@@ -1,0 +1,33 @@
+/*@
+    MPI_Recv - Blocking receive for a message
+
+Output Parameters:
++ buf - initial address of receive buffer (choice)
+- status - status object (Status)
+
+Input Parameters:
++ count - maximum number of elements in receive buffer (integer)
+. datatype - datatype of each receive buffer element (handle)
+. source - rank of source (integer)
+. tag - message tag (integer)
+- comm - communicator (handle)
+
+Notes:
+The 'count' argument indicates the maximum length of a message; the actual
+length of the message can be determined with 'MPI_Get_count'.
+
+.N ThreadSafe
+
+.N Fortran
+
+.N FortranStatus
+
+.N Errors
+.N MPI_SUCCESS
+.N MPI_ERR_COMM
+.N MPI_ERR_TYPE
+.N MPI_ERR_COUNT
+.N MPI_ERR_TAG
+.N MPI_ERR_RANK
+
+@*/

@@ -1,0 +1,38 @@
+/*@
+   MPI_Init_thread - Initialize the MPI execution environment
+
+Input Parameters:
++  argc - Pointer to the number of arguments
+.  argv - Pointer to the argument vector
+-  required - Level of desired thread support
+
+Output Parameters:
+.  provided - Level of provided thread support
+
+   Command line arguments:
+   MPI specifies no command-line arguments but does allow an MPI
+   implementation to make use of them.  See 'MPI_INIT' for a description of
+   the command line arguments supported by 'MPI_INIT' and 'MPI_INIT_THREAD'.
+
+   Notes:
+   The valid values for the level of thread support are\:
++ MPI_THREAD_SINGLE - Only one thread will execute.
+. MPI_THREAD_FUNNELED - The process may be multi-threaded, but only the main
+  thread will make MPI calls (all MPI calls are funneled to the
+   main thread).
+. MPI_THREAD_SERIALIZED - The process may be multi-threaded, and multiple
+  threads may make MPI calls, but only one at a time: MPI calls are not
+  made concurrently from two distinct threads (all MPI calls are serialized).
+- MPI_THREAD_MULTIPLE - Multiple threads may call MPI, with no restrictions.
+
+Notes for Fortran:
+   Note that the Fortran binding for this routine does not have the 'argc' and
+   'argv' arguments. ('MPI_INIT_THREAD(required, provided, ierror)')
+
+
+.N Errors
+.N MPI_SUCCESS
+.N MPI_ERR_OTHER
+
+.seealso: MPI_Init, MPI_Finalize
+@*/
