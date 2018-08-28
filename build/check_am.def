@@ -1,0 +1,86 @@
+page: check_am
+    module: perl
+
+    my $top_srcdir="."
+    my %opts=()
+    my %tgts=()
+    my %H
+
+    $call parse
+    $call report
+
+subcode: report
+    print "Checked Options: ", join(', ', sort keys %opts), "\n"
+
+    $(for:mpi_sources, mpi_core_sources)
+        my @$1 = split /\s+/, $H{$1}
+        $H{$1}=undef
+    $print ----------------\n
+    $foreach $k in sort keys %H
+        my $v = $H{$k}
+        $if $v
+            $print $k: $v
+    $(for:mpi_sources, mpi_core_sources)
+        $print ----------------\n
+        $print $1
+        $foreach $t in @$1
+            $if $t
+                $print "    $t"
+
+subcode: parse
+    my @stack
+    my ($cur_opt, @opt_stack)
+    $call get_file_lines, "Makefile.am"
+    my $lines = \@lines
+    $while 1
+        $if !@$lines
+            $if @stack
+                $lines = pop @stack
+            $else
+                last
+        # ------------------
+        my $l = shift @$lines
+        $if $l=~/^\s*#/
+            next
+        $elif $l=~/^\s*$/
+            next
+        $elif $l=~/^include\s+(.+)/
+            my $f = $1
+            $f=~s/\x24\(top_srcdir\)/$top_srcdir/
+            $call get_file_lines, $f
+            push @stack, $lines
+            $lines = \@lines
+            next
+        $elif $l=~/^if\s+(\w+)/
+            push @opt_stack, $cur_opt
+            $cur_opt = $1
+            $opts{$1}=0
+            next
+        $elif $l=~/^endif/
+            $cur_opt = pop @opt_stack
+            next
+        # -------------------
+        $if $l=~/^(.*?)\s+\\$/
+            $l=$1
+            $while 1
+                my $t=shift @$lines
+                $if !defined $t
+                    last
+                $if $t=~/^\s*(.*?)\s*\\$/
+                    $l.=' '.$1
+                $else
+                    $t=~s/^\s+//
+                    $l.=' '.$t
+                    last
+        # -------------------
+        $if $l=~/^(\w+)\s*(\+?)=\s*(.*)/ -> $k, $op, $v
+            $if $cur_opt
+                $k="[$cur_opt]$k"
+            $if $op
+                $H{$k}.=' '.$v
+            $else
+                $H{$k}=$v
+        $elif $l=~/(\S+):/
+            $tgts{$1}++
+
+

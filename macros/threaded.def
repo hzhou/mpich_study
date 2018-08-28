@@ -1,0 +1,69 @@
+#- #if defined MPICH_IS_THREADED
+#- ...
+#- #endif
+
+subcode:: mpi_init_0
+    # Not ready until mutexes are initialized
+    MPIR_ThreadInfo.isThreaded = 0;
+
+subcode:: mpir_init_1
+    # provisional value
+    MPIR_ThreadInfo.isThreaded = (n_required == MPI_THREAD_MULTIPLE);
+
+    $call fcall, thread_cs_init()
+
+    #if MPICH_THREAD_LEVEL >= MPI_THREAD_SERIALIZED
+    MPID_Thread_self(&MPIR_ThreadInfo.master_thread);
+    #endif
+
+subcode:: mpir_init_on_fail
+    MPIR_Thread_CS_Finalize();
+
+#----------------------------------------------- 
+subcode: thread_granularity
+    #if MPICH_THREAD_GRANULARITY == MPICH_THREAD_GRANULARITY__GLOBAL
+    /* a single, global lock, held for the duration of an MPI call */
+    $(set:mutex_list=GLOBAL_ALLFUNC)
+    BLOCK
+    #elif MPICH_THREAD_GRANULARITY == MPICH_THREAD_GRANULARITY__POBJ
+    /* Multiple locks */
+    $(set:mutex_list=GLOBAL_ALLFUNC, POBJ_HANDLE, POBJ_MSGQ, POBJ_COMPLETION, POBJ_CTX, POBJ_PMI)
+    BLOCK
+    #elif MPICH_THREAD_GRANULARITY == MPICH_THREAD_GRANULARITY__LOCKFREE
+    /* Updates to shared data and access to shared services is handled without locks where ever possible. */
+    #error lock-free not yet implemented
+    #elif MPICH_THREAD_GRANULARITY == MPICH_THREAD_GRANULARITY__SINGLE
+    /* No thread support, make all operations a no-op */
+    #else
+    #error Unrecognized thread granularity
+    #endif
+
+subcode: fn_thread_cs_init
+    &call thread_granularity
+        $map mutex_create, $(mutex_list)
+
+    MPID_THREADPRIV_KEY_CREATE;
+    MPL_DBG_MSG(MPIR_DBG_INIT, TYPICAL, "Created global mutex and private storage");
+    return MPI_SUCCESS;
+
+    subcode: mutex_create(NAME)
+        $local int err
+        $global MPID_Thread_mutex_t MPIR_THREAD_$(NAME)_MUTEX
+        MPID_Thread_mutex_create(&MPIR_THREAD_$(NAME)_MUTEX, &err);
+        MPIR_Assert(err == 0);
+
+
+subcode: fn_MPIR_Thread_CS_Finalize
+    MPL_DBG_MSG(MPIR_DBG_INIT, TYPICAL, "Freeing global mutex and private storage");
+
+    &call thread_granularity
+        $map mutex_destroy, $(mutex_list)
+    MPID_THREADPRIV_KEY_DESTROY;
+
+    return MPI_SUCCESS;
+
+    # -------------------------
+    subcode: mutex_destroy(NAME)
+        $local int err
+        MPID_Thread_mutex_destroy(&MPIR_THREAD_$(NAME)_MUTEX, &err);
+        MPIR_Assert(err == 0);

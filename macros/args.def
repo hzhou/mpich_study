@@ -1,0 +1,46 @@
+subcode:_autoload
+    $register_name(argc) int
+    $register_name(argv) char**
+    $register_name(p_argc) int*
+    $register_name(p_argv) char***
+#----------------------------------------------- 
+subcode: check_env(key)
+    $local char* p
+    p = getenv( "$(key)" )
+    $if p
+        BLOCK
+subcode: check_env_yes(key)
+    &call check_env, $(key)
+        $if strcmp( p, "YES" ) == 0 || strcmp( p, "yes" ) == 0
+            BLOCK
+
+subcode: get_env_int(key, var, default)
+    &call check_env, $(key)
+        $(var) = atoi(p)
+    $(if:default!=-)
+        $else
+            $(var) = $(default)
+
+#----------------------------------------------- 
+subcode: check_arg_opt(key)
+    &call each_arg
+        $if $(a) $Eq "$(key)"
+            BLOCK
+            $call shift_argv
+            break
+# ----------------
+subcode: each_arg
+    $if p_argc && p_argv
+        /* applied patch from Juha Jeronen, req #3920 */
+        $my int argc=*p_argc, char** argv=*p_argv
+        $for i=1:argc
+            $(set:a=argv[i])
+            $if !$(a)
+                break
+            BLOCK
+    subcode: shift_argv
+        argc--
+        $for j=i:argc
+            argv[j] = argv[j+1]
+        argv[argc]=NULL
+        *p_argc = argc

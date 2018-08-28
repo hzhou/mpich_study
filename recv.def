@@ -1,0 +1,86 @@
+include: common.def
+subcode: _autoload
+    $register_name(buf) void*
+    $register_name(count) int
+    $register_name(datatype) MPI_Datatype
+    $register_name(comm) MPI_Comm
+    $register_name(source,dest,tag) int
+
+page: recv # from templates/mpi/pt2pt/recv.c
+    $include "mpiimpl.h"
+    $list MPI_Recv
+
+page: send # from templates/mpi/pt2pt/send.c
+    $include "mpiimpl.h"
+    $list MPI_Send
+
+fncode: MPI_Recv(buf, count, datatype, source, tag, comm, MPI_Status* status)
+    subcode: on_fail
+        $call set_error, "**mpi_recv", "**mpi_recv %p %d %D %i %t %C %p", buf, count, datatype, source, tag, comm, status
+    &call PT2PT_enter, BACK
+        $call get_comm_ptr
+        $call @error_check_recv
+
+        $local MPIR_Request *request_ptr = NULL;
+        $call fcall_fail, MPID_Recv(buf, count, datatype, source, tag, comm_ptr, MPIR_CONTEXT_INTRA_PT2PT, status, &request_ptr);
+        $call check_request_ptr
+
+fncode: MPI_Send(const void* buf, count, datatype, dest, tag, comm)
+    subcode: on_fail
+        $call set_error, "**mpi_send", "**mpi_send %p %d %D %i %t %C", buf, count, datatype, dest, tag, comm
+
+    &call PT2PT_enter, FRONT
+        $call get_comm_ptr
+        $call @error_check_send
+
+        $local MPIR_Request *request_ptr = NULL;
+        $call fcall_fail, MPID_Send(buf, count, datatype, dest, tag, comm_ptr, MPIR_CONTEXT_INTRA_PT2PT, &request_ptr);
+        $call check_request_ptr
+
+#----------------------------------------------- 
+subcode: check_request_ptr
+    $if request_ptr == NULL
+        goto fn_exit;
+    $if !MPIR_Request_is_complete(request_ptr)
+        $call block_until_complete
+
+    mpi_errno = request_ptr->status.MPI_ERROR;
+    $(if:FunctionName=MPI_Recv)
+        MPIR_Request_extract_status(request_ptr, status);
+    MPIR_Request_free(request_ptr);
+    $if mpi_errno != MPI_SUCCESS
+        goto fn_fail;
+
+    subcode: block_until_complete
+        MPID_Progress_state progress_state;
+        MPID_Progress_start(&progress_state);
+        $while !MPIR_Request_is_complete(request_ptr)
+            mpi_errno = MPID_Progress_wait(&progress_state);
+            $if mpi_errno != MPI_SUCCESS
+                MPID_Progress_end(&progress_state);
+                goto fn_fail;
+
+            $(if:FunctionName=MPI_Recv)
+                $call @check_recv_error_extra
+        MPID_Progress_end(&progress_state);
+
+        /* MT: Note that MPID_Recv may release the SINGLE_CS if it * decides to block internally.  MPID_Recv in that case will * re-aquire the SINGLE_CS before returnning */
+        /* MT: Progress_wait may release the SINGLE_CS while it * waits */
+
+        subcode: check_recv_error_extra
+            $if unlikely({STUB})
+                $(block:STUB: && )
+                    unlikely(MPIR_CVAR_ENABLE_FT
+                    !MPIR_Request_is_complete(request_ptr)
+                    MPID_Request_is_anysource(request_ptr)
+                    !MPID_Comm_AS_enabled(request_ptr->comm)
+                $call handle_error_2
+
+        subcode: handle_error_2
+            MPID_Cancel_recv(request_ptr);
+            MPIR_STATUS_SET_CANCEL_BIT(request_ptr->status, FALSE);
+            MPIR_ERR_SET(request_ptr->status.MPI_ERROR, MPIX_ERR_PROC_FAILED, "**proc_failed");
+            mpi_errno = request_ptr->status.MPI_ERROR;
+            goto fn_fail;
+
+

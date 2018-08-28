@@ -1,0 +1,19 @@
+subcode: Thread_Lock(@T)
+    MPID_THREAD_CS_ENTER($(T))
+    DUMP_STUB _cs_init
+    BLOCK
+    MPID_THREAD_CS_EXIT($(T))
+
+subcode: Thread_Lock_global
+    MPID_THREAD_CS_ENTER(MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX)
+    BLOCK
+    MPID_THREAD_CS_EXIT(MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX)
+
+subcode: Thread_CS_on_fail
+    $(block:_cs_init)
+        $local int exit_init_cs_on_failure = 0
+        exit_init_cs_on_failure = 1;
+    $if exit_init_cs_on_failure
+        MPID_THREAD_CS_EXIT(GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX);
+
+#----------------------------------------------- 

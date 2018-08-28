@@ -1,0 +1,29 @@
+#- #ifdef HAVE_F08_BINDING
+#- ...
+#- #endif
+subcode:: mpir_init_1
+    $global MPI_Status *MPIR_C_MPI_STATUS_IGNORE
+    $global MPI_Status *MPIR_C_MPI_STATUSES_IGNORE;
+    $global char **MPIR_C_MPI_ARGV_NULL;
+    $global char ***MPIR_C_MPI_ARGVS_NULL;
+    $global int *MPIR_C_MPI_UNWEIGHTED;
+    $global int *MPIR_C_MPI_WEIGHTS_EMPTY;
+    $global int *MPIR_C_MPI_ERRCODES_IGNORE;
+
+    MPIR_C_MPI_STATUS_IGNORE = MPI_STATUS_IGNORE;
+    MPIR_C_MPI_STATUSES_IGNORE = MPI_STATUSES_IGNORE;
+    MPIR_C_MPI_ARGV_NULL = MPI_ARGV_NULL;
+    MPIR_C_MPI_ARGVS_NULL = MPI_ARGVS_NULL;
+    MPIR_C_MPI_UNWEIGHTED = MPI_UNWEIGHTED;
+    MPIR_C_MPI_WEIGHTS_EMPTY = MPI_WEIGHTS_EMPTY;
+    MPIR_C_MPI_ERRCODES_IGNORE = MPI_ERRCODES_IGNORE;
+
+    # ---- to be placed -----------------------------
+    $global MPI_F08_status MPIR_F08_MPI_STATUS_IGNORE_OBJ;
+    $global MPI_F08_status MPIR_F08_MPI_STATUSES_IGNORE_OBJ[1];
+    $global int MPIR_F08_MPI_IN_PLACE;
+    $global int MPIR_F08_MPI_BOTTOM;
+
+    /* Althought the two STATUS pointers are required but the MPI3.0,  they are not used in MPICH F08 binding */
+    $global MPI_F08_status *MPI_F08_STATUS_IGNORE = &MPIR_F08_MPI_STATUS_IGNORE_OBJ;
+    $global MPI_F08_status *MPI_F08_STATUSES_IGNORE = &MPIR_F08_MPI_STATUSES_IGNORE_OBJ[0];

@@ -1,0 +1,27 @@
+
+subcode:: mpir_init_2
+    #ifdef USE_MEMORY_TRACING
+    MPL_trinit();
+    #endif
+subcode:: mpir_init_3
+    #ifdef USE_MEMORY_TRACING
+    #ifdef MPICH_IS_THREADED
+    MPL_trconfig(MPIR_Process.comm_world->rank, MPIR_ThreadInfo.isThreaded);
+    #else
+    MPL_trconfig(MPIR_Process.comm_world->rank, 0);
+    #endif
+    /* Indicate that we are near the end of the init step; memory * allocated already will have an id of zero; this helps * separate memory leaks in the initialization code from * leaks in the "active" code */
+    #endif
+#----------------------------------------------- 
+subcode:: mpi_finalize_3
+    #ifdef USE_MEMORY_TRACING
+    /* FIXME: We'd like to arrange for the mem dump output to * go to separate files or to be sorted by rank (note that * the rank is at the head of the line) */
+    {
+        $if MPIR_CVAR_MEMDUMP
+            /* The second argument is the min id to print; memory allocated * after MPI_Init is given an id of one.  This allows us to * ignore, if desired, memory leaks in the MPID_Init call */
+            MPL_trdump((void *) 0, -1);
+        $if MPIR_CVAR_MEM_CATEGORY_INFORMATION
+            MPL_trcategorydump(stderr);
+    }
+    #endif
+

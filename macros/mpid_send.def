@@ -1,0 +1,8 @@
+macros: 
+    send_param: const void* buf, MPI_Aint count, MPI_Datatype datatype, int rank, int tag, MPIR_Comm* comm, int n_context_offset
+    send_param_1: $(send_param), MPIR_Request** pp_req
+    send_param_2: $(send_param), MPIDI_av_entry_t* av, MPIR_Request** pp_req, int have_request, int is_sync
+
+    send_arg1: buf, count, datatype, rank, tag, comm, n_context_offset, pp_req
+    send_arg2: buf, count, datatype, rank, tag, comm, n_context_offset, av, pp_req
+

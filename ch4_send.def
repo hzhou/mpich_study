@@ -1,0 +1,108 @@
+include: common.def
+include: macros/mpid_send.def
+
+page: ch4_send.h, from templates/mpid/ch4/src/ch4_send.h
+    module: c
+
+    $list(skip_declare) MPID_Send, MPID_Isend, MPID_Rsend, MPID_Irsend, MPID_Ssend, MPID_Issend
+    $list(skip_declare) MPID_Send_init, MPID_Ssend_init, MPID_Bsend_init, MPID_Rsend_init
+    $list(skip_declare) MPID_Cancel_send
+
+#------------------------------------------
+fncode: MPID_Send
+    $call mpid_send, send
+fncode: MPID_Isend
+    $call mpid_send, isend
+fncode: MPID_Rsend
+    $call mpid_send, send
+fncode: MPID_Irsend
+    $call mpid_send, isend
+fncode: MPID_Ssend
+    $call mpid_send, ssend
+fncode: MPID_Issend
+    $call mpid_send, issend
+
+# -----------------------
+subcode: mpid_send(send)
+    $parameter $(send_param_1)
+    $return_type $(ret_type)
+    &call MPIR_enter, VERBOSE
+        $call @check_rank_null
+        $call SHM_or_NM, send
+
+    subcode: send(NM_or_SHM)
+        mpi_errno = MPIDI_$(NM_or_SHM)_mpi_$(send)($(send_arg2));
+
+    subcode: update_request(r)
+        $if mpi_errno == MPI_SUCCESS && *pp_req
+            MPIDI_CH4I_REQUEST(*pp_req, is_local) = $(r)
+
+#------------------------------------------
+fncode: MPID_Send_init
+    $call mpid_send_init, send
+fncode: MPID_Ssend_init
+    $call mpid_send_init, ssend
+fncode: MPID_Bsend_init
+    $call mpid_send_init, bsend
+fncode: MPID_Rsend_init
+    $call mpid_send_init, rsend
+# --------------------------
+subcode: mpid_send_init(send)
+    $parameter $(send_param_1)
+    $return_type $(ret_type)
+    &call MPIR_enter, VERBOSE
+        $call SHM_or_NM, send_init
+
+    subcode: send_init(SHM_or_NM)
+        mpi_errno = MPIDI_$(SHM_or_NM)_mpi_$(send)_init($(send_arg2));
+
+    subcode: update_request(r)
+        $if mpi_errno == MPI_SUCCESS && *pp_req
+            MPIDI_CH4I_REQUEST(*pp_req, is_local) = $(r)
+            MPIDI_CH4I_REQUEST_ANYSOURCE_PARTNER(*pp_req) = NULL
+
+#------------------------------------------
+fncode: MPID_Cancel_send(MPIR_Request * sreq)
+    &call MPIR_enter, VERBOSE
+        $call SHM_or_NM, cancel
+
+    subcode: cancel(SHM_or_NM)
+        mpi_errno = MPIDI_$(SHM_or_NM)_mpi_cancel_send(sreq);
+
+    subcode: update_request
+        # NOOP
+
+#-------------------------------------- 
+subcode: SHM_or_NM(action)
+    $(if:action!=cancel)
+        $local MPIDI_av_entry_t *av = NULL
+        av = MPIDIU_comm_rank_to_av(comm, rank);
+        $local int r
+        $(set:is_local=r=MPIDI_av_is_local(av))
+    $(else)
+        $(set:is_local=MPIDI_CH4I_REQUEST(sreq, is_local))
+    #ifndef MPIDI_CH4_EXCLUSIVE_SHM
+    $call $(action), NM
+    #else
+    $if $(is_local)
+        $call $(action), SHM
+    $else
+        $call $(action), NM
+    $call @update_request, r
+    #endif
+    $if mpi_errno != MPI_SUCCESS
+        MPIR_ERR_POP(mpi_errno);
+
+# -----------------------------------
+subcode: check_rank_null
+    $if unlikely(rank == MPI_PROC_NULL)
+        MPIR_Request *p_req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
+        MPIR_ERR_CHKANDSTMT((p_req) == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
+        MPIR_Request_add_ref(p_req);
+        *pp_req = p_req;
+        MPIDI_CH4U_request_complete(p_req);
+        mpi_errno = MPI_SUCCESS;
+        goto fn_exit;
+
+macros: 
+    ret_type: MPL_STATIC_INLINE_PREFIX int

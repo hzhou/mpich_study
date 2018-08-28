@@ -1,0 +1,150 @@
+# -- utils
+include: macros/args.def
+# -- core components
+include: macros/comm.def
+include: macros/async.def
+include: macros/thread.def
+# -- optional features
+include: macros/threaded.def
+# include: macros/windows.def
+# include: macros/error_checking.def
+# include: macros/coverage.def
+# include: macros/memory_tracing.def
+include: macros/hwloc.def
+include: macros/argobots.def
+# include: macros/dbg_logging.def
+# include: macros/f08_binding.def
+# include: macros/fortran_binding.def
+# include: macros/cxx_binding.def
+
+subcode: _autoload
+    $register_prefix(has) int
+
+perlcode: _FUNC_HOOK
+    my $open = $func->{openblock}
+    my $name = $func->{name}
+    $if $name =~ /^MPI[A-Z]*_/
+        unshift @$open, "#undef FUNCNAME", "#define FUNCNAME $name", "#undef FCNAME", "#define FCNAME MPL_QUOTE(FUNCNAME)"
+        $if -f "docs/$name.txt"
+            $print "      found docs/$name.txt"
+            unshift @$open, "INCLUDE_FILE docs/$name.txt"
+    # ------------------------
+    $if $name =~/^MPI_/
+        my @t
+        push @t, "/* -- Begin Profiling Symbol Block for routine $name */"
+        push @t, "#if defined(HAVE_PRAGMA_WEAK)\n"
+        push @t, "#pragma weak $name = P$name\n"
+        push @t, "#elif defined(HAVE_PRAGMA_HP_SEC_DEF)\n"
+        push @t, "#pragma _HP_SECONDARY_DEF P$name  $name\n"
+        push @t, "#elif defined(HAVE_PRAGMA_CRI_DUP)\n"
+        push @t, "#pragma _CRI duplicate $name as P$name\n"
+        push @t, "#elif defined(HAVE_WEAK_ATTRIBUTE)\n"
+        push @t, "$func->{declare} __attribute__ ((weak, alias(\"P$name\")));\n"
+        push @t, "#endif\n"
+        push @t, "/* -- End Profiling Symbol Block */\n"
+        push @t, "\n"
+        push @t, "/* Define MPICH_MPI_FROM_PMPI if weak symbols are not supported to build the MPI routines */\n"
+        push @t, "#ifndef MPICH_MPI_FROM_PMPI\n"
+        push @t, "#undef $name\n"
+        push @t, "#define $name P$name\n"
+        $func->{declare_block}=\@t
+
+#----------------------------------------------- 
+subcode: MPIR_enter(TERSE)
+    $local int mpi_errno = MPI_SUCCESS
+    &call MPIR_
+        $(mpir)_STATE_DECL($(state))
+        MPIR_ERRTEST_INITIALIZED_ORDIE();
+        $call @_init
+        $(mpir)_ENTER($(state))
+        BLOCK
+        fn_exit:
+        $call @on_exit
+        $(mpir)_EXIT($(state))
+        return mpi_errno
+        fn_fail:
+        $call @on_fail
+        goto fn_exit
+
+subcode: PT2PT_enter(FRONT)
+    $local int mpi_errno = MPI_SUCCESS
+    $(set:F=$(FunctionName))
+    $(set:state=MPID_STATE_$(F:uc))
+    $(set:mpir=MPIR_FUNC_TERSE)
+
+    $(mpir)_STATE_DECL($(state))
+    $call @_init
+    &call Thread_Lock_global
+        $(mpir)_PT2PT_ENTER_$(FRONT)($(state))
+        BLOCK
+        fn_exit:
+        $(mpir)_PT2PT_EXIT_$(FRONT)($(state))
+    return mpi_errno
+    fn_fail:
+    $call @on_fail
+    goto fn_exit
+
+subcode: MPIR_fn
+    $local int mpi_errno = MPI_SUCCESS
+    BLOCK
+    fn_exit:
+    return mpi_errno
+    fn_fail:
+    $call @on_fail
+    goto fn_exit
+
+# -------------
+subcode: MPIR_
+    $(set:F=$(FunctionName))
+    $(set:state=MPID_STATE_$(F:uc))
+    $(if:F~MPI_Init)
+        $(set:mpir=MPIR_FUNC_TERSE_INIT)
+    $(elif:F=MPI_Finalize)
+        $(set:mpir=MPIR_FUNC_TERSE_FINALIZE)
+    $(else)
+        $(set:mpir=MPIR_FUNC_$(TERSE))
+    BLOCK
+
+subcode: ifdef(feat)
+    <-|#ifdef $(feat)
+    BLOCK
+    <-|#endif
+
+subcode: set_state(state)
+    OPA_store_int(&MPIR_Process.mpich_state, MPICH_MPI_STATE__$(state));
+
+subcode: check_state(eq, state)
+    $if OPA_load_int(&MPIR_Process.mpich_state) $(eq) MPICH_MPI_STATE__$(state)
+        BLOCK
+
+subcode: get_comm_ptr
+    $local MPIR_Comm *comm_ptr = NULL
+    $call @error_check_comm
+    MPIR_Comm_get_ptr(comm, comm_ptr);
+
+#---- mpi_errno & fn_fail ----
+subcode: check_fail
+    $if mpi_errno != MPI_SUCCESS
+        goto fn_fail;
+
+subcode: _autoload
+    $plugin fcall, fcall_fail
+
+subcode: fcall(@F)
+    mpi_errno = $(F);
+    $if mpi_errno
+        MPIR_ERR_POP(mpi_errno)
+
+subcode: fcall_fail(@F)
+    mpi_errno = $(F);
+    $if mpi_errno
+        goto fn_fail;
+
+subcode: set_error(@msg)
+    #ifdef HAVE_ERROR_REPORTING
+    {
+        mpi_errno = MPIR_Err_create_code(mpi_errno, MPIR_ERR_RECOVERABLE, FCNAME, __LINE__, MPI_ERR_OTHER, $(msg));
+    }
+    #endif
+    mpi_errno = MPIR_Err_return_comm(0, FCNAME, mpi_errno);
+

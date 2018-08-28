@@ -1,0 +1,14 @@
+subcode:: mpi_init_3
+    #if MPL_THREAD_PACKAGE_NAME == MPL_THREAD_PACKAGE_ARGOBOTS
+    $if MPIR_CVAR_ASYNC_PROGRESS
+        printf("WARNING: Asynchronous progress is not supported with Argobots\n");
+        goto fn_fail;
+    #endif
+
+subcode:: mpir_init_1
+    #if (MPL_THREAD_PACKAGE_NAME == MPL_THREAD_PACKAGE_ARGOBOTS)
+    $if ABT_initialized() != ABT_SUCCESS
+        #  no HAVE_ERROR_REPORTING?
+        mpi_errno = MPIR_Err_create_code(mpi_errno, MPIR_ERR_RECOVERABLE, FCNAME, __LINE__, MPI_ERR_OTHER, "**argobots_uninitialized", 0);
+        goto fn_fail;
+    #endif

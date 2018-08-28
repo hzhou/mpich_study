@@ -1,0 +1,107 @@
+page: ucx_send.h, from templates/mpid/ch4/netmod/ucx/ucx_send.h
+
+    $list(skip_declare) MPIDI_UCX_send
+    $(for:send,ssend,isend,issend)
+        $list(skip_declare) MPIDI_NM_mpi_$1
+    $(for:send,ssend,bsend,rsend)
+        $list(skip_declare) MPIDI_NM_mpi_$1_init
+
+fncode: MPIDI_NM_mpi_send
+    $call NM_send, 0, 0
+fncode: MPIDI_NM_mpi_ssend
+    $call NM_send, 0, 1
+fncode: MPIDI_NM_mpi_isend
+    $call NM_send, 1, 0
+fncode: MPIDI_NM_mpi_issend
+    $call NM_send, 1, 1
+
+fncode: MPIDI_NM_mpi_send_init
+    $call NM_send_init, send
+fncode: MPIDI_NM_mpi_ssend_init
+    $call NM_send_init, ssend
+fncode: MPIDI_NM_mpi_bsend_init
+    $call NM_send_init, bsend
+fncode: MPIDI_NM_mpi_rsend_init
+    $call NM_send_init, rsend
+
+subcode: NM_send(have_request, is_sync)
+    $parameter $(send_param_2)
+    $return_type static inline int
+    return MPIDI_UCX_send($(send_arg2), $(have_request), $(is_sync))
+
+subcode: NM_send_init(send)
+    $parameter $(send_param_1)
+    $return_type static inline int
+    return MPIDIG_mpi_$(send)_init($(send_arg1))
+
+fncode: MPIDI_NM_mpi_cancel_send(MPIR_Request * sreq)
+    $return_type static inline int
+    $if !MPIR_Request_is_complete(sreq)
+        ucp_request_cancel(MPIDI_UCX_global.worker, MPIDI_UCX_REQ(sreq).a.ucp_request)
+    return MPI_SUCCESS
+
+#----------------------------------------------- 
+fncode: MPIDI_UCX_send
+    $parameter $(send_param_2)
+    $return_type $(ret_type)
+
+    subcode: _init
+        int mpi_errno = MPI_SUCCESS;
+
+    &call MPIR_enter, VERBOSE
+        $local ucp_ep_h ep, uint64_t ucx_tag
+        ep = MPIDI_UCX_AV_TO_EP(av);
+        ucx_tag = MPIDI_UCX_init_tag(comm->context_id + context_offset, comm->rank, tag);
+        $local int dt_contig, size_t data_sz, MPIR_Datatype *dt_ptr, MPI_Aint dt_true_lb
+        MPIDI_Datatype_get_info(count, datatype, dt_contig, data_sz, dt_ptr, dt_true_lb);
+
+        $local MPIDI_UCX_ucp_request_t *ucp_request
+        $if is_sync
+            $if dt_contig
+                $call send, 1, 1
+            $else
+                $call send, 1, 0
+        $else
+            $if dt_contig
+                $call send, 0, 1
+            $else
+                $call send, 0, 0
+        $call check_update_request
+
+    subcode: send(is_sync, is_contig)
+        $(if:is_sync=1)
+            $(set:type=sync_nb)
+        $(else)
+            $(set:type=nb)
+        $(if:is_contig=1)
+            $(set:buf=(char *)buf+dt_true_lb)
+            $(set:size=data_sz)
+            $(set:dt=ucp_dt_make_contig(1))
+        $(else)
+            $(set:buf=buf)
+            $(set:size=count)
+            MPIR_Datatype_ptr_add_ref(dt_ptr);
+            $(set:dt=dt_ptr->dev.netmod.ucx.ucp_datatype)
+        ucp_request=(MPIDI_UCX_ucp_request_t *) ucp_tag_send_$(type)(ep, $(buf),$(size),$(dt),ucx_tag,&MPIDI_UCX_send_cmpl_cb);
+
+    subcode: check_update_request
+        MPIDI_UCX_CHK_REQUEST(ucp_request);
+        $local MPIR_Request* p_req = NULL
+        $if ucp_request
+            p_req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
+            MPIR_Request_add_ref(p_req);
+            ucp_request->req = p_req;
+            MPIDI_UCX_REQ(p_req).a.ucp_request = ucp_request;
+        $elif have_request
+        #ifndef HAVE_DEBUGGER_SUPPORT
+            p_req = MPIDI_UCX_global.lw_send_req;
+            MPIR_Request_add_ref(p_req);
+        #else
+            p_req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
+            MPIR_cc_set(&p_req->cc, 0);
+        #endif
+        }
+        *pp_req = p_req;
+
+macros: 
+    ret_type: static inline int

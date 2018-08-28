@@ -1,0 +1,131 @@
+include: common.def
+include: macros/mpi_init.def
+
+page: init, from templates/mpi/init/init.c
+    $list MPI_Init
+
+fncode: MPI_Init(p_argc, p_argv)
+    $call mpi_init, simple
+
+fncode: MPI_Init_thread(p_argc, p_argv, n_required, pn_provided)
+    $call mpi_init, thread
+
+#----------------------------------------------- 
+# Initialize ThreadInfo, Mutex Lock
+page: initthread, from templates/mpi/init/initthread.c
+    # $global MPIR_Process_t MPIR_Process = { OPA_INT_T_INITIALIZER(MPICH_MPI_STATE__PRE_INIT) }
+    # $global MPIR_Thread_info_t MPIR_ThreadInfo = {0}
+    # $global MPIR_Per_thread_t MPIR_Per_thread = {0}
+    # $global MPID_Thread_tls_t MPIR_Per_thread_key
+
+    $list MPI_Init_thread
+    $list MPIR_Init_thread
+
+#----------------------------------------------- 
+fncode: MPIR_Init_thread(p_argc, p_argv, n_required, pn_provided)
+    &call MPIR_fn
+        $call @mpir_init_1 
+        # ready for MPID_THREAD_CS_ENTER
+        $call set_state, IN_INIT
+        &call Thread_Lock, GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX
+            $call init_MPI_INFO_NULL
+            $call @mpir_init_2
+            # ----
+            $local int thread_provided = 0
+            $local has_args, has_env
+            $call fcall, MPID_Init(p_argc, p_argv, pn_required, &thread_provided, &has_args, &has_env)
+            $call @mpir_init_3
+            $call @mpii_wait_for_debugger
+            /* Let the device know that the rest of the init process is completed */
+            $if mpi_errno == MPI_SUCCESS
+                mpi_errno = MPID_InitCompleted();
+
+        /* Make fields of MPIR_Process global visible and set mpich_state * atomically so that MPI_Initialized() etc. are thread safe */
+        OPA_write_barrier();
+        $call set_state, POST_INIT
+
+    # -------------------
+    subcode: on_fail
+        $call @Thread_CS_on_fail
+        $call @mpir_init_on_fail
+    # ---------------------------
+    subcode: debug_hold
+        /* Wait for debugger to attach if requested. */
+        $if MPIR_CVAR_DEBUG_HOLD
+            $call spin_lock, hold
+        subcode: spin_lock(hold)
+            volatile int hold = 1;
+            $while hold
+                #ifdef HAVE_USLEEP
+                usleep(100);
+                #endif
+                ;
+    subcode: mpii_wait_for_debugger
+        /* FIXME: Does this need to come before the call to MPID_InitComplete?  * For some debugger support, MPII_Wait_for_debugger may want to use * MPI communication routines to collect information for the debugger */
+        #ifdef HAVE_DEBUGGER_SUPPORT
+        MPII_Wait_for_debugger();
+        #endif
+
+    subcode: init_MPI_INFO_NULL
+        /* create MPI_INFO_NULL object */
+        /* FIXME: Currently this info object is empty, we need to add data to this * as defined by the standard. */
+        $local MPIR_Info* info_ptr
+        info_ptr = MPIR_Info_builtin + 1;
+        info_ptr->handle = MPI_INFO_ENV;
+        MPIR_Object_set_ref(info_ptr, 1);
+        info_ptr->next = NULL;
+        info_ptr->key = NULL;
+        info_ptr->value = NULL;
+
+    subcode: assert_tag_ub
+        /* Assert: tag_ub should be a power of 2 minus 1 */
+        MPIR_Assert(((unsigned) MPIR_Process.
+                    attrs.tag_ub & ((unsigned) MPIR_Process.attrs.tag_ub + 1)) == 0);
+
+        /* Assert: tag_ub is at least the minimum asked for in the MPI spec */
+        MPIR_Assert(MPIR_Process.attrs.tag_ub >= 32767);
+
+    subcode: update_thread_provided
+        /* Capture the level of thread support provided */
+        MPIR_ThreadInfo.thread_provided = thread_provided;
+        $if pn_provided
+            *pn_provided = thread_provided;
+        #if defined MPICH_IS_THREADED
+        MPIR_ThreadInfo.isThreaded = (thread_provided == MPI_THREAD_MULTIPLE);
+        #endif /* MPICH_IS_THREADED */
+
+#----------------------------------------------- 
+subcode:: mpir_init_1
+    $call @set_do_error_checks_1
+    $call @init_attrs
+    /* This allows the device to select an alternative function for * dimsCreate */
+    MPIR_Process.dimsCreate = 0;
+    $call @debug_hold
+    $call @set_do_error_checks_2
+
+    subcode: init_attrs
+        /* Initialize necessary subsystems and setup the predefined attribute * values.  Subsystems may change these values. */
+        MPIR_Process.attrs.appnum = -1;
+        MPIR_Process.attrs.host = MPI_PROC_NULL;
+        MPIR_Process.attrs.io = MPI_PROC_NULL;
+        MPIR_Process.attrs.lastusedcode = MPI_ERR_LASTCODE;
+        MPIR_Process.attrs.tag_ub = MPIR_TAG_USABLE_BITS;
+        MPIR_Process.attrs.universe = MPIR_UNIVERSE_SIZE_NOT_SET;
+        MPIR_Process.attrs.wtime_is_global = 0;
+
+        /* Set the functions used to duplicate attributes.  These are
+        * when the first corresponding keyval is created */
+        MPIR_Process.attr_dup = 0;
+        MPIR_Process.attr_free = 0;
+
+
+subcode:: mpir_init_3
+    /* Initialize collectives infrastructure */
+    $call fcall, MPII_Coll_init()
+    $call @assert_tag_ub
+    $call update_thread_provided
+    /* FIXME: Define these in the interface.  Does Timer init belong here? */
+    MPII_Timer_init(MPIR_Process.comm_world->rank, MPIR_Process.comm_world->local_size);
+
+subcode:: mpir_init_on_fail
+    $call set_state, PRE_INIT

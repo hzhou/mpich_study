@@ -1,0 +1,30 @@
+#- #ifdef MPL_USE_DBG_LOGGING
+#- ...
+#- #endif
+subcode:: mpi_init_0
+    $call @dbg_pre_init
+#----------------------------------------------- 
+subcode:: mpid_init_3
+    $(for:t in connect,disconnect,progress,channel,other,msg,vc,refcount)
+        $call dbg_alloc, MPIDI_CH3_DBG_$(t:uc), ch3_$(t)
+#----------------------------------------------- 
+subcode:: mpir_init_3
+    #ifdef MPICH_IS_THREADED
+    $call dbg_init, MPIR_ThreadInfo.isThreaded
+    #else
+    $call dbg_init, 0  # simply init isThreaded to 0?
+    #endif
+    $(for:t in init,pt2pt,thread,datatype,handle,comm,bsend,errhand,other,request,coll,assert,string)
+        $call dbg_alloc, MPIR_DBG_$(t), $(t)
+
+#----------------------------------------------- 
+subcode: dbg_pre_init
+    MPL_dbg_pre_init(argc, argv, rc);
+
+subcode: dbg_init(isThreaded)
+    /* FIXME: This is a hack to handle the common case of two worlds.  * If the parent comm is not NULL, we always give the world number * as "1" (false). */
+    MPL_dbg_init(argc, argv, has_args, has_env, MPIR_Process.comm_parent != NULL, MPIR_Process.comm_world->rank, $(isThreaded));
+
+subcode: dbg_alloc(var, t)
+    $global MPL_dbg_class $(var)
+    $(var) = MPL_dbg_class_alloc("$(t:uc)", "$(t:lc)");

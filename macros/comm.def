@@ -1,0 +1,100 @@
+subcode:: mpir_init_1
+    $call init_comm, comm_world, 0
+    $call init_comm, comm_self,  1
+    #ifdef MPID_NEEDS_ICOMM_WORLD
+    $call init_comm, icomm_world, 2
+    #endif
+
+    MPIR_Process.comm_parent = NULL;
+    /* Setup the initial communicator list in case we have * enabled the debugger message-queue interface */
+    MPII_COMML_REMEMBER(MPIR_Process.comm_world);
+    MPII_COMML_REMEMBER(MPIR_Process.comm_self);
+
+subcode:: mpid_init_3
+    $local MPIR_Comm* comm
+    $call setup_comm, comm_world, pg_rank, pg_size
+    $call setup_comm, comm_self, 0, 1
+    #ifdef MPID_NEEDS_ICOMM_WORLD
+    $call setup_comm, icomm_world, pg_rank, pg_size
+    #endif
+    #ifndef MPIDI_CH3_HAS_NO_DYNAMIC_PROCESS
+    $if has_parent
+        $call set_comm_parent
+    #endif
+#----------------------------------------------- 
+subcode: init_comm(comm, id)
+    $(set:C=MPIR_Process.$(comm))
+    $(C) = MPIR_Comm_builtin + $(id);
+    MPII_Comm_init($(C));
+    $(C)->handle = MPI_$(comm:uc)
+    $(C)->context_id = $(id) << MPIR_CONTEXT_PREFIX_SHIFT;
+    $(C)->recvcontext_id = $(id) << MPIR_CONTEXT_PREFIX_SHIFT;
+    $(C)->comm_kind = MPIR_COMM_KIND__INTRACOMM;
+    /* This initialization of the comm name could be done only when * comm_get_name is called */
+    MPL_strncpy($(C)->name, "MPI_$(comm:uc)", MPI_MAX_OBJECT_NAME);
+
+subcode: setup_comm(name,rank,size)
+    comm = MPIR_Process.$(name);
+    comm->rank        = $(rank)
+    comm->remote_size = $(size)
+    comm->local_size  = $(size)
+    $(if:size=pg_size)
+        comm->pof2    = MPL_pof2(pg_size);
+    $(else)
+        comm->pof2    = 0
+    # --------------------
+    $(if:name=icomm_world)
+        MPIDI_VCRT_Add_ref( MPIR_Process.comm_world->dev.vcrt );
+        comm->dev.vcrt = MPIR_Process.comm_world->dev.vcrt;
+    $(else)
+        $call fcall_jump1, "MPI_$(name:uc)", MPIDI_VCRT_Create(comm->remote_size, &comm->dev.vcrt)
+        $(if:size=pg_size)
+            $for i=0:pg_size
+                MPIDI_VCR_Dup(&pg->vct[i], &comm->dev.vcrt->vcr_table[i]);
+        $(else)
+            MPIDI_VCR_Dup(&pg->vct[pg_rank], &comm->dev.vcrt->vcr_table[0])
+    $call fcall, MPIR_Comm_commit(comm)
+
+subcode: set_comm_parent
+    /* * If this process group was spawned by a MPI application, then * form the MPI_COMM_PARENT inter-communicator.  */ 
+    /* * FIXME: The code to handle the parent case should be in a separate * routine and should not rely on #ifdefs */
+    $my char * parent_port
+    /* FIXME: To allow just the "root" process to request the port and then use MPIR_Bcast_intra_auto to distribute it to the rest of the processes, we need to perform the Bcast after MPI is otherwise initialized.  We could do this by adding another MPID call that the MPI_Init(_thread) routine would make after the rest of MPI is initialized, but before MPI_Init returns.  In fact, such a routine could be used to perform various checks, including parameter consistency value (e.g., all processes have the same environment variable values). Alternately, we could allow a few routines to operate with predefined parameter choices (e.g., bcast, allreduce) for the purposes of initialization. */
+    $call fcall_jump, MPIDI_CH3_GetParentPort(&parent_port)
+    MPL_DBG_MSG_S(MPIDI_CH3_DBG_CONNECT,VERBOSE,"Parent port is %s", parent_port);
+        
+    $call fcall_jump1, parent_port, MPID_Comm_connect(parent_port, NULL, 0, MPIR_Process.comm_world, &comm)
+
+    MPIR_Process.comm_parent = comm;
+    MPIR_Assert(MPIR_Process.comm_parent != NULL);
+    MPL_strncpy(comm->name, "MPI_COMM_PARENT", MPI_MAX_OBJECT_NAME);
+    /* FIXME: Check that this intercommunicator gets freed in MPI_Finalize if not already freed.  */
+
+#----------------------------------------------- 
+subcode:: mpi_finalize_1
+    $call delete_attributes
+    $call release_errhandler
+
+    subcode: delete_attributes
+        /* The standard (MPI-2, section 4.8) says that the attributes on * MPI_COMM_SELF are deleted before almost anything else happens */
+        /* Note that the attributes need to be removed from the communicators * so that they aren't freed twice. (The communicators are released * in MPID_Finalize) */
+        $if MPIR_Process.attr_free
+            $(for:comm in comm_self, comm_world)
+                $if MPIR_Process.$(comm)->attributes
+                    mpi_errno = MPIR_Process.attr_free(MPI_$(comm:uc), &MPIR_Process.$(comm)->attributes);
+                    $if mpi_errno
+                        MPIR_ERR_POP(mpi_errno);
+                    MPIR_Process.$(comm)->attributes = 0;
+
+    subcode: release_errhandler
+        /* * Now that we're finalizing, we need to take control of the error handlers * At this point, we will release any user-defined error handlers on * comm self and comm world */
+        $(for:comm in comm_world, comm_self)
+            $(set:H=MPIR_Process.$(comm)->errhandler)
+            $(set:not_builtin=HANDLE_GET_KIND($1)!=HANDLE_KIND_BUILTIN)
+            $if $(H) && $(not_builtin:$(H))
+                $my int in_use
+                MPIR_Errhandler_release_ref($(H), &in_use);
+                $if !in_use
+                    MPIR_Handle_obj_free(&MPIR_Errhandler_mem, $(H));
+            /* always set to NULL to avoid a double-release later in finalize */
+            $(H) = NULL;

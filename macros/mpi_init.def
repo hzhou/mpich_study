@@ -1,0 +1,52 @@
+#--| MPI_Init -> MPIR_Init_thread -> MPID_Init -> MPIDI_PG_Init
+
+# shared subcodes for src/mpi/init
+subcode: mpi_init(type)
+    # MPI_Init, MPI_Init_thread
+    #   nearly identical, the latter w. explicit thread_level
+    subcode: _init
+        $(if:type=thread)
+            $local n_reqd = n_required
+        $call @mpi_init_0
+
+    &call MPIR_enter, TERSE
+        MPIR_T_env_init();
+        $call get_threadLevel
+        $call @mpi_init_1
+        $call init_thread
+        $call @mpi_init_3
+    # ------------------------------
+    subcode: on_fail
+        $(if:type=thread)
+            $call set_error, "**mpi_init_thread", "**mpi_init_thread %p %p %d %p", p_argc, p_argv, n_required, pn_provided
+            # MPID_THREAD_CS_EXIT(GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX); # taken care of in MPIR_Init_thread
+        $(else)
+            $call set_error, "**mpi_init", "**mpi_init %p %p", p_argc, p_argv
+
+    subcode: init_thread
+        $(if:type!=thread)
+            $local n_provided = 0
+            $(set:p=&n_provided)
+        $(else)
+            $(set:p=&pn_provided)
+        $call fcall_fail, MPIR_Init_thread(p_argc, p_argv, n_thread_level, $(p))
+
+    subcode: get_threadLevel
+        $(if:type!=thread)
+            $local n_thread_level
+            $call get_default_threadlevel
+        subcode: get_default_threadlevel
+            $(for:MULTIPLE,SERIALIZED,FUNNELED,SINGLE)
+                $case strcasecmp(MPIR_CVAR_DEFAULT_THREAD_LEVEL, "MPI_THREAD_$1")==0
+                    n_thread_level = MPI_THREAD_$1
+            $else
+                MPL_error_printf("Unrecognized thread level %s\n", MPIR_CVAR_DEFAULT_THREAD_LEVEL);
+                exit(1);
+
+#----------------------------------------------- 
+subcode:: mpi_init_0
+    $my int rc = MPID_Wtime_init()
+
+    &call check_state, !=, PRE_INIT
+        $call set_error, "**inittwice", NULL
+        goto fail

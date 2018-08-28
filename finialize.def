@@ -1,0 +1,61 @@
+include: common.def
+page: finalize, from templates/mpi/init/finalize.c
+    $list MPI_Finalize
+
+fncode: MPI_Finalize
+    subcode: _init
+        $call @mpi_finalize_0
+
+    &call MPIR_enter, TERSE
+        &call Thread_Lock, GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX
+            $call @mpi_finalize_1
+            $call fcall, MPII_Coll_finalize()
+            $call fcall, MPID_Finalize()
+            $call @low_priority_callbacks
+            $call check_fail
+
+            $call @free_MPIR_T
+        $call set_state, POST_FINALIZED
+        #if defined(MPICH_IS_THREADED)
+        MPIR_Thread_CS_Finalize();
+        #endif
+
+        $call @mpi_finalize_3
+    
+    subcode: low_priority_callbacks
+        /* Call the low-priority (post Finalize) callbacks */
+        MPIR_Call_finalize_callbacks(0, MPIR_FINALIZE_CALLBACK_PRIO - 1);
+    subcode: free_MPIR_T
+        /* Users did not call MPI_T_init_thread(), so we free memories allocated to * MPIR_T during MPI_Init here. Otherwise, free them in MPI_T_finalize() */
+        $if !MPIR_T_is_initialized()
+            MPIR_T_env_finalize();
+
+    subcode: on_fail
+        $call set_error, "**mpi_finalize", NULL
+        &call check_state, <, POST_FINALIZED
+            MPID_THREAD_CS_EXIT(GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX);
+
+
+#----------------------------------------------- 
+subcode:: mpi_finalize_0
+    MPIR_ERRTEST_INITIALIZED_ORDIE();
+    /* Note: Only one thread may ever call MPI_Finalize (MPI_Finalize may be called at most once in any program) */
+
+subcode:: mpi_finalize_1
+    $call @finalize_callbacks
+    $call @signal_debugger
+
+subcode: finalize_callbacks
+    /* FIXME: Why is this not one of the finalize callbacks?.  Do we need * pre and post MPID_Finalize callbacks? */
+    MPII_Timer_finalize();
+
+    /* Call the high-priority callbacks */
+    MPIR_Call_finalize_callbacks(MPIR_FINALIZE_CALLBACK_PRIO + 1, MPIR_FINALIZE_CALLBACK_MAX_PRIO);
+
+subcode: signal_debugger
+    /* Signal the debugger that we are about to exit. */
+    /* FIXME: Should this also be a finalize callback? */
+    #ifdef HAVE_DEBUGGER_SUPPORT
+    MPIR_Debugger_set_aborting((char *) 0);
+    #endif
+

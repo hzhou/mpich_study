@@ -1,0 +1,83 @@
+page: mpir_func.h, from templates/include/mpir_func.h
+    module: general
+
+subcode: define_enter_exit_macros
+    #if defined(MPL_USE_DBG_LOGGING) || defined(MPICH_DEBUG_MEMARENA)
+    $call define_common
+    $call define_terse_state_empty
+    $call define_terse_enter_exit
+    $call define_verbose_state_empty
+    $call define_verbose_enter_exit
+    #define MPII_Timer_init(rank, size)
+    #define MPII_Timer_finalize()
+
+    #else
+    #if defined(HAVE_TIMING) && ( $(join:HAVE_TIMING==MPICH_TIMING_KIND__$1: || :LOG,LOG_DETAILED,ALL,RUNTIME) )
+    $call include_special
+
+    #else /* HAVE_TIMING and doing logging */
+    $(set:EMPTY=1)
+    $call define_terse_state_empty
+    $call define_terse_enter_exit
+    $call define_verbose_state_empty
+    $call define_verbose_enter_exit
+    #define MPII_Timer_init(rank, size)
+    #define MPII_Timer_finalize()
+
+    #endif /* HAVE_TIMING */
+    #endif /* ! defined(MPL_USE_DBG_LOGGING) && ! defined(MPICH_DEBUG_MEMARENA) */
+
+    subcode: define_common
+        # MPIR_FUNC_ENTER
+        # MPIR_FUNC_EXIT
+        $(for:ENTER, EXIT and Entering, Leaving)
+            #if defined(MPL_USE_DBG_LOGGING)
+            #define MPIR_FUNC_$1(a) MPL_DBG_MSG(MPL_DBG_ROUTINE_$1,TYPICAL,"$2 "#a)
+            #elif defined(MPICH_DEBUG_MEMARENA)
+            #define MPIR_FUNC_$1(a) MPL_trvalid("$2 "#a)
+            #endif
+    subcode: define_terse_state_empty
+        $(for:INIT_STATE, FINALIZE_STATE, STATE)
+            #define MPIR_FUNC_TERSE_$1_DECL(a)
+    subcode: define_verbose_state_empty
+        $(for:STATE)
+            #define MPIR_FUNC_VERBOSE_$1_DECL(a)
+    subcode: define_terse_enter_exit
+        $(for:e in ENTER,EXIT)
+            $call terse, -, -, $(e)
+            $(for:PT2PT,COLL,RMA,REQUEST,INIT,FINALIZE)
+                $call terse, $1, -, $(e)
+            $(for:FRONT,BACK,BOTH)
+                $call terse, PT2PT, $1, $(e)
+
+    subcode: define_verbose_enter_exit
+        $(for:e in ENTER,EXIT)
+            $call verbose, $(e), $(e)
+            $(for:PT2PT,RMA)
+                $call verbose, $1_$(e), $(e)
+    subcode: terse(a, b, enter)
+        $(set:A=ENTER)
+        $(if:a!=-)
+            $(set:A=$(a)_$(A))
+        $(if:b!=-)
+            $(set:A=$(A)_$(b))
+        $(if:EMPTY)
+            #define MPIR_FUNC_TERSE_$(A)(a)
+        $(else)
+            #define MPIR_FUNC_TERSE_$(A)(a) MPIR_FUNC_$(enter)(a)
+    subcode: verbose(A, enter)
+        $(if:EMPTY)
+            #define MPIR_FUNC_VERBOSE_$(A)(a)
+        $(else)
+            #define MPIR_FUNC_VERBOSE_$(A)(a) MPIR_FUNC_$(enter)(a)
+
+    subcode: include_special
+        #include "mpiallstates.h"
+
+        #if (USE_LOGGING == MPICH_LOGGING__RLOG)
+        #include "rlog_macros.h"
+        #elif (USE_LOGGING == MPICH_LOGGING__EXTERNAL)
+        #include "mpilogging.h"
+        #else
+        #error You must select a logging library if timing is enabled
+        #endif

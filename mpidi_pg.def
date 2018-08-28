@@ -1,0 +1,25 @@
+include: common.def
+page: mpidi_pg, from templates/mpid/ch3/src/mpidi_pg.c
+
+subcode: _autoload
+    $list MPIDI_PG_Init
+
+macros:
+    FN_PG_id_cmp: MPIDI_PG_Compare_ids_fn
+    FN_PG_destroy: MPIDI_PG_Destroy_fn
+
+fncode: MPIDI_PG_Init(p_argc,p_argv, $(FN_PG_id_cmp)_t fn_cmp, $(FN_PG_destroy)_t fn_destroy)
+    $global static $(FN_PG_id_cmp)_t $(FN_PG_id_cmp)
+    $global static $(FN_PG_destroy)_t $(FN_PG_destroy)
+    $(FN_PG_id_cmp) = fn_cmp
+    $(FN_PG_destroy)= fn_destroy
+
+    $global static int verbose=0 # -> is_verbose
+    &call check_env_yes, MPICHD_DBG_PG
+        verbose = 1
+    &call check_arg_opt, -mpichd-dbg-pg
+        verbose = 1
+
+    $local int mpi_errno = MPI_SUCCESS
+    return mpi_errno
+

@@ -1,0 +1,16 @@
+subcode:: mpi_init_1
+    $if MPIR_CVAR_ASYNC_PROGRESS
+        n_thread_level = MPI_THREAD_MULTIPLE;
+
+subcode:: mpi_init_3
+    $if MPIR_CVAR_ASYNC_PROGRESS
+        $if n_provided != MPI_THREAD_MULTIPLE
+            printf("WARNING: No MPI_THREAD_MULTIPLE support (needed for async progress)\n");
+        $call fcall_fail, MPID_Init_async_thread();
+        MPIR_async_thread_initialized = 1;
+
+#----------------------------------------------- 
+subcode:: mpi_finalize_1
+    $if MPIR_async_thread_initialized
+        $call fcall_fail, MPID_Finalize_async_thread()
+
