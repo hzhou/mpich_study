@@ -1,0 +1,37 @@
+perlcode: ac_output
+    &call check_ac_output_dir
+        $call do_output
+
+    subcode: do_output
+        $if !$MyDef::def->{_subst}
+            $MyDef::def->{_subst}={}
+        my $subst = $MyDef::def->{_subst}
+        my $codelist = $MyDef::compileutil::named_blocks{"last_grab"}
+        $foreach $l in @$codelist
+            $if $l && $l!~/^SOURCE[:_]/
+                my $f = $l
+                $if -f "$f.in"
+                    push @$out, "AC_CONFIG_FILES($f)"
+                    &call open_r, $f.in
+                        $while /@(\w+)@/g
+                            $if !$subst->{$1}
+                                $subst->{$1}=1
+                                push @$out, "AC_SUBST($1)"
+                $else
+                    warn "ac_output: $f.in not found!\n"
+
+    subcode: check_ac_output_dir
+        $(if:ac_output_dir)
+            my $cwd = `pwd`
+            chomp $cwd
+            chdir "$(ac_output_dir)"
+        BLOCK
+        $(if:ac_output_dir)
+            chdir $cwd
+
+    subcode: open_r(file)
+        open In, "$(file)" or die "Can't open $(file)\n"
+        $while <In>
+            BLOCK
+        close In
+

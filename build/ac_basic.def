@@ -1,0 +1,103 @@
+macros:
+    Package: test
+    Version: 0.0.1
+    # BugReport: email
+    # TarName: test
+    # URL: url
+
+macros:
+    AC_Ver: 2.63   # 2008-09, 2.69   @ 2012
+    AM_Ver: 1.13   # 2013-01, 1.16.1 @ 2018
+    LT_Ver: 2.4    # 2010-09, 2.4.6  @ 2015
+
+subcode: ac_frame
+    # _autoload will go here
+    AC_PREREQ($(AC_Ver))
+    # AC_INIT: process commandline
+    $(if:URL)
+        AC_INIT($(Package), $(Version), $(BugReport), $(TarName), $(URL))
+    $(else)
+        AC_INIT($(Package), $(Version))
+    $call @main
+    DUMP_STUB _feature_test
+    DUMP_STUB _option_process
+    DUMP_STUB _ac_output
+    AC_OUTPUT
+
+#----------------------------------------------- 
+subcode: ac_basic
+    AM_INIT_AUTOMAKE([$(AM_Ver) $(AM_OPT)])
+    AM_MAINTAINER_MODE([enable])
+    AM_PROG_AR
+
+    LT_PREREQ($(LT_Ver))
+    LT_INIT()
+
+    AC_CANONICAL_BUILD
+    AC_CANONICAL_HOST
+
+#----- common utils ---------------------------------- 
+macros:
+    tr: $( echo $1 | tr '$2' '$3')
+    append: $1="$$1 $2"
+
+subcode: convert_comma_list(var)
+    $(var)=$( echo $$(var) |tr , ' ')
+
+subcode: convert_to_upper(var)
+    $(var)=$( echo $$(var) |tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+subcode: parse_simple_list(list, prefix, @val_list)
+    $call convert_comma_list, $(list)
+    $for a in $$(list)
+        $switch "$a"
+            $(for:$(val_list))
+                $of $1
+                    $(prefix)_$1=yes
+            $of yes|all
+                $(for:$(val_list))
+                    $(prefix)_$1=yes
+            $of no|none
+                NOOP
+            $of *
+                AC_MSG_WARN([Unknown value $a for $(list)])
+
+# consider tuck them inside $(block:_before_ac_output)
+subcode: ac_define(var, val, @desc)
+    $(if:var~\$ or val~\$)
+        AC_DEFINE_UNQUOTED($(var), $(val), $(desc))
+    $(else)
+        AC_DEFINE($(var), $(val), $(desc))
+
+subcode: am_cond(am_var, sh_var, val)
+    AM_CONDITIONAL($(am_var), [test x$(sh_var) = x$(val)])
+
+#----------------------------------------------- 
+subcode: check_prefix
+    # --prefix=/path/to, default NONE
+    # --srcdir=/path/to, default where configure is from
+    $if "$prefix"!="NONE" && -d "$prefix"
+        _prefix=$(abs_path:$prefix)
+        _srcdir=$(abs_path:$srcdir)
+        $if $_prefix=$_srcdir || $_prefix=$PWD
+            AC_MSG_ERROR([The install directory (--prefix=) cannot be the same as the build or src directory.])
+
+# This test is complicated by the fact that top_srcdir is not set until
+# the very end of configure.  Instead, we get it ourselves
+subcode: set_use_top_srcdir
+    $if -z $top_srcdir
+        use_top_srcdir=$srcdir   
+    $else
+        use_top_srcdir=$top_srcdir
+
+    $if -z $master_top_srcdir
+        $if $(unlike:$use_top_srcdir:/*)
+            use_top_srcdir=$(abs_path:$use_top_srcdir)
+        master_top_srcdir=$use_top_srcdir
+
+    $if -z $master_top_builddir
+        master_top_builddir="`pwd`"
+
+    export master_top_builddir
+    export master_top_srcdir
+

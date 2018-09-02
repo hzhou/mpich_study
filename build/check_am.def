@@ -2,34 +2,89 @@ page: check_am
     module: perl
 
     my $top_srcdir="."
-    my %opts=()
-    my %tgts=()
-    my %H
+    my %tgts=() # XXX:
+    my %H       # XXX += ...
 
+    chdir ".."
     $call parse
-    $call report
+    $call pre_report
+    # $call report_options
+    # $call report_vars
+    # $map report_list, mpi_sources, mpi_core_sources
+    $call report_tree
 
-subcode: report
-    print "Checked Options: ", join(', ', sort keys %opts), "\n"
-
+subcode: pre_report
     $(for:mpi_sources, mpi_core_sources)
         my @$1 = split /\s+/, $H{$1}
         $H{$1}=undef
+
+subcode: report_vars
     $print ----------------\n
     $foreach $k in sort keys %H
         my $v = $H{$k}
         $if $v
             $print $k: $v
-    $(for:mpi_sources, mpi_core_sources)
-        $print ----------------\n
-        $print $1
-        $foreach $t in @$1
-            $if $t
-                $print "    $t"
 
+subcode: report_list(L)
+    $print ----------------\n
+    $print $(L)
+    $foreach $t in @$(L)
+        $if $t
+            $print "    $t"
+
+#---- if OPT ---------------------------------- 
+subcode: _autoload
+    my %opts=()
+
+subcode:: parse_cases
+    $(block:parse_init)
+        my ($cur_opt, @opt_stack)
+    $elif $l=~/^if\s+(\w+)/
+        push @opt_stack, $cur_opt
+        $cur_opt = $1
+        $opts{$1}=0
+        next
+    $elif $l=~/^endif/
+        $cur_opt = pop @opt_stack
+        next
+
+subcode: report_options
+    print "Checked Options: ", join(', ', sort keys %opts), "\n"
+
+#---- include XXX ---------------------------------- 
+subcode: _autoload
+    my $tree
+
+subcode:: on_include
+    # $print on_include $f
+    unshift @lines, "PUSH $f"
+    push @lines, "POP"
+
+subcode:: parse_cases
+    $(block:parse_init)
+        $tree = [undef, "Makefile.am"]
+        my $subtree = $tree
+    $elif $l=~/^PUSH (.+)/ -> $f
+        push @$subtree, [$subtree, $f]
+        $subtree = $subtree->[-1]
+    $elif $l=~/^POP/
+        $subtree = $subtree->[0]
+
+subcode: report_tree
+    $print ----------------\n
+    f_report_tree($tree, 0)
+
+fncode: f_report_tree($t, $level)
+    my $f = $t->[1]
+    $f=~s/\/Makefile.mk$//
+    print "    " x $level, $f, "\n"
+    $for $i=2:@$t
+        f_report_tree($t->[$i], $level+1)
+
+#----------------------------------------------- 
 subcode: parse
+    DUMP_STUB parse_init
     my @stack
-    my ($cur_opt, @opt_stack)
     $call get_file_lines, "Makefile.am"
     my $lines = \@lines
     $while 1
@@ -48,17 +103,11 @@ subcode: parse
             my $f = $1
             $f=~s/\x24\(top_srcdir\)/$top_srcdir/
             $call get_file_lines, $f
+            $call @on_include
             push @stack, $lines
             $lines = \@lines
             next
-        $elif $l=~/^if\s+(\w+)/
-            push @opt_stack, $cur_opt
-            $cur_opt = $1
-            $opts{$1}=0
-            next
-        $elif $l=~/^endif/
-            $cur_opt = pop @opt_stack
-            next
+        $call @parse_cases
         # -------------------
         $if $l=~/^(.*?)\s+\\$/
             $l=$1

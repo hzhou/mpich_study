@@ -1,0 +1,6 @@
+include: build/config_doc.def
+
+page: t.ac
+    module: sh
+
+    $call root_doc

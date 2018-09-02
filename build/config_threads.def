@@ -1,0 +1,126 @@
+# Threads must be supported by the device.  First, set the default to
+# be the highest supported by the device
+# "runtime" was an old (now deprecated) option; just map it to multiple
+subcode: on_enable_threads
+    $call arg_alias, enable_threads, runtime, multiple
+    $call arg_alias, enable_threads, yes, default
+    $call arg_alias, enable_threads, no, single
+    $if $enable_threads = default
+        $if -n $MPID_MAX_THREAD_LEVEL
+            $call set_threads_to_MPID_MAX
+        $else
+            enable_threads=single
+
+    $call set_thread_level
+    # Check $MPID_MAX_THREAD_LEVEL>=$MPICH_THREAD_LEVEL
+    $call check_thread_level_ok
+
+    export MPICH_THREAD_LEVEL
+    AC_DEFINE_UNQUOTED(MPICH_THREAD_LEVEL,$MPICH_THREAD_LEVEL,[Level of thread support selected at compile time])
+
+    $if $MPICH_THREAD_LEVEL = MPI_THREAD_MULTIPLE
+        AC_DEFINE([MPICH_IS_THREADED],[1],[MPICH is configured to require thread safety])
+
+    # If not in MPI_THREAD_SINGLE, we need -D_REENTRANT to get thread-safe "errno".
+    # Most POSIX systems provide this by default when using -lpthread, but we only use it in MPI_THREAD_MULTIPLE.
+    # Some systems (Solaris) still require an explicit define in any case.
+    if test "$MPICH_THREAD_LEVEL" != "MPI_THREAD_SINGLE"; then
+        PAC_APPEND_FLAG([-D_REENTRANT], [CPPFLAGS])
+    fi
+
+    # Check for value thread_cs choice; set the refcount default if necessary
+    thread_granularity=MPICH_THREAD_GRANULARITY__SINGLE
+    thread_refcount=MPICH_REFCOUNT__NONE
+    if test "$enable_threads" = "multiple" ; then
+        case $enable_thread_cs in 
+        global)
+        thread_granularity=MPICH_THREAD_GRANULARITY__GLOBAL
+        if test "$enable_refcount" = "default" ; then enable_refcount=none ; fi
+        ;;
+        per-object|per_object)
+        thread_granularity=MPICH_THREAD_GRANULARITY__POBJ
+        if test "$enable_refcount" = "default" ; then enable_refcount=lock-free ; fi
+        ;;
+        lock-free|lock_free|lockfree)
+        thread_granularity=MPICH_THREAD_GRANULARITY__LOCKFREE
+        if test "$enable_refcount" = "default" ; then enable_refcount=lock-free ; fi
+        if test "$enable_predefined_refcount" = "default" ; then enable_predefined_refcount=no ; fi
+        AC_MSG_ERROR([--enable-thread-cs=lock-free is not supported yet, please select a different granularity])
+        ;;
+        *)
+        AC_MSG_ERROR([Unrecognized value $enable_thread_cs for --enable-thread-cs])
+        ;;
+        esac
+
+        case $enable_refcount in
+        lock-free|lock_free|lockfree)
+        thread_refcount=MPICH_REFCOUNT__LOCKFREE
+        ;;
+        none)
+        thread_refcount=MPICH_REFCOUNT__NONE
+        ;;
+        *)
+        AC_MSG_ERROR([Unrecognized value $enable_refcount for --enable-refcount])
+        ;;
+        esac
+    fi
+    AC_DEFINE_UNQUOTED([MPICH_THREAD_GRANULARITY],$thread_granularity,[Method used to implement atomic updates and access])
+
+    AC_DEFINE_UNQUOTED([MPICH_THREAD_REFCOUNT],$thread_refcount,[Method used to implement refcount updates])
+
+    # -------------------------------
+    subcode: set_threads_to_MPID_MAX
+        case $MPID_MAX_THREAD_LEVEL in
+            MPI_THREAD_SINGLE)     enable_threads=single ;;
+            MPI_THREAD_FUNNELED)   enable_threads=funneled ;;
+            MPI_THREAD_SERIALIZED) enable_threads=serialized ;;
+            MPI_THREAD_MULTIPLE)   enable_threads=multiple ;;
+            *) AC_MSG_ERROR([Unrecognized thread level from device $MPID_MAX_THREAD_LEVEL])
+            ;;
+        esac
+
+    subcode: set_thread_level
+        MPICH_THREAD_LEVEL=MPI_THREAD_FUNNELED
+        $switch $enable_threads
+            $of single
+                thread_pkg_required=no
+                MPICH_THREAD_LEVEL=MPI_THREAD_SINGLE
+            $of funneled
+                thread_pkg_required=no
+                MPICH_THREAD_LEVEL=MPI_THREAD_FUNNELED
+            $of serialized
+                thread_pkg_required=no
+                MPICH_THREAD_LEVEL=MPI_THREAD_SERIALIZED
+            $of multiple
+                thread_pkg_required=yes
+                MPICH_THREAD_LEVEL=MPI_THREAD_MULTIPLE
+            $of *
+                AC_MSG_ERROR(["$enable_threads" is not a valid value for --enable-threads])     
+
+    subcode: check_thread_level_ok
+        threadLevelOK=yes
+        $if ! -z "$MPID_MAX_THREAD_LEVEL"
+            case $MPICH_THREAD_LEVEL in 
+                MPI_THREAD_MULTIPLE)
+                if test "$MPID_MAX_THREAD_LEVEL" != "MPI_THREAD_MULTIPLE" ; then
+                    threadLevelOK=no
+                fi
+                ;;
+                MPI_THREAD_SERIALIZED)
+                if test "$MPID_MAX_THREAD_LEVEL" != "MPI_THREAD_MULTIPLE" -a \
+                        "$MPID_MAX_THREAD_LEVEL" != "MPI_THREAD_SERIALIZED" ; then
+                    threadLevelOK=no
+                fi
+                ;;
+                MPI_THREAD_FUNNELED)
+                if test "$MPID_MAX_THREAD_LEVEL" = "MPI_THREAD_SINGLE" ; then
+                    threadLevelOK=no
+                fi
+                ;;
+                MPI_THREAD_SINGLE)
+                ;;
+            esac
+
+        $if $threadLevelOK != yes
+            AC_MSG_ERROR([The device $with_device does not support $MPICH_THREAD_LEVEL])
+

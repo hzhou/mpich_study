@@ -1,0 +1,65 @@
+subcode: on_enable_wrapper_rpath
+    $if $enable_shared = no
+        enable_wrapper_rpath=no
+    # output rpath flags in a usable format for mpich.pc (pkg-config)
+    $if $enable_wrapper_rpath = yes
+        # FIXME: why eval?
+        eval WRAPPER_RPATH_LDFLAGS=\"$hardcode_libdir_flag_spec\"
+
+subcode: on_enable_iterlib-deps
+    INTERLIB_DEPS=yes
+    # We conservatively disable interlibrary dependencies if the libtool
+    # support model is anything different from "pass_all"
+    $if $enable_shared=no || $deplibs_check_method!=pass_all || $enable_interlib_deps=no
+        INTERLIB_DEPS=no
+
+    export INTERLIB_DEPS
+
+subcode: on_enable_weak_symbols
+    # Set NEEDSPLIB to yes if link commands need both -l$MPILIBNAME
+    # and -lp$MPILIBNAME.
+    NEEDSPLIB=yes
+    if test $enable_weak_symbols = yes ; then
+        # Turn off weak symbols if they aren't available
+        PAC_PROG_C_WEAK_SYMBOLS(,enable_weak_symbols=no)
+    fi
+    if test $enable_weak_symbols = "yes" ; then
+        AC_DEFINE(USE_WEAK_SYMBOLS,1,[Define if weak symbols should be used])
+        NEEDSPLIB=no
+        # Check for the ability to support multiple weak symbols
+        if test "$pac_cv_prog_c_weak_symbols" = "pragma weak" ; then
+        PAC_PROG_C_MULTIPLE_WEAK_SYMBOLS(AC_DEFINE(HAVE_MULTIPLE_PRAGMA_WEAK,1,[Define if multiple weak symbols may be defined]))
+        fi
+    fi
+    export NEEDSPLIB
+
+    AM_CONDITIONAL([BUILD_PROFILING_LIB],[test "$NEEDSPLIB" = "yes"])
+
+    # --enable-visibility
+    PAC_CHECK_VISIBILITY
+    # disable visibility if building profiling library
+    if test "$NEEDSPLIB" = "yes" ; then
+        VISIBILITY_CFLAGS=""
+    fi
+
+#----------------------------------------------- 
+subcode: check_CC_FUNCTION_NAME_SYMBOL
+    # Check for whether the compiler defines a symbol that contains the 
+    # function name.  The MPICH code, for greater portability, defines
+    # its own symbols, FCNAME (a string) and FUNCNAME (a token that is not a 
+    # string).  Code should use these symbols where possible.  However, 
+    # some debugging macros may want to use a compiler-provided symbol
+    # for the function name, and this check makes it possible to 
+    # define such macros in a way that is always correct.
+    PAC_CC_FUNCTION_NAME_SYMBOL
+
+subcode: check_MPI_DEFAULT_COPTS
+    # Check if $MPI_DEFAULT_COPTS is valid with $CC
+    $if -n "$MPI_DEFAULT_COPTS"
+        $if $enable_check_compiler_flags=yes
+            PAC_C_CHECK_COMPILER_OPTION( [$MPI_DEFAULT_COPTS], [
+            CFLAGS="$CFLAGS $MPI_DEFAULT_COPTS"
+                                    ] )
+        $else
+            CFLAGS="$CFLAGS $MPI_DEFAULT_COPTS"
+

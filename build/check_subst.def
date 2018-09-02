@@ -1,0 +1,12 @@
+page: t
+    module: perl
+
+    my %all
+    &call open_r, out/all_subst.ac
+        $if /(AC_SUBST\(.*\))/ -> $t
+            $all{$t}++
+
+    &call open_r, templates/configure.ac
+        $if /(AC_SUBST\(.*\))/ -> $t
+            $if !$all{$t}
+                $print missing $t

@@ -1,0 +1,104 @@
+subcode: root_doc
+    \x23 
+    \x23 (C) 2006 by Argonne National Laboratory.
+    \x23     See COPYRIGHT in top-level directory.
+    \x23
+    dnl Process this file with autoconf to produce a configure script.
+    dnl
+    dnl aclocal_cache.m4, included by sowing/confdb/aclocal.m4, fixes 
+    dnl bugs in autoconf caching.
+    dnl
+    dnl This is a large configure script and it is important to keep it
+    dnl clearly organized.  In addition, this script must coordinate with 
+    dnl the other modules that can be used to construct MPICH, such as
+    dnl the communication device and the process manager.  Each of these
+    dnl may have special features or limitations that other modules or
+    dnl this configure may need to take into account.  To handle this, there
+    dnl are xx major steps in this configure script:
+    dnl
+    dnl 1. Identify major modules and source any prerequisite scripts
+    dnl 2. Determine compiler characteristics 
+    dnl 3. Setup and configure the other modules
+    dnl 4. Determine MPI features and characteristics (such as datatype values)
+    dnl
+    dnl Each of these is described in more detail below.
+    dnl
+    dnl 1. Identify the modules (most are specified by 
+    dnl --with-<modulename>=instance,
+    dnl for example, --with-pm=hydra or --with-device=ch3:nemesis).
+    dnl For each module, source the file mpichprereq if present (in the
+    dnl module's top-level directory).  This
+    dnl must be a bourne (sh) shell script; it can access any of the variables
+    dnl in the configure script.  In addition, there are a few variables that
+    dnl are defined and provided to allow the modules to communicate their 
+    dnl needs or limitations to the other modules.  These are:
+    dnl    MPID_MAX_THREAD_LEVEL - thread level supported by device.
+    dnl                            if unset, is MPI_THREAD_FUNNELED
+    dnl    MPID_NO_LONG_LONG     - if yes, the device does not support the 
+    dnl                            long long integer type
+    dnl    MPID_NO_LONG_DOUBLE   - if yes, the device does not support the
+    dnl                            long double type
+    dnl    MPID_PM_NAMESERVER    - if set, provides the name of the nameserver
+    dnl                            that the process manager supports.
+    dnl                            This name server will be used if the
+    dnl                            default name server is selected.
+    dnl    MPID_NO_PM            - If yes, the device does not require any
+    dnl                            PM implementation.  
+    dnl    MPID_MAX_PROCESSOR_NAME - The maximum number of character in a processor
+    dnl                            name.  If not set, 128 will be used.
+    dnl    MPID_MAX_ERROR_STRING - The maximum number of character in an error
+    dnl                            string.  If not set, 1024 will be used.
+    dnl    MPID_LIBTOOL_STATIC_FLAG - The static compilation flag to use
+    dnl                               for the example executables within
+    dnl                               mpich.  If not set, -static will be
+    dnl                               used.
+    dnl    PM_REQUIRES_PMI       - if set, provides the name of the PMI 
+    dnl                            interface implementation.  If not set,
+    dnl                            the "simple" PMI implementation is used.
+    dnl                            A process manager that needs a particular
+    dnl                            process manager should check that this is
+    dnl                            not set to an incompatible value.
+    dnl    MPID_NO_SPAWN         - if yes, the device does not support the
+    dnl                            dynamic process routines (spawn, connect
+    dnl                            attach, join, plus port and publish 
+    dnl                            routines).  The major effect of this
+    dnl                            is to let the test codes know that
+    dnl                            spawn is not implemented.
+    dnl    MPID_NO_RMA           - if yes, the device does not support the
+    dnl                            MPI RMA routines (MPI_Win_create and 
+    dnl                            MPI_Put etc.).  The major effect of this
+    dnl                            is to let the test codes know that 
+    dnl                            RMA is not implemented.
+    dnl
+    dnl Note that the meanings of these variables are defined so that an 
+    dnl undefined value gives the default.  This makes it easy to expand
+    dnl the set of such variables, since only modules that need the new
+    dnl variable will need to be changed.
+    dnl
+    dnl 2. Determine compiler characteristics
+    dnl Here is where features of the compilers are determined, including
+    dnl support for shared libraries and sizes of the basic datatype types.
+    dnl
+    dnl 3. Setup and configure the other modules
+    dnl Before each module configure is executed, the script setup_<module>
+    dnl is run if present.  This is a bourne (sh) shell script and may
+    dnl access configure variables.  It should not make any changes to the
+    dnl compiler name or flags (e.g., do not add -D_XOPEN_SOURCE to CFLAGS here,
+    dnl because that may invalidate the determination of the compiler 
+    dnl characteristics in the prior step).
+    dnl
+    dnl 4. Determine MPI features
+    dnl    
+    dnl
+    dnl Special environment variables
+    dnl To let other scripts and in particular the configure in test/mpi
+    dnl know that they are being invoked from within the MPICH configure,
+    dnl the following environment variables are set and exported:
+    dnl    FROM_MPICH
+    dnl    MPICH_ENABLE_F77
+    dnl    MPICH_ENABLE_FC
+    dnl    MPICH_ENABLE_CXX
+    dnl
+    dnl Note that no executable statements are allowed (and any are silently 
+    dnl dropped) before AC_INIT.
+

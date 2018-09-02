@@ -1,0 +1,148 @@
+# ------------------------------------------------------------
+# 
+# enable-timing and with-logging
+# 
+# Still to do: add subsets: e.g., class=pt2pt,class=coll.  See mpich doc
+# 
+# Logging and timing are intertwined.  If you select logging, you
+# may also need to select a timing level.  If no timing is selected 
+# but logging with rlog is selected, make "all" the default timing level.
+# 
+# FIXME: make timing and logging options work more cleanly together,
+# particularly when other logging options are selected (e.g., logging is not
+# rlog).
+# ------------------------------------------------------------
+
+subcode: config_timing_logging
+    AM_CONDITIONAL(BUILD_LOGGING_RLOG,[test "$with_logging" = "rlog"])
+    $call check_enable_timing
+    $call check_with_logging
+    $call set_logging_subsystem
+
+subcode: check_enable_timing
+    $if $enable_timing="default" && $with_logging="rlog"
+        enable_timing=all
+
+    subcode: _set(timing_name, collect_stats, logging_required)
+        timing_name=$(timing_name)
+        collect_stats=$(collect_stats)
+        logging_required=$(logging_required)
+
+    $call _set, none, false, false
+    $switch $enable_timing
+        $of time
+            $call _set, time, true, false
+        $of log|log_detailed
+            $call _set, $enable_timing, false, true
+        $of yes
+            $call _set, all, true, true
+        $of all|runtime
+            $call _set, $enable_timing, true, true
+        $of no|none|default
+            NOOP
+        $of *
+            AC_MSG_WARN([Unknown value $enable_timing for enable-timing])
+            enable_timing=no
+
+subcode: check_with_logging
+    # 
+    # The default logging package is rlog; you can get it by 
+    # specifying --with-logging or --with-logging=rlog
+    # 
+    $switch $with_logging
+        $of yes
+            logging_name=rlog
+        $of no|none
+            logging_name=none
+        $of default
+            $if $logging_required="true"
+                logging_name=rlog
+            $else
+                logging_name=none
+        $of *
+            $logging_name=$with_logging
+
+subcode: set_logging_subsystem
+    # 
+    # Include the selected logging subsystem
+    # 
+    # Choices:
+    # 1) A subdir of src/util/logging
+    #     This directory must contain a configure which will be executed
+    #     to build the 
+    # 2) An external directory
+    #     This directory must contain 
+    #          a mpilogging.h file
+    #     It may contain 
+    #          a setup_logging script
+    #          a configure
+    #     
+    #   
+    logging_subsystems=
+    $if $logging_name!="none"
+        # Check for an external name (directory containing a /)
+        hasSlash=`echo A$logging_name | sed -e 's%[[^/]]%%g'`
+        $if -n "$hasSlash"
+            $call check_external_logging_system
+        $else
+            $call check_internal_logging_system
+    # 
+    # FIXME: Logging doesn't necessarily require timing (e.g., simply logging the 
+    # sequence of routines).  
+    $call warn_logging_notiming
+    $call warn_logging_required
+    $if $logging_name!="none" && $enable_timing!="no"
+        $if $enable_timing="default" || $enable_timing="none"
+            enable_timing=log
+            timing_name=log
+        subsystems="$subsystems $logging_subsystems"
+    $call _defines # HAVE_TIMING, COLLECT_STATS, USE_LOGGING
+
+    subcode: check_external_logging_system
+        # Check that the external logging system is complete.
+        # Any failure will cause configure to abort
+        $call assert_logging, d, $logging_name
+        $call assert_logging, s, $logging_name/mpilogging.h
+        logdir=$(abs_path:$logging_name)
+        logging_name=external
+        CPPFLAGS="$CPPFLAGS -I$logdir"
+        # Add to the list of external modules to setup
+        $if -x $logdir/setup_logging
+            EXTERNAL_SETUPS="$EXTERNAL_SETUPS $logdir/setup_logging"
+
+    subcode: check_internal_logging_system
+        logdir=$srcdir/src/util/logging
+        logreldir=src/util/logging/$logging_name
+        logging_subsystems="$logging_subsystems $logreldir"
+        $for dir in $logging_name
+            $call assert_logging, d, $logdir/$dir
+        $for dir in $logging_subsystems
+            $call assert_logging, x, $srcdir/$dir/configure
+
+    subcode: _defines
+        $if $timing_name != "none"
+            timing_kind=$(upper:$timing_name)
+            timing_kind=MPICH_TIMING_KIND__$timing_kind
+            AC_DEFINE_UNQUOTED(HAVE_TIMING,$timing_kind,[define to enable timing collection])
+            $if $collect_stats = "true"
+                AC_DEFINE(COLLECT_STATS,1,[define to enable collection of statistics])
+
+        use_logging_variable=$(upper:MPICH_LOGGING__$logging_name)
+        AC_DEFINE_UNQUOTED(USE_LOGGING,$use_logging_variable,[define to choose logging library])
+
+    subcode: assert_logging(d, path)
+        $if ! -$(d) $(path)
+            AC_MSG_ERROR([Missing $(path) (-$(d)). Configure aborted])
+            logging_name=none
+
+    subcode: warn_logging_notiming
+        $if $logging_name!="none" && $enable_timing="no"
+            AC_MSG_WARN([Timing was disabled.  Logging has been disabled as well.])
+            with_logging=no
+            logging_name=none
+
+    subcode: warn_logging_required
+        $if $logging_name="none" && $logging_required="true"
+            AC_MSG_WARN([Timing was enabled with log option but no logging library is available.  Timing has been disabled.])
+            enable_timing=no
+            timing_name=none

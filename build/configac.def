@@ -1,79 +1,33 @@
-# ./configure --with-device=ch4:ofi  
-# find src -name subconfigure.m4
-# find src -name configure
-subcode: subconfig
-    m4_map([PAC_SUBCFG_CONFIGURE_SUBSYS],[PAC_SUBCFG_MODULE_LIST])
-    for subsys in $devsubsystems $subsystems ; do
-        PAC_CONFIG_SUBDIR([$subsys],[],[AC_MSG_ERROR([$subsys configure failed])])
+include: build/ac_mpich.def
 
-page: t.ac
-    module: general
+macros:
+    Package: MPICH
+    Version: MPICH_VERSION_m4
+    BugReport: discuss@mpich.org
+    TarName: mpich
+    URL: http://www.mpich.org/
 
-    AC_PREREQ(2.63)
-    m4_include([maint/version.m4])
-    AC_INIT([MPICH], MPICH_VERSION_m4, [discuss@mpich.org], [mpich], [http://www.mpich.org/])
-    $call @check_prefix
-    $call @check_mpich_version
-    # 1.0.7rc1 -> 10007201 (a,b,rc,-)->(0,1,2,3)
-    AH_BOTTOM([
-    #include "nopackage.h"
-    #endif /* !defined(MPICHCONF_H_INCLUDED) */
-    ])
+    # silent-rules is default as v1.13
+    # foreign style, the default is gnu, which demands NEWS,...etc.
+    # subdir-objects, cd before compile (foo_SOURCES=src/sub/foo.c)
+    AM_OPT: -Wall -Wno-portability-recursive foreign silent-rules subdir-objects
 
-    AC_CONFIG_AUX_DIR(confdb)
-    AC_CONFIG_MACRO_DIR([confdb])
+page: t.ac, mpich_ac_frame
+    module: sh
+
     FROM_MPICH=yes
     export FROM_MPICH
 
     PAC_PREFIX_ALL_FLAGS(USER)
     PAC_PREFIX_ALL_FLAGS(WRAPPER)
-
     $call @set_CFLAGS
-    m4_include([subsys_include.m4])
+    m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
-    # default with_name=default
-    $map @ac_arg_with, custom-version-string, aint-size, device, pmi, pm, logging, cross, namepublisher, name-publisher, mpl-prefix, openpa-prefix, atomic-primitives, zm-prefix, hwloc-prefix,
-    $map @ac_arg_enable, echo, error-checking, error-messages, tag-error-bits, timing, g, mpit_pvars, fast, interlib-deps, check-compiler-flags, fortran, f77, fc, cxx, romio, debuginfo, versioning
-    $map @ac_arg_enable, threads, thread-cs, refcount, mutex-timing, predefined-refcount, weak-symbols, two-level-namespace, multi-aliases, wrapper-rpath, long-double, dbg-nolocal, dbg-localoddeven
-
-    AC_CANONICAL_TARGET
-    $call @PROG_CC
-    AM_INIT_AUTOMAKE([-Wall -Wno-portability-recursive foreign 1.12.3 silent-rules subdir-objects])
-    AM_MAINTAINER_MODE([enable])
-    AM_PROG_AR
-    LT_INIT()
-    $call @set_non_verbose_make
-    $call @PROG_CXX_F77_FC
-
-    AC_CANONICAL_BUILD
-    AC_CANONICAL_HOST
     PAC_ARG_CACHING
     PAC_ARG_STRICT
+    PAC_VPATH_CHECK(src/include/mpi.h src/env/mpicc,lib)
 
-    $call @check_srcdir
-    # with_device: default -> ch3; device_name, device_args
-    #     devicedir = src/mpid/$device_name
-    $call @default_with_device
     $call @default_library_names
-    $call @check_enable_fast
-    $call @check_error_checking
-    $call @check_error_messages
-    $call @check_error_tags
-    $call @check_timing_logging
-    $call @check_MPL    # src/mpl
-    $call @check_OpenPA # src/openpa
-    $call @check_Izem
-    $call @check_plib   # depend on enable_weak_symbols
-    $call @check_hwloc
-    $call @check_threads
-    $call @check_debug  # enable_g
-    $call @check_romio
-    $call @add_devicedir_to_devsubsystems
-    $call @check_pmix
-    $call @check_pm
-    $call @check_pmi
-    $call @check_rpath
-    $call @check_bindings
     AC_LANG_C
     AC_PATH_PROG(PERL,perl)
     $map check_progs, ar, ranlib, killall, xargs, install, mkdir, make
@@ -93,14 +47,12 @@ page: t.ac
     $call @configure_device
     $call @check_MISC
 
-    # $map @ac_arg_enable, izem, f77characterlen, alloca, checkpointing
-    
-    subcode: check_prefix
-        # (--prefix=) cannot be the same as the build or src directory.
+#----------------------------------------------- 
+# ./configure --with-device=ch4:ofi  
+# find src -name subconfigure.m4
+# find src -name configure
+subcode: subconfig
+    m4_map([PAC_SUBCFG_CONFIGURE_SUBSYS],[PAC_SUBCFG_MODULE_LIST])
+    for subsys in $devsubsystems $subsystems ; do
+        PAC_CONFIG_SUBDIR([$subsys],[],[AC_MSG_ERROR([$subsys configure failed])])
 
-    subcode: PROG_CC
-        PAC_PROG_CC # icc pgcc xlc xlC pathcc gcc clang cc
-        # check cross_compiling
-
-    subcode: set_non_verbose_make
-        m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])

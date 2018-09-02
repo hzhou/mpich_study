@@ -1,0 +1,7 @@
+include: build/config_output.def
+
+page: all_subst.ac
+    module: sh
+
+    $call all_ac_output
+

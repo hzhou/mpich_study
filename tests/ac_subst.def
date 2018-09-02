@@ -1,0 +1,20 @@
+include: build/ac_basic.def
+
+page: t.ac
+    module: sh
+    run: autoconf -o out/configure out/t.ac && sh out/configure && cat out/t.test
+
+    Version=1.0.0
+    name=test
+
+    AC_CONFIG_FILES(out/t.test)
+    AC_SUBST(name)
+    AC_OUTPUT
+
+/* expect output:
+configure: creating ./config.status
+config.status: creating out/t.test
+--> test - @Version@ <--
+*/
+
+#- Note: it creates config.status, which creates awk scripts to to the actual substituions. Search for "$ac_tmp/subs1.awk".

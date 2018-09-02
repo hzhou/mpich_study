@@ -1,0 +1,18 @@
+subcode: on_enable_versioning
+    # ABIVERSION is the name used by simplemake, so we reassign the
+    # libmpi_so_version number to it
+    ABIVERSION=${libmpi_so_version}
+    export ABIVERSION
+    export libmpi_so_version
+
+    $if $enable_versioning="yes"
+        ABIVERSIONFLAGS="-version-info \$""(ABIVERSION)"
+    $else
+        ABIVERSIONFLAGS="-avoid-version"
+    export ABIVERSIONFLAGS
+
+subcode: on_with_custom_version_string
+    MPICH_CUSTOM_STRING=$with_custom_version_string
+
+
+

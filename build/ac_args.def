@@ -1,0 +1,169 @@
+#-- AC_ARG_ENABLE(name, help_str, action_if_given, actiion_if_not_given)
+
+#-- ../configure --help >> docs/config.help , then manually edit for help strings
+#-- perlcode: set_macros_from_config_help sets up macros for AC_ARG_ENABLE, AC_ARG_WITH
+
+macros:
+    # AM_INIT_AUTOMAKE(silent-rules)
+    ac_arg_skiplist:: silent-rules, dependency-tracking, maintainer-mode, shared, static, fast-install, libtool-lock, cache, strict
+    ac_var_skiplist:: CC, CFLAGS, LDFLAGS, LIBS, CPPFLAGS, CPP
+    ac_var_skiplist:: LT_SYS_LIBRARY_PATH
+    ac_var_skiplist:: CXX, CXXFLAGS, CXXCPP
+    ac_var_skiplist:: FC, FCFLAGS, F77, FFLAGS
+    ac_var_skiplist:: PKG_CONFIG, AR_FLAGS, GCOV
+
+perlcode: ac_arg_load
+    $if !-f $param
+        warn "ac_arg_load: file [$param] not found!\n"
+    my (@opts, @vars, $o)
+    $MyDef::def->{_opts}=\@opts
+    $MyDef::def->{_vars}=\@vars
+    my %skip_args=($(join:"*"=>1:, :$(ac_arg_skiplist)))
+    my %skip_vars=($(join:"*"=>1:, :$(ac_var_skiplist)))
+
+    &call open_r, $param
+        $if /^((\s+)--(?:en|dis)able-([^\[=\s]+).*)$/ and length($2)<4
+            my ($l, $sp, $name) = ($1, $2, $3)
+            $if $skip_args{$name}
+                $o = undef
+                next
+            $if $name !~/^(FEATURE|option-checking)\b/
+                $o = ["enable-$name", $l]
+                push @opts, $o
+        $elif /^(\s+--with(?:out)?-([^\[=\s]+).*)$/ 
+            my ($l, $name) = ($1, $2)
+            $if $skip_args{$name}
+                $o = undef
+                next
+            $if $name !~/^(PACKAGE)\b/
+                $o = ["with-$name", $l]
+                push @opts, $o
+        $elif /^Some influential environment variables:/
+            $while <In>
+                $if /^\s{0,4}(\w+)\s*(.*)/
+                    $if $skip_vars{$1}
+                        $o = undef
+                        next
+                    $o = [$1]
+                    $if $2
+                        push @$o, $2
+                    push @vars, $o
+                $elif /^\s{4,}(.*)/
+                    $if $o
+                        push @$o, $1
+                $elif /^\s*# .*/
+                    next
+                $else
+                    last
+        $elif $o
+            $if /^\S/
+                $o = undef
+            $elif /^(.*)$/
+                push @$o, $1
+                $if /^\s*#\s*PAC_SET_HEADER_LIB_PATH:\s*(\w+)/
+                    $skip_args{"$1-include"}=1
+                    $skip_args{"$1-lib"}=1
+
+    subcode: open_r(f)
+        open In, "$(f)" or die "Can't open $(f)\n"
+        $while <In>
+            BLOCK
+        close In
+
+perlcode: ac_arg_options
+    my @callsubs
+    $MyDef::def->{_callsubs} = \@callsubs
+    $foreach $L in @{$MyDef::def->{_opts}}
+        my $name = shift @$L
+        my $v = $name
+        $v=~s/-/_/g
+        $call _collect
+        $if $H{PAC_SET_HEADER_LIB_PATH}
+            push @$out, "PAC_SET_HEADER_LIB_PATH($name)"
+        $else
+            $call _dump
+    subcode: _collect
+        my %H={default=>"default"}
+        # -------
+        my @tlist
+        $foreach $l in @$L
+            $if $l=~/^\s*#\s*callsub:?\s*(.*)/
+                $if $1
+                    push @callsubs, $1
+                $else
+                    push @callsubs, "on_$v"
+            $elif $l=~/^\s*#\s*(\w+):\s*(.*)/
+                $H{$1}=$2
+            $else
+                push @tlist, $l
+
+    subcode: _dump
+        my $t = join("\n", @tlist)
+        $t=~s/\[/\@<:\@/g
+        $t=~s/\]/\@:>\@/g
+        # ----
+        my $action = $H{action}
+        my $default = $H{default}
+        $if !$action
+            $if $H{define}
+                $if $H{define}=~/(.+):\s*(.+)/ 
+                    $action = "[if test \$withval = $1; then AC_DEFINE($2); fi]"
+                $else
+                    $action = "AC_DEFINE($H{define})"
+            $elif defined $H{empty}
+                $action = "[if test -z \$withval; then $v=$H{empty}; fi],[$v=$default]"
+            $else
+                $action = ",[$v=$default]"
+        $if $name=~/enable-(.*)/
+            push @$out, "AC_ARG_ENABLE([$1],[$t],$action)"
+        $elif $name=~/with-(.*)/
+            push @$out, "AC_ARG_WITH([$1],[$t],$action)"
+        push @$out, "NEWLINE"
+
+        $if $H{alias}
+            $if $name=~/enable-(.*)/
+                push @$out, "AC_ARG_ENABLE(enable-$H{alias},[],$v=\$withval)"
+            $else
+                push @$out, "AC_ARG_WITH(with-$H{alias},[],$v=\$withval)"
+            push @$out, "NEWLINE"
+            
+perlcode: ac_arg_callsubs
+    $foreach $subname in @{$MyDef::def->{_callsubs}}
+        MyDef::compileutil::call_sub($subname)
+
+perlcode: ac_arg_vars
+    $foreach $L in @{$MyDef::def->{_vars}}
+        my $name = shift @$L
+        # -------
+        my $t = join(' ', @$L)
+        push @$out, "AC_ARG_VAR($name,[$t])"
+
+#----------------------------------------------- 
+subcode: ac_args(config_help)
+    $call ac_arg_load, $(config_help)
+    $call ac_arg_options
+    $(block:_option_process)
+        $call ac_arg_callsubs
+    $(block:_before_ac_output)
+        $call ac_arg_vars
+
+#----------------------------------------------- 
+subcode: arg_alias(var, from, to, @env)
+    $(if:from=-)
+        $(set:cond=-z $$(var))
+    $(else)
+        $(set:cond=$$(var)=$(from))
+
+    $if $(cond)
+        $call set_var
+
+    subcode: set_var
+        $(if:env)
+            $if -n $(env)
+                $(var)=$(env)
+            $else
+                $(var)=$(to)
+        $(else)
+            $(var)=$(to)
+
+

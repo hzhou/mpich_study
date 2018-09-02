@@ -1,0 +1,56 @@
+#---- autoheader scans configure.ac for AC_DEFINE, AC_DEFINE_UNQUOTED and generate config header
+#- autoheader -> config.h.in -> config.h
+
+subcode: config_h(file)
+    AC_CONFIG_HEADER($(file))
+    AH_TOP([/* -*- Mode: C; c-basic-offset:4 ; -*- */
+    \x2f*
+    *  (C) 2001 by Argonne National Laboratory.
+    *      See COPYRIGHT in top-level directory.
+    */
+    #ifndef MPICHCONF_H_INCLUDED
+    #define MPICHCONF_H_INCLUDED
+    ])
+    AH_BOTTOM([
+    \x2f* Include nopackage.h to undef autoconf-defined macros that cause conflicts in
+    * subpackages.  This should not be necessary, but some packages are too
+    * tightly intertwined right now (such as ROMIO and the MPICH core) */
+    #include "nopackage.h"
+    #endif /* !defined(MPICHCONF_H_INCLUDED) */
+    ])
+
+#---- The root is certain macros cause conflicts ----
+# We use an #include strategy here because all of the alternative strategies for
+# quashing these variables have various drawbacks.  The alternatives are listed
+# here to avoid rediscovery of these problems by someone else in the future:
+
+# 1) Strategy: Rewrite mpichconf.h.in with sed at autogen.sh time.
+#    Problem: Automatic remaking of config.status and friends will re-run
+#             autoheader and blow away our sed changes without an opportunity to
+#             patch the resulting file again.
+# 2) Strategy: Add literal "#undef PACKAGE" lines to the AH_BOTTOM text.
+#    Problem: These lines get rewritten by config.status to be "#define" lines,
+#             so the intended quashing never actually occurs.
+# 3) Strategy: Use AC_CONFIG_COMMANDS to run a sed rewrite command on
+#              mpichconf.h at config.status time.
+#    Problem: Causes mpichconf.h to always be rewritten, first by the normal
+#             config.status commands and then by sed.  This can cause
+#             unnecessary remaking of object files since nearly every C source
+#             file includes this header (see the Autoconf Manual, "Automatic
+#             Remaking")
+#
+# The only other plausible strategy would seem to be rewriting config.status
+# itself via AC_CONFIG_COMMANDS_POST, but that seems error prone.  The best
+# solution would be to stop all subconfigures from including config.h headers
+# from other packages.  Then all of this nonsense can be eliminated.
+# [goodell@ 2011-08-26]
+
+subcode: src_include_nopackage_h
+subcode: mpi_romio_adio_include_nopackage_h
+    #undef PACKAGE
+    #undef PACKAGE_BUGREPORT
+    #undef PACKAGE_NAME
+    #undef PACKAGE_STRING
+    #undef PACKAGE_TARNAME
+    #undef PACKAGE_URL
+    #undef PACKAGE_VERSION

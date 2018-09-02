@@ -1,0 +1,145 @@
+#-- $with_device -> src/mpid/$device_name
+#-      source mpichprereq, may set MPID_NO_PM or MPID_PM_NAMESERVER
+
+#-- $with_pm -> src/pm/$pm_name
+#-      source mpichprereq, may set PM_REQUIRES_PMI
+
+#-- $with_pmi -> src/pmi/$pmi_name
+#----------------------------------------------- 
+subcode: config_device_pm_pmi
+    $if $with_device="default"
+        with_device=ch3
+    &call parse_device
+        $call checkadd_subdir, mpid/$device_name
+
+    export device_name
+    export device_args
+    export devicedir
+
+    $call source_setup, $devicedir/mpichprereq
+    # $MPID_NO_PM, $MPID_DEFAULT_PM, $MPID_PM_NAMESERVER
+    $call warn_MPID_NO_SPAWN
+    # ----
+    $call on_with_pmix
+    # ----
+    $call normalize_with_pm
+    $call arg_alias, with_pm, yes, default
+    $call arg_alias, with_pm, default, hydra, $MPID_DEFAULT_PM
+
+    $call split_pm_names
+    &call each_pm_in_pm_names
+        $call checkadd_subdir, pm/$pm_name
+        &call check_MPID_PM_NAMESERVER
+            $call source_setup, $use_top_srcdir/src/pm/$pm_name/mpichprereq
+            # PM_REQUIRES_PMI
+    pm_name=$first_pm_name
+    # ----
+    $if $with_pmi != no
+        $call arg_alias, with_pmi, yes, default
+        $if -n $PM_REQUIRES_PMI && $with_pmi!=default
+            $call @error_pmi_incompatible
+        $call arg_alias, with_pmi, default, simple, $PM_REQUIRES_PMI
+        pmi_name=$with_pmi
+        $call checkadd_subdir, pmi/$pmi_name
+        # $call source_setup, $use_top_srcdir/src/pmi/$pmi_name/mpichprereq
+            
+    # ----
+    $for a in $pm_names
+        $call source_setup, $use_top_srcdir/src/pm/$a/setup_pm
+
+    # -------------------
+    subcode: parse_device
+        DEVICE=$with_device 
+        # eg. ch3:nemesis:mx
+        #     /path/to/device_folder
+        $if $(like:$with_device,/*)
+            devicedir=$DEVICE
+            device_name=`echo $device_name | sed -e 's%.*/%%'`
+        $else
+            $call parse_device_name_args
+            BLOCK
+            devicedir=$use_top_srcdir/src/mpid/$device_name
+
+        subcode: parse_device_name_args
+            device_name=`echo $with_device | sed -e 's/:.*$//'`
+            changequote(<<,>>)
+            device_args=`echo $with_device | sed -e 's/^[^:]*//' -e 's/^://'`
+            changequote([,])
+
+    subcode: warn_MPID_NO_SPAWN
+        # Check to see if the device does not support spawn.  
+        # FIXME: This should provide the option of not building the dynamic
+        # process routines.  It could also allow us to specialize support
+        # for all processes are members of MPI_COMM_WORLD (only one comm_world).
+        $if "$MPID_NO_SPAWN" = yes 
+            AC_MSG_WARN([The device $with_device does not support MPI dynamic process routines])   
+
+    # -----------------------
+    subcode: normalize_with_pm
+        $call arg_alias, with_pm, none, no
+        $if $MPID_NO_PM=yes
+            $if $with_pm!=default && $with_pm!=no
+                AC_MSG_ERROR([The PM chosen ($with_pm) is is not valid for the selected device ($with_device)])
+            with_pm=no
+        $call arg_alias, with_pm, -, no
+        $if $with_pmi=uni && $with_pm=default
+            with_pm="no"
+
+    subcode: split_pm_names
+        $if $with_pm != no
+            pm_names="`echo $with_pm | sed -e 's/:/ /g' -e 's/,/ /g'`"
+        $else
+            pm_names=""
+
+    subcode: each_pm_in_pm_names
+        hasError=no
+        # step 1
+        $for pm_name in $pm_names
+            $if -z $first_pm_name
+                first_pm_name=$pm_name
+                export first_pm_name
+            BLOCK
+        $if $hasError != no
+            AC_MSG_ERROR([Aborting configure because an error was seen in the selection of process managers])
+        subcode: check_MPID_PM_NAMESERVER
+            nameserver=$MPID_PM_NAMESERVER
+            BLOCK
+            $if $nameserver!=$MPID_PM_NAMESERVER 
+                $if $first_pm_name != $pm_name
+                    # Reject (use the default, common mode)
+                    MPID_PM_NAMESERVER=""
+    # -----------------------------
+    subcode: error_pmi_incompatible
+        AC_MSG_ERROR([The PM chosen ($with_pm) requires the PMI implementation $PM_REQUIRES_PMI but $with_pmi was selected as the PMI implementation.])
+
+#----------------------------------------------- 
+# We need to be careful about PM's that have either conflicting 
+# requirements (e.g., different PMI implementations) or different
+# optional features (e.g., MPID_PM_NAMESERVER).
+# In addition, we need to interleave the setup of the PMI and PM
+# modules.  The order is as follows:
+
+# For each PM, execute the mpichprereq script for that pm (if present).  
+# This script provides information about the PM, including which PMI
+# implementations are supported.
+
+# Then, for the selected PMI, the setup script (if any) is run.  This is
+# necessary because the setup of the PM may require information discovered
+# or provided duing the PMI setup step.
+
+# Finally, for each PM, the setup script is executed.
+
+#----------------------------------------------- 
+subcode: on_with_pmix
+    $if -n "$with_pmix" && "$with_pmix" != "no" 
+        # disable built-in PMI and process managers
+        with_pmi="no"
+        with_pm="no"
+        $if "$device_name" != "ch4" 
+            AC_MSG_ERROR([$device_name does not support PMIx])
+        PAC_PUSH_FLAG([LIBS])
+        PAC_CHECK_HEADER_LIB_FATAL(pmix, pmix.h, pmix, PMIx_Init)
+        PAC_APPEND_FLAG([-lpmix],[WRAPPER_LIBS])
+        PAC_POP_FLAG([LIBS])
+        AC_DEFINE(USE_PMIX_API, 1, [Define if PMIx API must be used])
+

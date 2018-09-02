@@ -1,0 +1,20 @@
+configure.ac: AC_ARG_ENABLE([mpit_pvars],
+    should be: AC_ARG_ENABLE([mpit-pvars],
+
+configure.ac: device directory parsing
+    device_name=`echo $device_name ~ sed -e 's%.*/%%'`
+    should be ...`echo $device_name | sed ...`
+
+configure.ac: unify subsystem check for device, pm, pmi
+
+configure.ac: with_cross=$MPID_DEFAULT_CROSS_FILE -- where is MPID_... set?
+
+configure.ac: config_namepublisher: FIXME
+
+configure.ac: AC_CANONICAL_TARGET despite the comment "TARGET not needed, MPICH isn't a compiler"
+
+aclocal_cc.m4: AM_PROG_CC_C_0: silent-rules supported automatically now
+
+configure.ac: enable_fortran: FIXME, need clearer logic
+
+configure.ac: need account for all exports

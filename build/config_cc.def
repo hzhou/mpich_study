@@ -1,0 +1,34 @@
+# ref: confdb/aclocal_cc.m4
+# PAC_PROG_CC: AC_PROG_CC([icc pgcc xlc xlC pathcc gcc clang cc])
+# -- add options to 'COPTIONS'
+# PAC_C_CHECK_COMPILER_OPTION
+# PAC_C_OPTIMIZATION
+# PAC_PROG_C_UNALIGNED_DOUBLES
+# PAC_PROG_C_WEAK_SYMBOLS
+# PAC_PROG_C_MULTIPLE_WEAK_SYMBOLS
+# PAC_ARG_STRICT - Add --enable-strict to configure.  
+# PAC_FUNC_NEEDS_DECL - Set NEEDS_<funcname>_DECL if a declaration is needed
+# PAC_C_GNU_ATTRIBUTE - if GCC __attribute__ specifier is allowed.
+# PAC_C_MACRO_VA_ARGS
+
+subcode: config_cc
+    # Find a C compiler.
+    # We also need to do this before the F77 and FC test to ensure that we
+    # find the C preprocessor reliably.
+    PAC_PROG_CC
+    PAC_PUSH_FLAG([CFLAGS])
+    AC_PROG_CPP
+    # Bug in autoconf.  Restore cross settings
+    if test "$pac_cross_compiling" = "yes" -a "$ac_cv_prog_cc_cross" = "no" ; then
+        AC_MSG_RESULT([Resetting cross compilation to yes])
+        cross_compiling=yes
+        ac_cv_prog_cc_cross=yes
+        ac_cv_prog_f77_cross=yes
+        ac_cv_prog_fc_cross=yes
+        ac_cv_prog_cxx_cross=yes
+    fi
+    PAC_POP_FLAG([CFLAGS])
+
+    # also needed by hwloc in embedded mode, must also come early for expansion
+    # ordering reasons
+    AC_USE_SYSTEM_EXTENSIONS

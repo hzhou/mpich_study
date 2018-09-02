@@ -1,0 +1,11 @@
+include: build/ac_basic.def
+include: build/ac_args.def
+include: build/config_timing_logging.def
+
+page: t.ac, ac_frame
+    module: sh
+    run: cd out && autoconf -o configure t.ac && sh configure
+
+    $call ac_arg_load, docs/config.help
+    # $call ac_arg_vars
+    $call ac_arg_options

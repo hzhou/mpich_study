@@ -1,0 +1,10 @@
+include: build/ac_basic.def
+
+page: t
+    module: sh
+
+    A=..
+    A=$(abs_path:$A)
+    echo $A
+
+

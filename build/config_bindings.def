@@ -1,0 +1,599 @@
+macros:
+    CXX_search_list: [$CCC icpc pgCC xlC pathCC g++ clang++ c++ cc++ cxx CC cl]
+    F77_search_list: [ifort pgf77 af77 xlf frt cf77 fort77 fl32 fort ifc efc ftn gfortran f77 g77]
+    FC_search_list: [ifort pgf90 pathf90 pathf95 xlf90 xlf95 xlf2003 gfortran f90 epcf90 f95 fort lf95 g95 ifc efc gfc])
+
+subcode: ac_prog_(LANG)
+    # suppress default "-g -O2" from AC_PROG_$(LANG)
+    $(if:LANG=F77)
+        : ${FFLAGS=""}
+    $(else)
+        : ${$(LANG)FLAGS=""}
+    # AC_PROG_$(LANG)([$($(LANG)_search_list)])
+    AC_PROG_$(LANG)([PAC_$(LANG)_SEARCH_LIST])
+
+subcode: on_enable_cxx
+    $if $enable_cxx=no
+        CXX=no
+    $call ac_prog_, CXX
+    $if $enable_cxx=default
+        AC_MSG_ERROR([aborting because "--enable-cxx=default" is no longer a supported value])
+    $if $enable_cxx=yes
+        $call test_cxx
+        $call @append_MPI_DEFAULT_OPTS, CXX, CXX
+
+subcode: on_enable_fortran
+    # We'll set FORTRAN_BINDING to 1 if we support Fortran 
+    FORTRAN_BINDING=0
+    $call deprecate_F90
+    $call deprecate_enable_f77_fc
+    $call check_enable_fortran
+    $if $enable_fc = no
+        FC=no
+    $if $enable_f77 = no
+        F77=no
+
+    $call ac_prog_, FC
+
+    $if ! -z "$FC" -a -z "$F77"
+        F77=$FC
+        $if ! -z "$FCFLAGS" -a -z "$FFLAGS"
+            FFLAGS=$FCFLAGS
+
+    # FIXME: need clearer logic
+    AM_CONDITIONAL([INSTALL_MPIF77],[test "$F77" != "$FC" -a "$FFLAGS" != "$FCFLAGS"])
+
+    $call ac_prog_, F77
+
+    $call @check_fortran
+
+    subcode: deprecate_F90
+        $if -n "$F90" || -n "$F90FLAGS" 
+            AC_MSG_ERROR([F90 and F90FLAGS are replaced by FC and FCFLAGS respectively in this configure, please unset F90/F90FLAGS and set FC/FCFLAGS instead and rerun configure again.])
+
+    subcode: deprecate_enable_f77_fc
+        $(for:f77,fc)
+            $if $enable_$1!=default
+                AC_MSG_ERROR([ --enable-$1 is deprecated. Use --enable-fortran or --disable-fortran instead.])
+
+    subcode: check_enable_fortran
+        $call parse_simple_list, enable_fortran, enable, f77, fc
+
+        $if $enable_f77!=yes && $enable_fc=yes
+            AC_MSG_ERROR([Fortran 90 support requires enabling Fortran 77])
+
+#----------------------------------------------- 
+subcode: check_fortran
+    $if $enable_f77=yes
+        $call @check_error_no_f77
+        $call @append_MPI_DEFAULT_OPTS, F, F77
+        $call save_FLIBS
+        $call @check_f77_name_mangling
+
+        $if $enable_fc=yes
+            $call @check_error_no_fc
+            $call @check_fc_with_f77
+
+    $if $enable_f77=yes
+        $call test_f77
+        $call output_mpif
+        $if $enable_fc=yes
+            bindingsubsystems="$bindingsubsystems src/binding/fortran/use_mpi"
+            bindings="$bindings f90"
+            $call test_f08_works
+        $call set_default_fc_vars # for src/bindings/f90
+        $if $enable_fc=yes
+            $call test_fc
+
+    # -------------------
+    subcode: save_FLIBS
+        FLIBS_save="$FLIBS"
+        FLIBS=""
+    subcode: check_f77_name_mangling
+        AC_F77_LIBRARY_LDFLAGS
+        # checks (particularly with the Fujitsu frt compiler).
+        PAC_PROG_F77_FLIBS_VALID
+        PAC_PROG_F77_CHECK_FLIBS
+        PAC_PROG_F77_OBJ_LINKS_WITH_C
+        PAC_PROG_F77_LINKER_WITH_C
+        # For name mangle, we need the library flags
+        PAC_PROG_F77_NAME_MANGLE
+        # libraries
+        PAC_PROG_F77_AND_C_STDIO_LIBS
+        $call @warn_mixed_mangling
+        PAC_F77_INIT_WORKS_WITH_C
+        $if "$pac_f_init_works_with_c" = "yes" 
+            AC_DEFINE(HAVE_MPI_F_INIT_WORKS_WITH_C,1,[Define if the Fortran init code for MPI works from C programs without special libraries])
+        $call check_f77characterlen
+    
+    # ---------------------------
+    subcode: check_f77characterlen
+        # Set the default
+        f77_uses_int_for_str=default
+
+        case "$enable_f77characterlen" in
+            yes|no)
+            ;;
+            size_t)
+                f77_uses_int_for_str=no
+                enable_f77characterlen=yes
+            ;;
+            int)
+                f77_uses_int_for_str=yes
+                enable_f77characterlen=yes
+            ;;
+            *)
+            AC_MSG_ERROR([Invalid value provided for --enable-f77characterlen])
+            ;;
+        esac
+
+        # If we might change the size (enable) and we haven't set the choice,
+        # attempt to determine it from the compiler name.  Risky, but we haven't
+        # found a reliable way to do this with test codes.
+        if test "$enable_f77characterlen" = "yes" -a \
+                "$f77_uses_int_for_str" = "default" ; then
+            f77_uses_int_for_str=yes
+            f77Basename=`basename $F77`
+            case $f77Basename in
+            ifort*)
+            f77_uses_int_for_str=no
+            ;;
+            gfortran*)
+            f77_uses_int_for_str=no
+            ;;
+            esac
+        fi
+        # This test is disabled for now.  Despite information in documentation
+        # on gfortran, it appears to pass lengths as int, at least in some
+        # builds (it used movl when tested in 2/2013).  Tests that failed
+        # included infotestf.f, in a call to mpi_info_get.
+        # Leave this as a place holder until a proper test can be determined.
+        if test  "$enable_f77characterlen" = "yes" -a \
+                    "$f77_uses_int_for_str" = "no" ; then
+            AC_DEFINE(USE_FORT_STR_LEN_SIZET,1,[Define if the length of a CHARACTER*(*) string in Fortran should be passed as size_t instead of int] )
+        fi
+
+    subcode: check_fc_with_f77
+        fc_with_f77=yes
+        enable_fc=no
+        $if "$FC" != "no" 
+            $call init_testRoutine_name
+            PAC_FC_AND_F77_COMPATIBLE(fc_with_f77=yes,fc_with_f77=no,$testRoutine)
+            $if $fc_with_f77 != yes
+                $call @error_fc_f77_incompatible
+            enable_fc=yes
+        $elif test "$pac_cv_prog_fc_works" = no; then
+            AC_MSG_WARN([Use --disable-fc to keep configure from searching for a Fortran 90 compiler])
+
+        subcode: init_testRoutine_name
+            # If we allow multiple weak symbols, we should test a name
+            # that does not contain an underscore.  The Fortran binding uses
+            # this rule for enabling multiple weak symbols:
+            # if defined(USE_WEAK_SYMBOLS) && !defined(USE_ONLY_MPI_NAMES) &&
+            #    defined(HAVE_MULTIPLE_PRAGMA_WEAK) && 
+            #    defined(F77_NAME_LOWER_2USCORE)
+            # 
+            testRoutine="t1_2"
+            if test "$pac_cv_prog_c_multiple_weak_symbols" = "yes" -a \
+                "$enable_weak_symbols" = "yes" -a \
+                "$pac_cv_prog_f77_name_mangle" = "lower doubleunderscore" ; then
+                testRoutine="t12"
+            fi
+
+
+    # -- errors -----------------
+    subcode: check_error_no_f77
+        $if x$F77 = x || x$F77 = xno
+            AC_MSG_ERROR([No Fortran 77 compiler found. If you don't need to build any Fortran programs, you can disable Fortran support using --disable-fortran. If you do want to build Fortran programs, you need to install a Fortran compiler such as gfortran or ifort before you can proceed.])
+    subcode: check_error_no_fc
+        $if x$FC = x || x$FC = xno
+            AC_MSG_ERROR([No Fortran 90 compiler found. If you don't need to build any Fortran 90 programs, you can disable Fortran 90 support using --enable-fortran=f77 or --disable-fortran. If you do want to build Fortran 90 programs, you need to install a Fortran 90 compiler such as gfortran or ifort before you can proceed.])
+                
+    # Warn about mixed name mangling, since many of the tests will fail
+    subcode: warn_mixed_mangling
+        if test "$pac_cv_prog_f77_name_mangle" = "mixed" ; then
+            AC_MSG_WARN([The compiler $F77 uses mixed case names.  Fortran is monocase and many Fortran programs may use either upper or lower case names for MPI calls.  Consider specifying a particular parameter to your Fortran compiler to select either upper or lower case names.  For the Absoft compiler, -f selects lower case and -N109 selects upper case (if you use -f, also use -B108 to enable the iargc and getarg routines, which are needed for some tests and by many user programs).  Specify new command line options by setting the environment variable FFLAGS to include the options (e.g., setenv FFLAGS "-f -B108").  In addition, make sure that your Fortran 90 compiler uses a compatible naming choice.  For the Absoft Fortran 90, -YALL_NAMES=LCS selects lower case names and -B108 adds underscores to names, as required for iargc and getarg.  Pass this information to configure with the FCFLAGS environment variable.])
+            # If Fortran implicitly enabled, disable it now.  Otherwise, # abort the configure since warning messages are often lost in # the output.
+            AC_MSG_ERROR([Aborting configure because of mixed case names in Fortran.  Either select --disable-fortran or set FCFLAGS to force the compiler to select monocase names])
+        fi
+    subcode: error_fc_f77_incompatible
+        enable_fc=no
+        AC_MSG_ERROR([The selected Fortran 90 compiler $FC does not work with the selected Fortran 77 compiler $F77.  Use the environment variables FC and F77 respectively to select compatible Fortran compilers.  The check here tests to see if a main program compiled with the Fortran 90 compiler can link with a subroutine compiled with the Fortran 77 compiler.])
+
+#----------------------------------------------- 
+subcode: append_MPI_DEFAULT_OPTS(F, LANG)
+    $if -n $MPI_DEFAULT_$(F)OPTS
+        $(set:a=$(F)FLAGS="$$(F)FLAGS $MPI_DEFAULT_$(F)OPTS")
+        $if $enable_check_compiler_flags=yes
+            PAC_$(LANG)_CHECK_COMPILER_OPTION([$MPI_DEFAULT_$(F)OPTS],[$(a)])
+        $else
+            $(a)
+#----------------------------------------------- 
+
+subcode: test_cxx
+    AC_CACHE_CHECK([whether the C++ compiler $CXX can build an executable],
+    pac_cv_cxx_builds_exe,[
+ AC_LANG_PUSH([C++])
+ AC_TRY_LINK([
+class mytest { 
+  int a;
+public:
+  mytest(void) : a(1) {}
+  ~mytest(void) {}
+};],[mytest a;],
+ pac_cv_cxx_builds_exe=yes, pac_cv_cxx_builds_exe=no)
+ AC_LANG_POP([C++])
+])
+    if test "$pac_cv_cxx_builds_exe" != yes ; then
+        AC_MSG_ERROR([Aborting because C++ compiler does not work.  If you do not need a C++ compiler, configure with --disable-cxx])
+    fi
+    # Recent failures have come when a standard header is loaded
+    # The Intel icpc 10.x compiler fails with <string> if gcc 4.2 is installed. 
+    AC_CACHE_CHECK([whether C++ compiler works with string],pac_cv_cxx_compiles_string,[
+    AC_LANG_PUSH([C++])
+    AC_TRY_COMPILE([#include <string>],[return 0;],pac_cv_cxx_compiles_string=yes,pac_cv_cxx_compiles_string=no)
+    AC_LANG_POP([C++])
+])
+    if test "$pac_cv_cxx_compiles_string" != yes ; then 
+        AC_MSG_WARN([The C++ compiler $CXX cannot compile a program containing the <string> header - this may indicate a problem with the C++ installation.  Consider configuing with --disable-cxx])
+    fi
+
+    AC_LANG_CPLUSPLUS
+    AX_CXX_EXCEPTIONS
+    AX_CXX_BOOL
+    AX_CXX_NAMESPACES
+    if test "$ac_cv_cxx_namespaces" != "yes" ; then
+        AC_MSG_ERROR([Namespaces are required for the MPI C++ interface])
+    fi
+    HAVE_CXX_EXCEPTIONS=0
+    if test "$ac_cv_cxx_exceptions" = "yes" ; then
+        HAVE_CXX_EXCEPTIONS=1
+    fi
+    # iostream and math are needed for examples/cxx/cxxpi.cxx
+    AC_CACHE_CHECK([whether <iostream> available],pac_cv_cxx_has_iostream,[
+    AC_TRY_COMPILE([
+#include <iostream>
+],[using namespace std;],pac_cv_cxx_has_iostream=yes,pac_cv_cxx_has_iostream=no)])
+    AX_CXX_NAMESPACE_STD
+   
+    AC_CACHE_CHECK([whether <math> available],pac_cv_cxx_has_math,[
+    AC_TRY_COMPILE([
+#include <math>
+],[using namespace std;],pac_cv_cxx_has_math=yes,pac_cv_cxx_has_math=no)])
+
+    # GNU changed the calling conventions between minor releases (!!!)
+    # This is too hard to detect, but we should be able to detect
+    # the version mismatch.  By default, we set the GNU version to 0.
+    # In a cross-compiling environment, these can be set with environment
+    # variables, either directly or through the standard "CROSS" variable.
+    if test -z "$GNUCXX_VERSION" ; then
+        if test -n "$CROSS_GNUCXX_VERSION" ; then 
+	     GNUCXX_VERSION=$CROSS_GNUCXX_VERSION
+        else
+             GNUCXX_VERSION=0
+        fi
+    fi
+    if test -z "$GNUCXX_MINORVERSION" ; then 
+	if test -n "$CROSS_GNUCXX_MINORVERSION" ; then
+	     GNUCXX_MINORVERSION=$CROSS_GNUCXX_MINORVERSION
+       	else
+             GNUCXX_MINORVERSION=0
+        fi
+    fi
+    if test "$cross_compiling" = "no" -a "$ac_compiler_gnu" = "yes" -a \
+       "$GNUCXX_VERSION" = 0 -a "$GNUCXX_MINORVERSION" = 0 ; then
+         ac_vals=""
+	 AC_MSG_CHECKING([for GNU g++ version])
+         AC_TRY_RUN([#include <stdio.h>
+int main() {
+    int v = -1, m = -1;
+    FILE *fp = fopen("conftest.out","w");
+#ifdef __GNUC_MINOR__
+    m = __GNUC_MINOR__;
+#endif
+#ifdef __GNUC__
+    v = __GNUC__;
+#endif
+    fprintf( fp, "v=%d, m=%d\n", v, m );
+    fclose( fp );
+    return 0;
+}],ac_vals=`cat conftest.out`)
+         if test -n "$ac_vals" ; then
+             v=`echo "$ac_vals" | sed -e 's/v=\(.*\),.*/\1/'`
+             m=`echo "$ac_vals" | sed -e 's/.*m=\(.*\)/\1/'`
+             AC_MSG_RESULT([$v . $m])
+             GNUCXX_VERSION=$v
+             GNUCXX_MINORVERSION=$m
+         else
+             AC_MSG_RESULT([unknown])
+         fi 
+    fi    
+
+    bindings="$bindings cxx"
+    AC_DEFINE(HAVE_CXX_BINDING,1,[Define if C++ is supported])
+    INCLUDE_MPICXX_H='#include "mpicxx.h"'
+
+    # In order to support the Fortran datatypes within C++, 
+    # 
+    # FORTRAN_BINDING always has a CPP-time value of either 0 or 1,
+    # so that it may be used in #if statements without adding to 
+    # the CPP name space
+
+    # Special C++ datatypes.  Set to DATATYPE NULL first; we'll 
+    # replace the ones that we have later, after we have determined
+    # the C datatypes
+    MPIR_CXX_BOOL=0x0c000000
+    MPIR_CXX_COMPLEX=0x0c000000
+    MPIR_CXX_DOUBLE_COMPLEX=0x0c000000
+    MPIR_CXX_LONG_DOUBLE_COMPLEX=0x0c000000
+
+    # determine rpath and other shared library flags for CXX
+    cxx_shlib_conf=src/env/cxx_shlib.conf
+    PAC_COMPILER_SHLIB_FLAGS([CXX],[$cxx_shlib_conf])
+    AC_SUBST_FILE([cxx_shlib_conf])
+#----------------------------------------------- 
+subcode: test_f77
+    # determine rpath and other shared library flags for F77
+    f77_shlib_conf=src/env/f77_shlib.conf
+    PAC_COMPILER_SHLIB_FLAGS([F77],[$f77_shlib_conf])
+    AC_SUBST_FILE([f77_shlib_conf])
+
+    AC_LANG_FORTRAN77
+    PAC_PROG_F77_EXCLAIM_COMMENTS(has_exclaim="yes",has_exclaim="no")
+    PAC_PROG_F77_HAS_INCDIR(src)
+    PAC_PROG_F77_LIBRARY_DIR_FLAG
+
+    if test "$MPI_WITH_PMPI" = "no" ; then
+        # If the PMPI routines are not in the same library with the MPI
+        # routines, we may need to remove the pmpi declarations
+        PAC_PROG_F77_ALLOWS_UNUSED_EXTERNALS([MPIFPMPI=",PMPI_WTIME,PMPI_WTICK"],[
+        MPIFPMPI=""; 
+        AC_MSG_WARN([Removed PMPI_WTIME and PMPI_WTICK from mpif.h])])
+    else
+        MPIFPMPI=",PMPI_WTIME,PMPI_WTICK"
+    fi
+
+    # Once we have name mangle, we can try to limit the number of needed libs
+    dnl F77_IN_C_LIBS is not needed currently because mpirinitf_() in setbotf.f
+    dnl is called in initthread.c only when FLIBS is not needed to initialize
+    dnl Fortran constants from a C main, See PAC_F77_INIT_WORKS_WITH_C.
+    dnl PAC_PROG_F77_IN_C_LIBS
+    dnl AC_SUBST(F77_IN_C_LIBS)
+
+    # Most systems allow the Fortran compiler to process .F and .F90 files
+    # using the C preprocessor.  However, some systems either do not
+    # allow this or have serious bugs (OSF Fortran compilers have a bug
+    # that generates an error message from cpp).  The following test
+    # checks to see if .F works, and if not, whether "cpp -P -C" can be used
+    # This is needed for Mac OSX 10.5
+    PAC_F77_WORKS_WITH_CPP([F77CPP])
+
+    # Check that the Fortran compiler will allow us to pass arguments
+    # of different types (e.g., for MPI_Send)
+    PAC_PROG_F77_MISMATCHED_ARGS(addarg,yes)
+    if test "X$addarg" != "X" ; then
+        # We could add the names of all of the MPI routines that 
+        # accept different types.  Instead, we fail cleanly.  
+        # Some Fortran compilers allow you to turn off checking for 
+        # mismatched arguments for *all* routines.  Adding an argument
+	# that turns off checking for *everything* is not something that 
+	# configure should do - if the user wants this, they can follow
+	# the instructions in the following error message.
+	AC_MSG_ERROR([The Fortran compiler $F77 does not accept programs that call the same routine with arguments of different types without the option $addarg.  Rerun configure with FFLAGS=$addarg])
+    fi
+
+    bindings="$bindings f77"
+    AC_DEFINE(HAVE_FORTRAN_BINDING,1,[Define if Fortran is supported])
+    # Also define the name FORTRAN_BINDING for use in #if @FORTRAN_BINDING@..
+    FORTRAN_BINDING=1
+
+subcode: output_mpif
+    dnl By modifying mpif.h to use ! for comments, it can work with many f90 
+    dnl compilers without creating a separate version.  
+    dnl Note that this is run AFTER the AC_OUTPUT actions
+    AC_OUTPUT_COMMANDS([if test "$enable_f77" = yes ; then 
+    if test "$has_exclaim" = "yes" ; then
+        sed -e 's/^C/\!/g' src/binding/fortran/mpif_h/mpif.h > src/include/mpif.h
+            cp src/include/mpif.h src/binding/fortran/mpif_h/mpif.h
+    else
+        cp src/binding/fortran/mpif_h/mpif.h src/include
+    fi
+    if test "$has_fort_real8" = "yes" ; then
+        sed -e 's/DOUBLE PRECISION/REAL*8/g' src/include/mpif.h > src/include/mpif.h.new
+        mv src/include/mpif.h.new src/include/mpif.h
+        cp src/include/mpif.h src/binding/fortran/mpif_h/mpif.h
+    fi
+    fi],
+    master_top_srcdir=$master_top_srcdir
+    enable_f77=$enable_f77
+    enable_fc=$enable_fc
+    has_exclaim=$has_exclaim
+    has_fort_real8=$pac_cv_fort_real8
+    includebuild_dir=$includebuild_dir
+    libbuild_dir=$libbuild_dir
+    bashWorks=$bashWorks)
+
+subcode: test_f08_works
+    f08_works=no
+    if test "$enable_fc" = "yes" ; then
+        PAC_FC_2008_SUPPORT([f08_works=yes],[f08_works=no])
+    fi
+    AM_CONDITIONAL([BUILD_F08_BINDING], [test "$f08_works" = "yes"])
+
+    if test "$f08_works" = "yes" ; then
+        status_f08_works=1
+        bindings="$bindings f08"
+    else
+        status_f08_works=0
+    fi
+    AC_DEFINE_UNQUOTED(HAVE_F08_BINDING, $status_f08_works, [Define to 1 to enable Fortran 2008 binding])
+
+subcode: set_default_fc_vars
+    # Set defaults for these values so that the Makefile in src/bindings/f90
+    # is valid even if fc is not enabled (this is necessary for the 
+    # distclean target)
+    MPIMODNAME=mpi
+    MPICONSTMODNAME=mpi_constants
+    MPISIZEOFMODNAME=mpi_sizeofs
+    MPIBASEMODNAME=mpi_base
+
+    # F08 binding stuff
+    MPI_F08_LINK_CONSTANTS_NAME=mpi_f08_link_constants
+    PMPI_F08_NAME=pmpi_f08
+    MPI_F08_CALLBACKS_NAME=mpi_f08_callbacks
+    MPI_C_INTERFACE_NAME=mpi_c_interface
+    MPI_C_INTERFACE_GLUE_NAME=mpi_c_interface_glue
+    MPI_F08_TYPES_NAME=mpi_f08_types
+    MPI_C_INTERFACE_NOBUF_NAME=mpi_c_interface_nobuf
+    MPI_F08_COMPILE_CONSTANTS_NAME=mpi_f08_compile_constants
+    MPI_F08_NAME=mpi_f08
+    MPI_C_INTERFACE_TYPES_NAME=mpi_c_interface_types
+    MPI_C_INTERFACE_CDESC_NAME=mpi_c_interface_cdesc
+
+subcode: test_fc
+    # determine rpath and other shared library flags for FC
+    fc_shlib_conf=src/env/fc_shlib.conf
+    PAC_COMPILER_SHLIB_FLAGS([FC],[$fc_shlib_conf])
+    AC_SUBST_FILE([fc_shlib_conf])
+
+    # Determine characteristics of the Fortran 90 compiler
+    # Find a Fortran 90 compiler.  Sets FC
+    # Work around bug in autoconf that adds -g to FCFLAGS
+    saveFCFLAGS="$FCFLAGS"
+    dnl FIXME XXX DJG this needs to be reconciled with our separate use of
+    dnl AC_PROG_FC earlier
+    dnl PAC_PROG_FC
+    PAC_PROG_FC_WORKS
+    FCFLAGS=$saveFCFLAGS
+    if test "$pac_cv_prog_fc_works" = no ; then 
+        # Reject this compiler
+        if test "$FC" != "no" ; then
+            fc_rejected=yes
+            oldFC="$FC"
+            FC="no"
+        fi
+    fi
+
+    # Determine the extension for Fortran 90 files (it isn't always .f90)
+    FCEXT=$ac_fc_srcext
+
+    if test "$FC" = "no" ; then
+        if test "$fc_rejected" = "yes" ; then
+            AC_MSG_ERROR([Could not find a usable Fortran 90 compiler.  The compiler $oldFC may be incompatible with the Fortran 77 compiler $F77; check the output of configure and consult the installation manuals])
+        else
+            AC_MSG_ERROR([Could not find a usable Fortran 90 compiler.])
+        fi
+    fi
+
+    # Find the extension that this compiler uses for modules.
+    # Sets FCMODEXT (and adds it to the list substed)
+    # Sets FCMODINCFLAG (and adds it to the list substed)
+    PAC_FC_MODULE
+    if test -z "$FCMODOUTFLAG" ; then
+        AC_MSG_ERROR([FCMODOUTFLAG could not be determined but is critical for the current Fortran build system])
+    fi
+
+    if test "$pac_cv_fc_module_case" = "upper" ; then
+        MPIMODNAME=MPI
+        MPICONSTMODNAME=MPI_CONSTANTS
+	MPISIZEOFMODNAME=MPI_SIZEOFS
+	MPIBASEMODNAME=MPI_BASE
+        MPI_F08_NAME=MPI_F08
+        MPI_F08_LINK_CONSTANTS_NAME=MPI_F08_LINK_CONSTANTS
+        MPI_F08_CALLBACKS_NAME=MPI_F08_CALLBACKS
+        MPI_F08_TYPES_NAME=MPI_F08_TYPES
+        MPI_F08_COMPILE_CONSTANTS_NAME=MPI_F08_COMPILE_CONSTANTS
+        PMPI_F08_NAME=PMPI_F08
+        MPI_C_INTERFACE_NAME=MPI_C_INTERFACE
+        MPI_C_INTERFACE_NOBUF_NAME=MPI_C_INTERFACE_NOBUF
+        MPI_C_INTERFACE_GLUE_NAME=MPI_C_INTERFACE_GLUE
+        MPI_C_INTERFACE_TYPES_NAME=MPI_C_INTERFACE_TYPES
+        MPI_C_INTERFACE_CDESC_NAME=MPI_C_INTERFACE_CDESC
+    else
+        MPIMODNAME=mpi
+        MPICONSTMODNAME=mpi_constants
+	MPISIZEOFMODNAME=mpi_sizeofs
+	MPIBASEMODNAME=mpi_base
+        MPI_F08_NAME=mpi_f08
+        MPI_F08_LINK_CONSTANTS_NAME=mpi_f08_link_constants
+        MPI_F08_CALLBACKS_NAME=mpi_f08_callbacks
+        MPI_F08_TYPES_NAME=mpi_f08_types
+        MPI_F08_COMPILE_CONSTANTS_NAME=mpi_f08_compile_constants
+        PMPI_F08_NAME=pmpi_f08
+        MPI_C_INTERFACE_NAME=mpi_c_interface
+        MPI_C_INTERFACE_NOBUF_NAME=mpi_c_interface_nobuf
+        MPI_C_INTERFACE_GLUE_NAME=mpi_c_interface_glue
+        MPI_C_INTERFACE_TYPES_NAME=mpi_c_interface_types
+        MPI_C_INTERFACE_CDESC_NAME=mpi_c_interface_cdesc
+    fi
+
+
+    # Assume that all Fortran 90 compilers accept -I for include directories
+    FCINC=-I
+    FCINCFLAG=-I
+
+    # Check if $MPI_DEFAULT_FCOPTS is valid with $F90
+    if test -n "$MPI_DEFAULT_FCOPTS" ; then
+        if test "$enable_check_compiler_flags" = "yes" ; then
+            PAC_FC_CHECK_COMPILER_OPTION( [$MPI_DEFAULT_FCOPTS], [
+            FCFLAGS="$FCFLAGS $MPI_DEFAULT_FCOPTS"
+                                     ] )
+        else
+            FCFLAGS="$FCFLAGS $MPI_DEFAULT_FCOPTS"
+        fi
+    fi
+
+    # Most systems allow the Fortran compiler to process .F and .F90 files
+    # using the C preprocessor.  However, some systems either do not
+    # allow this or have serious bugs (OSF Fortran compilers have a bug
+    # that generates an error message from cpp).  The following test
+    # checks to see if .F works, and if not, whether "cpp -P -C" can be used
+    PAC_FC_WORKS_WITH_CPP([FCCPP])
+
+    # Check whether additional libraries are needed when linking with C
+    PAC_PROG_FC_AND_C_STDIO_LIBS
+#----------------------------------------------- 
+subcode: comment_fortran_binding
+    # Support for the language bindings: Fortran 77, Fortran 90, and C++
+    #
+    # First, we handle the case of no explicit enable/disable option.  In that
+    # case, we look for a usable compiler.  We cannot use the ac macros for this
+    # because they abort the configure step if they fail to find a compiler 
+    # (earlier versions of autoconf did not have this behavior!).
+    #
+    # Second, we perform the langugage-specific tests, if necessary.  This may
+    # be relatively simple (C++) or complex (Fortran 77, including formation of 
+    # the encoded MPI handles).
+    #
+    # Note that the bindings support needs to know some of the properties of
+    # the C compiler, so those tests (particularly for weak symbols)
+    # must come first.
+
+subcode: comment_f_init_works_with_c
+    # The MPI standard requires that MPI_Init in any language initialize
+    # MPI in all languages.  This can be a problem when objects produced 
+    # by the Fortran compiler require symbols from the Fortran runtime
+    # (making linking C-only programs unnecessarily difficult).  What we test 
+    # here is whether the much more restricted needs of the Fortran 
+    # initialize can be met with no special use of the Fortran runtime
+
+subcode: comment_f77characterlen
+    # Some Fortran compilers now pass CHARACTER length as a size_t instead
+    # of as an int.  This is hard to test for, since the data is passed by
+    # value and for characters less than about 2GB long, the correct
+    # value will be used.  In this case, we must use an approach similar to
+    # the one used by libtool for shared library options - look at the
+    # compiler name or vendor.
+    # Known compilers that use size_t instead of int:
+    #    Intel Fortran
+    #    gfortran
+    # Add others as they become known
+
+subcode: comment_cxx
+    # Another bug in autoconf.  The checks for the C++ compiler do not
+    # ensure that you can link a program that is built with the C++ 
+    # compiler.  We've seen this error with gcc and icc, particularly
+    # when those compilers accept C++ language elements but are unable
+    # to link programs that are really C++.  For that reason,
+    # we've added a test to see if the C++ compiler can produce
+    # an executable.

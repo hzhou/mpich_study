@@ -1,0 +1,20 @@
+include: build/ac_basic.def
+include: build/ac_args.def
+
+subcode: _autoload
+    m4_include(../maint/version.m4)
+macros:
+    Version: MPICH_VERSION_m4
+    URL: https://www.mpich.org/
+
+page: t.ac
+    module: sh
+    run: autoconf -o out/configure out/t.ac && sh out/configure --help > out/t.out
+
+    $if "$prefix"!="NONE"
+        echo prefix: $prefix
+    $else
+        echo prefix is NONE
+    $call check_prefix
+    # $call ac_basic
+    # $call ac_arg_from_config_help, docs/config.help

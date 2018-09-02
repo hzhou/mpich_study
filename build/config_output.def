@@ -1,0 +1,74 @@
+include: build/ac_output.def
+macros:
+    ac_output_dir: ..
+
+subcode:: all_ac_output
+    &call ac_output
+        Makefile
+        examples/Makefile
+        test/Makefile
+        test/commands/Makefile
+        src/include/mpichinfo.h
+        mpich-doxygen
+        src/include/mpir_ext.h
+        src/binding/cxx/mpicxx.h
+        src/binding/fortran/mpif_h/mpif.h
+        src/binding/fortran/mpif_h/setbotf.f
+        src/binding/fortran/mpif_h/setbot.c
+        src/binding/fortran/use_mpi/mpi_sizeofs.f90
+        src/binding/fortran/use_mpi/mpi_base.f90
+        src/binding/fortran/use_mpi/mpi_constants.f90
+        src/binding/fortran/use_mpi_f08/mpi_f08_compile_constants.f90
+        src/binding/fortran/use_mpi_f08/mpi_c_interface_types.f90
+        src/packaging/pkgconfig/mpich.pc
+        src/packaging/envmods/mpich.module
+        src/env/mpixxx_opts.conf
+        src/env/mpicc.sh
+        src/env/mpicc.bash
+        src/env/mpicxx.sh
+        src/env/mpicxx.bash
+        src/env/mpif77.sh
+        src/env/mpif77.bash
+        src/env/mpifort.sh
+        src/env/mpifort.bash
+        src/env/parkill
+        src/include/mpi.h
+        doc/design/Makefile
+        doc/installguide/Makefile
+        doc/logging/Makefile
+        doc/refman/Makefile
+        doc/userguide/Makefile
+        test/commands/cmdtests
+
+/*
+missing AC_SUBST([enable_wrapper_rpath])
+missing AC_SUBST([HAVE_ERROR_CHECKING])
+missing AC_SUBST([mplsrcdir])
+missing AC_SUBST([mpllibdir])
+missing AC_SUBST([mpllib])
+missing AC_SUBST([opasrcdir])
+missing AC_SUBST([opalibdir])
+missing AC_SUBST([opalib])
+missing AC_SUBST([zmsrcdir])
+missing AC_SUBST([zmlibdir])
+missing AC_SUBST([zmlib])
+missing AC_SUBST([hwlocsrcdir])
+missing AC_SUBST([hwloclibdir])
+missing AC_SUBST([hwloclib])
+missing AC_SUBST(F77_IN_C_LIBS)
+missing AC_SUBST([MPIR_CXX_BOOL])
+missing AC_SUBST([MPIR_CXX_COMPLEX])
+missing AC_SUBST([MPIR_CXX_DOUBLE_COMPLEX])
+missing AC_SUBST([MPIR_CXX_LONG_DOUBLE_COMPLEX])
+missing AC_SUBST([MPI_F77_CXX_BOOL])
+missing AC_SUBST([MPI_F77_CXX_FLOAT_COMPLEX])
+missing AC_SUBST([MPI_F77_CXX_DOUBLE_COMPLEX])
+missing AC_SUBST([MPI_F77_CXX_LONG_DOUBLE_COMPLEX])
+missing AC_SUBST([MPI_COUNT])
+missing AC_SUBST([COUNT_KIND])
+missing AC_SUBST([MPI_COUNT_DATATYPE])
+missing AC_SUBST([MPI_F77_COUNT])
+missing AC_SUBST([SIZEOF_MPI_STATUS])
+missing AC_SUBST([MPI_STATUS_SIZE])
+missing AC_SUBST([mpich_libtool_static_flag])
+*/

@@ -1,0 +1,42 @@
+# Get the default nameserver, if no nameserver was selected.  A process
+# manager may advertise a nameserver name by setting the variable
+# MPID_PM_NAMESERVER.
+
+subcode: config_namepublisher
+    nameserv_name=""
+    $call arg_alias, with_namepublisher, default, pmi, $MPID_PM_NAMESERVER
+
+    $switch $with_namepublisher
+        $of none|no
+            # Removed ldap namepublisher hook - we no longer support or distribute
+            # the ldap-based name server
+        $of file*
+            $call set_nameserv_file
+        $of *
+            $call set_nameserv_dir
+    $if -n $nameserv_name
+        $call ac_define, HAVE_NAMEPUB_SERVICE,1,[Define if a name publishing service is available]
+    export nameserv_name
+
+    $call am_cond, BUILD_NAMEPUB_FILE, $nameserv_name, file
+    $call am_cond, BUILD_NAMEPUB_PMI,  $nameserv_name, pmi
+
+    subcode: set_nameserv_file
+        # Note that we always build the Makefile for the file version because
+        # this name publisher is really too simple to require a 
+        # separate configure, and we might as well include a basic
+        # name publisher with any MPICH distribution
+        # We DO need to extract the directory name that is used for writing 
+        # the files, with the User's home directory as the default
+        nameserv_name="file"
+        basedir=`echo $with_namepublisher | sed -e 's/file://'`
+        # FIXME: ?
+        $if $basedir=$with_namepublisher
+            # Reset since no directory was set.
+            basedir='"."'
+        $call ac_define, FILE_NAMEPUB_BASEDIR,$basedir,[Directory to use in namepub]
+        $call ac_define, USE_FILE_FOR_NAMEPUB,1,[Define if file should be used for name publisher]
+
+    subcode: set_nameserv_dir
+        dir=$with_namepublisher
+        $call checkadd_subdir, nameserv/$dir

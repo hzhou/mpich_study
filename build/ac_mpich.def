@@ -1,0 +1,137 @@
+include: build/ac_basic.def
+include: build/ac_args.def
+include: build/ac_subsystem.def
+
+include: build/config_doc.def
+include: build/config_output.def
+include: build/config_h.def
+
+include: build/config_device.def
+include: build/config_romio.def
+include: build/config_threads.def
+include: build/config_cross.def
+include: build/config_namepublisher.def
+include: build/config_misc.def
+include: build/config_conditional.def
+
+subcode: mpich_ac_frame
+    $call root_doc
+    $call load_version # compare: subcode: check_version
+    $(for:MPICH_VERSION,MPICH_RELEASE_DATE,libmpi_so_version,MPICH_NUMVERSION)
+        $1=$($1)
+    # ---- for aclocal -----
+    AC_CONFIG_AUX_DIR(confdb)
+    AC_CONFIG_MACRO_DIR(confdb)
+    # ----------------
+    AC_PREREQ($(AC_Ver))
+    AC_INIT($(Package), $(Version), $(BugReport), $(TarName), $(URL))
+    $call check_prefix
+    $call set_use_top_srcdir
+    $call check_configure_args
+    echo "Running on system: `uname -a`"
+    $call ac_basic # AM_INIT_AUTOMAKE, LT_INIT
+    $call config_h, src/include/mpichconf.h # why not config.h
+
+    $call ac_args, docs/config.help
+    $call @main
+    m4_include([subsys_include.m4])
+    # ----------------
+    $call config_cc
+    DUMP_STUB _feature_test
+    DUMP_STUB _option_process
+    DUMP_STUB _ac_output
+    AC_OUTPUT
+    echo 'Configuration completed.'
+
+#----------------------------------------------- 
+perlcode: load_version
+    my $macros=$MyDef::def->{macros}
+    $call load_m4, ../maint/version.m4
+    $call parse_MPICH_VERSION
+    $macros->{Version}=$macros->{MPICH_VERSION}
+
+    subcode: load_m4(file)
+        # much simpler if use mydef macros directly
+        &call open_r, $(file)
+            $if /m4_define\(\s*(.*)\s*,\s*(.*)\s*\)/ -> $k, $v
+                $if $k=~/^\s*\[(.*)\]\s*$/
+                    $k = $1
+                $if $v=~/^\s*\[(.*)\]\s*$/
+                    $v = $1
+                $k=~s/_m4$//
+                $macros->{$k}=$v
+
+    subcode: parse_MPICH_VERSION
+        my $t=$macros->{MPICH_VERSION}
+        my $t2 = "300"
+        $if $t=~/(.*)(a|b|rc|p)(\d*)/
+            my %rev=(a=>0,b=>1,rc=>2,p=>3)
+            $t2 = sprintf("%d%02d", $rev{$2}, $3)
+            my ($V1,$V2,$V3)=split /\./, $1
+            $t = sprintf("%d%02d%02d$t2", $V1, $V2, $V3)
+        $macros->{MPICH_NUMVERSION}=$t
+            
+    subcode: open_r(file)
+        open In, "$(file)" or die "Can't open $(file)\n"
+        $while <In>
+            BLOCK
+        close In
+
+subcode: check_version
+    $if -z "$MPICH_VERSION"
+        AC_MSG_ERROR([MPICH_VERSION is empty, check maint/version.m4 for errors])
+    # Produce a numeric version assuming the following format:
+    # Version: [MAJ].[MIN].[REV][EXT][EXT_NUMBER]
+    # Example: 1.0.7rc1 has
+    #          MAJ = 1
+    #          MIN = 0
+    #          REV = 7
+    #          EXT = rc
+    #          EXT_NUMBER = 1
+    # 
+    # Converting to numeric version will convert EXT to a format number:
+    #          ALPHA (a) = 0
+    #          BETA (b)  = 1
+    #          RC (rc)   = 2
+    #          PATCH (p) = 3
+    # Regular releases are treated as patch 0
+    #
+    # Numeric version will have 1 digit for MAJ, 2 digits for MIN,
+    # 2 digits for REV, 1 digit for EXT and 2 digits for EXT_NUMBER.
+    changequote(<<,>>)
+    V1=`expr $MPICH_VERSION : '\([0-9]*\)\.[0-9]*\.*[0-9]*[a-zA-Z]*[0-9]*'`
+    V2=`expr $MPICH_VERSION : '[0-9]*\.\([0-9]*\)\.*[0-9]*[a-zA-Z]*[0-9]*'`
+    V3=`expr $MPICH_VERSION : '[0-9]*\.[0-9]*\.*\([0-9]*\)[a-zA-Z]*[0-9]*'`
+    V4=`expr $MPICH_VERSION : '[0-9]*\.[0-9]*\.*[0-9]*\([a-zA-Z]*\)[0-9]*'`
+    V5=`expr $MPICH_VERSION : '[0-9]*\.[0-9]*\.*[0-9]*[a-zA-Z]*\([0-9]*\)'`
+    changequote([,])
+
+    if test "$V2" -le 9 ; then V2=0$V2 ; fi
+    if test "$V3" = "" ; then V3=0; fi
+    if test "$V3" -le 9 ; then V3=0$V3 ; fi
+    if test "$V4" = "a" ; then
+        V4=0
+    elif test "$V4" = "b" ; then
+        V4=1
+    elif test "$V4" = "rc" ; then
+        V4=2
+    elif test "$V4" = "" ; then
+        V4=3
+        V5=0
+    elif test "$V4" = "p" ; then
+        V4=3
+    fi
+    if test "$V5" -le 9 ; then V5=0$V5 ; fi
+
+    MPICH_NUMVERSION=`expr $V1$V2$V3$V4$V5 + 0`
+
+#----------------------------------------------- 
+subcode: check_configure_args
+    CONFIGURE_ARGS_CLEAN=`echo $* | tr '"' ' '`
+    CONFIGURE_ARGUMENTS="$ac_configure_args"
+    $if -n $ac_configure_args
+        echo "Configuring MPICH version $MPICH_VERSION with $ac_configure_args"
+    $else 
+        echo "Configuring MPICH version $MPICH_VERSION"
+
+#----------------------------------------------- 

@@ -1,0 +1,14 @@
+include: build/ac_basic.def
+
+page: t.ac, ac_frame
+    module: sh
+    run: autoconf -o out/configure out/t.ac && sh out/configure
+
+    echo srcdir: $srcdir
+    $if "$prefix"!="NONE"
+        echo prefix: $prefix
+    $else
+        echo prefix is NONE
+    $call check_prefix
+    # $call ac_basic
+    # $call ac_arg_from_config_help, docs/config.help

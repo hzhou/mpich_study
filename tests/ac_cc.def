@@ -1,0 +1,21 @@
+include: build/ac_basic.def
+include: build/ac_output.def
+include: build/config_cc.def
+
+page: t.ac, ac_frame
+    module: sh
+    run: cd out && autoconf -o configure t.ac && autoheader t.ac && sh configure
+
+    m4_include(../../confdb/aclocal_util.m4)
+    m4_include(../../confdb/aclocal_cc.m4)
+    AC_CONFIG_HEADER(config.h)
+    $call config_cc
+
+    name=test
+    Version=1.0.0
+
+    $(set:ac_output_dir=out)
+    &call ac_output
+        t.test
+
+    # note: check subs1.awk in out/config.status

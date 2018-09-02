@@ -1,0 +1,74 @@
+subcode: config_izem
+    $call convert_comma_list, enable_izem
+    $for a in $enable_izem
+        $switch $a
+            $of sync|yes|all
+                izem_sync=yes
+            $of no|none
+                NOOP
+            $of *
+                AC_MSG_WARN([Unknown value $option for enable-debug])
+    $if "$izem_sync" = "yes"
+        AC_DEFINE(ENABLE_IZEM_SYNC,1,[Define to enable using Izem locks and condition variables])
+
+    ZMLIBNAME=${ZMLIBNAME:-"zm"}
+    export ZMLIBNAME
+    zmsrcdir=""
+    zmlibdir=""
+    zmlib=""
+
+    if test "$enable_izem" != "no" && test "$enable_izem" != "none"; then
+        if test "$with_zm_prefix" = "yes" || test "$with_zm_prefix" = "embedded"; then
+            if test -e "${use_top_srcdir}/src/izem" ; then
+                zm_subdir_args="--enable-embedded"
+                PAC_CONFIG_SUBDIR_ARGS([src/izem],[$zm_subdir_args],[],[AC_MSG_ERROR(Izem configure failed)])
+                zmsrcdir="${master_top_builddir}/src/izem"
+                zmlib="${master_top_builddir}/src/izem/src/lib${ZMLIBNAME}.la"
+                PAC_APPEND_FLAG([-I${use_top_srcdir}/src/izem/src/include],[CPPFLAGS])
+                PAC_APPEND_FLAG([-I${master_top_builddir}/src/izem/src/include],[CPPFLAGS])
+            else
+                AC_MSG_WARN([Attempted to use the embedded Izem source tree in "src/izem", but it is missing.  Configuration or compilation may fail later.])
+            fi
+        elif test "$with_zm_prefix" = "system"; then
+            # check if an Izem installation exists on this system
+            PAC_PUSH_FLAG([LIBS])
+            PAC_PREPEND_FLAG([-l${ZMLIBNAME}],[LIBS])
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([#include "lock/zm_ticket.h"
+                                            ],
+                                            [zm_ticket_t lock;
+                                            zm_ticket_init(&lock);
+                                            zm_ticket_acquire(&lock);
+                                            zm_ticket_release(&lock);])],
+                        [AC_MSG_ERROR([No usable Izem installation was found on this system])],
+                        [PAC_PREPEND_FLAG([-l${ZMLIBNAME}],[WRAPPER_LIBS])])
+            PAC_POP_FLAG([LIBS])
+        elif test "$with_zm_prefix" = "no"; then
+            AC_MSG_ERROR([Izem features were requested with --enable-izem but Izem was disabled.])
+        else
+            # The user specified an already-installed Izem; just sanity check, don't
+            # subconfigure it
+
+            AS_IF([test -s "${with_zm_prefix}/include/lock/zm_lock.h" -a -s "${with_zm_prefix}/include/cond/zm_cond.h"],
+                [:],[AC_MSG_ERROR([Izem headers at "${with_zm_prefix}/include" are missing])])
+            PAC_APPEND_FLAG([-I${with_zm_prefix}/include],[CPPFLAGS])
+
+            PAC_PUSH_FLAG([LIBS])
+            PAC_PUSH_FLAG([LDFLAGS])
+            PAC_PREPEND_FLAG([-l${ZMLIBNAME}],[LIBS])
+            PAC_APPEND_FLAG([-L${with_zm_prefix}/lib],[LDFLAGS])
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([#include "lock/zm_ticket.h"
+                                            ],
+                                            [zm_ticket_t lock;
+                                            zm_ticket_init(&lock);
+                                            zm_ticket_acquire(&lock);
+                                            zm_ticket_release(&lock);])],
+                        [],[AC_MSG_ERROR([The Izem installation at "${with_zm_prefix}" seems broken])])
+            PAC_POP_FLAG([LIBS])
+            PAC_POP_FLAG([LDFLAGS])
+            PAC_APPEND_FLAG([-L${with_zm_prefix}/lib],[WRAPPER_LDFLAGS])
+            PAC_PREPEND_FLAG([-l${ZMLIBNAME}],[WRAPPER_LIBS])
+            zmlibdir="-L${with_zm_prefix}/lib"
+        fi
+    fi
+
+

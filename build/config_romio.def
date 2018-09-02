@@ -1,0 +1,20 @@
+# uses sub configure
+subcode: on_enable_romio
+    $if $enable_romio=yes
+        $if -d $use_top_srcdir/src/mpi/romio
+            subsystems="$subsystems src/mpi/romio"
+            AC_DEFINE(HAVE_ROMIO,1,[Define if ROMIO is enabled])
+            PAC_APPEND_FLAG([-I${master_top_builddir}/src/mpi/romio/include],[CPPFLAGS])
+
+            export use_top_srcdir
+            top_build_dir=`pwd`
+            export top_build_dir
+
+            if test ! -d lib ; then mkdir lib ; fi
+            # tell mpi.h to include mpio.h
+            PAC_HAVE_ROMIO
+        $else
+            AC_MSG_WARN([ROMIO src directory is not available])
+
+    AM_CONDITIONAL([BUILD_ROMIO], [test x$enable_romio = xyes])
+

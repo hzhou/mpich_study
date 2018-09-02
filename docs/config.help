@@ -1,0 +1,550 @@
+# vim: set syntax=sh
+
+Optional Features:
+  --disable-option-checking  ignore unrecognized --enable/--with options
+  --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
+  --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --enable-echo           Turn on strong echoing. The default is enable=no.
+    # action: set -x
+  --enable-error-checking=level
+      Control the amount of error checking.
+        no        - no error checking
+        runtime   - error checking controllable at runtime through environment
+                    variables
+        all       - error checking always enabled (default)
+    # default: all
+    # callsub:
+
+  --enable-error-messages=level - Control the amount of detail in error messages.
+        all       - Maximum amount of information
+        generic   - Only generic messages (no information about the specific
+                    instance)
+        class     - One message per MPI error class
+        none      - No messages
+    # default: all
+    # callsub:
+
+  --enable-tag-error-bits=yes|no - Control whether bits are taken from the user tag for error handling.
+        yes       - Two bits are taken from the user tag to support error propagation.
+        no        - No bits are taken from the user tag (this could cause deadlock if an error is detected during a collective).
+    # default: yes
+    # callsub:
+
+  --enable-timing=level - Control the amount of timing information
+                           collected by the MPICH implementation.
+        none    - Collect no data (default)
+        all     - Collect lots of data
+        runtime - Runtime control of data collected
+    # callsub: config_timing_logging
+
+  --with-logging=name     Specify the logging library for MPICH
+    # empty: rlog
+    # default: none
+
+  --enable-g=option - Control the level of debugging support in the
+                       MPICH implementation.  "option" is a list of comma
+                       separated names including.  Default is "most".
+        none     - No debugging
+        handle   - Trace handle operations
+        handlealloc - Trace handle allocations
+        dbg      - Add compiler flag, -g, to all internal
+                   compiler flags, i.e. MPICHLIB_CFLAGS, MPICHLIB_CXXFLAGS,
+                   MPICHLIB_FFLAGS, and MPICHLIB_FCFLAGS.
+        debug    - Synonym for dbg
+        mem      - Memory usage tracing
+        meminit  - Preinitialize memory associated structures and unions to
+                   eliminate access warnings from programs like valgrind
+        memarena - Check for overwrite errors in memory allocation arena
+        mutex    - Enable error checking on pthread mutexes
+        mutexnesting - Check for non-nesting of mutexes
+        most     - Most of the above options, excluding some with severe
+                   performance impacts.  Recommended for typical development.
+        yes      - synonym for "most" (*not* "all")
+        all      - All of the above choices
+
+    # default: none
+    # callsub:
+
+  --enable-mpit-pvars=list - Selectively enable MPI_T performance variables in
+                      modules. list is a comma-separated module names,
+                      including (Default is "none"):
+        none     - No performance info recorded
+        recvq    - All message queue-related
+        nem      - All nemesis-related
+        rma      - All rma-related
+        all      - All variables above
+    # default: none
+    # callsub:
+
+  --enable-fast=option - Control the level of fast execution in the
+                         MPICH implementation.  option is a list of
+                         comma separated names including
+        O<n>     - Appends default optimization flags, -O<n>, to all internal
+                   compiler flags, i.e. MPICHLIB_CFLAGS, MPICHLIB_CXXFLAGS,
+                   MPICHLIB_FFLAGS, and MPICHLIB_FCFLAGS. (default is -O2)
+        ndebug   - Appends -DNDEBUG to MPICHLIB_CFLAGS.
+        all|yes  - "O2" and "ndebug" are enabled
+        none     - None of above options, i.e. --disable-fast
+    # default: O2
+    # callsub:
+
+  --enable-interlib-deps - Enable interlibrary dependencies
+    # default: yes
+    # callsub:
+
+  --enable-check-compiler-flags
+                          enable the checks for all compiler options,
+                          xxxFLAGS, MPICH_xxxFLAGS. Default is on.
+    # default: yes
+
+  --enable-fortran=option - Control the level of Fortran support in the MPICH implementation.
+	yes|all   - Enable all available Fortran implementations (F77, F90+)
+	f77       - Enable Fortran 77 support
+	fc        - Enable Fortran 90 and 2008 support
+	no|none   - No Fortran support
+    # default: all
+    # callsub:
+
+  --enable-f77            DEPRECATED: Use --enable-fortran or
+                          --disable-fortran instead
+  --enable-fc             DEPRECATED: Use --enable-fortran or
+                          --disable-fortran instead
+  --enable-f77characterlen
+                          Select between int and size_t for the length of a
+                          Fortran CHARACTER, depending on the F77 compiler. If
+                          --enable-f77characterlen=size_t is given, force the
+                          use of size_t. This is used for passing Fortran
+                          CHARACTER data between C and Fortran, and is
+                          provided for experts. Note that the documentation
+                          provided by compiler vendors on the calling
+                          convention may not be accurate.
+    # default: no
+
+  --enable-cxx            Enable C++ bindings
+    # default: yes
+    # callsub:
+  --enable-romio          Enable ROMIO MPI I/O implementation
+    # default: yes
+    # callsub:
+  --enable-debuginfo      Enable support for debuggers
+    # default: no
+  --enable-versioning     Enable library versioning
+    # default: yes
+    # callsub:
+  --enable-threads=level - Control the level of thread support in the
+                           MPICH implementation.  The following levels
+                           are supported.
+        single          - No threads (MPI_THREAD_SINGLE)
+        funneled        - Only the main thread calls MPI (MPI_THREAD_FUNNELED)
+        serialized      - User serializes calls to MPI (MPI_THREAD_SERIALIZED)
+        multiple        - Fully multi-threaded (MPI_THREAD_MULTIPLE)
+        runtime         - Alias to "multiple"
+
+        See also the --enable-thread-cs option for controlling the granularity of
+        the concurrency inside of the library
+    # callsub:
+
+  --enable-thread-cs=type Choose the method used for critical sections and
+                          other atomic updates when multiple threads are
+                          present. Values may be global (default), per-object,
+                          lock-free
+    # default: global
+
+  --enable-refcount=type  Choose the method for ensuring atomic updates to the
+                          reference counts for MPI objects. Values may be
+                          lock-free or none. The default depends on the
+                          thread-cs choice; for global it is none (because
+                          none is required), for per-object and lock-free,
+                          lock-free
+
+  --enable-mutex-timing   calculate the time spent waiting on mutexes
+    # define: MPIU_MUTEX_WAIT_TIME, 1, [Define to enable mutex-timing]
+  --enable-predefined-refcount
+                          control whether predefined objects like
+                          MPI_COMM_WORLD are reference counted (default
+                          depends on --enable-thread-cs choice)
+    # define: no: MPICH_THREAD_SUPPRESS_PREDEFINED_REFCOUNTS, 1, [Define to disable reference counting predefined objects like MPI_COMM_WORLD]
+  --enable-weak-symbols   Use weak symbols to implement PMPI routines
+                          (default)
+    # default: yes
+    # callsub:
+  --enable-two-level-namespace
+                          (Darwin only) Build shared libraries and programs
+                          built with the mpicc/mpifort/etc. compiler wrappers
+                          with '-Wl,-commons,use_dylibs' and without
+                          '-Wl,-flat_namespace'. This may make the MPICH
+                          installation and MPI programs more compatible with
+                          other libraries. Only enable this option if you
+                          really know what these linker options imply.
+
+    # default: no
+  --enable-multi-aliases  Multiple aliasing to support multiple fortran
+                          compilers (default)
+    # default: no
+
+  --enable-wrapper-rpath  Determine whether the rpath is set when programs are
+                          linked by mpicc compiler wrappers. This only applies
+                          when shared libraries are built. The default is yes;
+                          use --disable-wrapper-rpath to turn this feature
+                          off. In that case, shared libraries will be found
+                          according to the rules for your system (e.g., in
+                          LD_LIBRARY_PATH)
+    # default: yes
+    # callsub:
+  --disable-long-double   Pass --disable-long-double to prevent the MPI
+                          library from supporting the C "long double" type,
+                          even if the C compiler supports it. "long double"
+                          support is enabled by default, provided the compiler
+                          supports it.
+    # default: yes
+
+  --enable-dbg-nolocal    enables debugging mode where shared-memory
+                          communication is disabled
+    # define: ENABLED_NO_LOCAL, 1, [Define to disable shared-memory communication for debugging]
+
+  --enable-dbg-localoddeven
+                          enables debugging mode where shared-memory
+                          communication is enabled only between even processes
+                          or odd processes on a node
+    # define: ENABLED_ODD_EVEN_CLIQUES, 1, [Define to disable debugging mode where shared-memory communication is done only between even procs or odd procs]
+
+  --enable-dependency-tracking
+                          do not reject slow dependency extractors
+  --disable-dependency-tracking
+                          speeds up one-time build
+  --enable-silent-rules   less verbose build output (undo: "make V=1")
+  --disable-silent-rules  verbose build output (undo: "make V=0")
+  --disable-maintainer-mode
+                          disable make rules and dependencies not useful (and
+                          sometimes confusing) to the casual installer
+  --enable-shared[=PKGS]  build shared libraries [default=yes]
+  --enable-static[=PKGS]  build static libraries [default=yes]
+  --enable-fast-install[=PKGS]
+                          optimize for fast installation [default=yes]
+  --disable-libtool-lock  avoid locking (might break parallel builds)
+  --enable-cache          Turn on configure caching
+  --enable-strict         Turn on strict compilation testing
+  --enable-sock-debug     Turn on tests of the socket data structures
+  --enable-ch4-netmod-direct
+       Enables inlined netmod build when a single netmod is used
+       level:
+         yes       - Enabled (default)
+         no        - Disabled (may improve build times and code size)
+
+  --enable-ch4-shm=level:module
+       Control whether CH4 shared memory is built and/or used. Default
+       shm level depends on selected netmod(s). (OFI=exclusive, UCX=no).
+       level:
+         no        - Do not build or use CH4 shared memory.
+         yes       - Build CH4 shared memory, but do not use it by default (Your chosen netmod must provide it).
+         exclusive - Build and exclusively use CH4 shared memory.
+       module-list(optional).  comma separated list of shared memory modules:
+         posix     - POSIX shared memory implementation
+
+  --enable-ch4-shm-direct
+       Enables inlined shared memory build when a single shared memory module is used
+       level:
+         yes       - Enabled (default)
+         no        - Disabled (may improve build times and code size)
+
+  --enable-visibility     enable visibility feature of certain
+                          compilers/linkers (default: enabled on platforms
+                          that support it)
+  --enable-coverage       Turn on coverage analysis using gcc and gcov
+  --enable-alloca         Use alloca to allocate temporary memory if available
+  --enable-checkpointing  Enable application checkpointing
+  --enable-base-cache     Enable the use of a simple cache for the subsidiary
+                          configure scripts
+  --enable-allowport      Turn on use of a port for communicating with the
+                          processes started by mpiexec
+  --enable-pmiport - Allow PMI interface to use a host-port pair to contact
+                   for PMI services
+  --enable-ftb            Enable FTB support (default is no)
+  --enable-fast - pick the appropriate options for fast execution.
+                  This turns off error checking and timing collection
+  --enable-nemesis-dbg-nolocal
+                          alias for --enable-dbg-nolocal
+  --enable-nemesis-dbg-localoddeven
+                          alias for --enable-dbg-localoddeven
+  --enable-nemesis-shm-collectives - enables use of shared memory for collective comunication within a node
+  --enable-nemesis-lock-free-queues - Use atomic instructions and lock-free queues for shared memory communication.  Lock-based queues will be used otherwise.  The default is enabled (lock-free).
+  --enable-ch4r-per-comm-msg-queue=option
+       Enable use of per-communicator message queues for posted recvs/unexpected messages
+         yes       - Use per-communicator message queue. (Default)
+         no        - Use global queue for posted recvs/unexpected messages.
+
+  --enable-onsig          Control the handling of processes that signal (e.g.,
+                          SEGV) using ptrace. Disabled by default
+  --enable-newsession     Create a new process group session if standard in is
+                          not connected to a terminal
+  --enable-onsig          Control the handling of processes that signal (e.g.,
+                          SEGV) using ptrace. Disabled by default
+  --enable-newsession     Create a new process group session if standard in is
+                          not connected to a terminal
+
+Optional Packages:
+  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-custom-version-string
+                          Adds a user-specified value to the output of the
+                          mpichversion executable
+    # default: ""
+    # callsub:
+  --with-aint-size        Override the size of MPI_AINT (in bytes)
+    # default: 0
+  --with-device=name      Specify the communication device for MPICH
+    # callsub: config_device_pm_pmi
+  --with-pmi=name         Specify the pmi interface for MPICH
+  --with-pm=name          Specify the process manager for MPICH. "no" or
+                          "none" are valid values. Multiple process managers
+                          may be specified as long as they all use the same
+                          pmi interface by separating them with colons. The
+                          mpiexec for the first named process manager will be
+                          installed. Example: "--with-pm=hydra:gforker" builds
+                          the two process managers hydra, and gforker; only
+                          the mpiexec from hydra is installed into the bin
+                          directory.
+  --with-cross=file       Specify the values of variables that configure
+                          cannot determine in a cross-compilation environment
+    # callsub:
+  --with-namepublisher=name   Choose the system that will support
+                              MPI_PUBLISH_NAME and MPI_LOOKUP_NAME.  Options
+                              include
+                                   pmi (default)
+			           file:directory (optional directory)
+                                   no (no service available)
+
+    # alias: name-publisher
+    # callsub: config_namepublisher
+  --with-pic[=PKGS]       try to use only PIC/non-PIC objects [default=use
+                          both]
+  --with-aix-soname=aix|svr4|both
+                          shared library versioning (aka "SONAME") variant to
+                          provide on AIX, [default=aix].
+  --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
+  --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
+                          compiler's sysroot if not specified).
+  --with-hcoll=[PATH]     specify path where hcoll include directory and lib
+                          directory can be found
+  --with-hcoll-include=PATH
+                          specify path where hcoll include directory can be
+                          found
+  --with-hcoll-lib=PATH   specify path where hcoll lib directory can be found
+  --with-ch4-shmmod-posix-args=arg1:arg2:arg3
+        CH4 POSIX shmmod arguments:
+                disable-lock-free-queues - Disable atomics and lock-free queues
+
+  --with-ch4-netmod-ucx-args=arg1:arg2:arg3
+    CH4 OFI netmod arguments:
+            am-only          - Do not use UCX tagged or RMA communication.
+
+  --with-ch4-ofi-direct-provider=provider
+                provider - Build OFI with FABRIC_DIRECT mode using the specified provider
+                           Provider value does not matter if not building an embedded OFI library
+
+  --with-mpl-prefix[=DIR] use the MPL library installed in DIR, rather than
+                          the one included in src/mpl. Pass "embedded" to
+                          force usage of the MPL source distributed with
+                          MPICH.
+    # default: embedded
+    # callsub: config_mpl
+  --with-openpa-prefix[=DIR]
+                          use the OpenPA atomics library installed in DIR,
+                          rather than the one included in src/openpa. Pass
+                          "embedded" to force usage of the OpenPA source
+                          distributed with MPICH.
+    # callsub: config_openpa
+  --with-atomic-primitives
+                          Force OPA to use a specific atomic primitives
+                          implementation. See the src/openpa directory for
+                          more info.
+    # default: not_specified
+
+  --enable-izem[=ARGS]   Enable features from the Izem library.
+                          "ARGS" is a list of comma separated features.
+                          Accepted arguments are:
+			  sync     - use the Izem interface for sychronization objects
+                                     (locks and condition variables) instead of the MPL interface
+                          yes/all  - all of the above features are enabled
+                          no/none  - none of the above features are enabled
+    # callsub: config_izem
+    # default: no
+  --with-zm-prefix[=ARG]
+                          specify the Izem library to use. No argument implies "yes".
+                          Accepted values for ARG are:
+                          yes|embedded - use the embedded Izem
+                          system       - search system paths for an Izem installation
+                          no           - disable Izem
+                          <PATH>       - use the Izem at PATH
+    # default: no
+  --with-hwloc-prefix[=DIR]
+                          use the HWLOC library installed in DIR, rather than
+                          the one included in src/hwloc. Pass "embedded" to
+                          force usage of the HWLOC source distributed with
+                          MPICH.
+    # default: embedded
+    # callsub: config_hwloc
+
+  --with-x                use the X Window System
+  --with-hwloc-plugins-path=dir:...
+                          Colon-separated list of plugin directories. Default:
+                          "$prefix/lib/hwloc". Plugins will be installed in
+                          the first directory. They will be loaded from all of
+                          them, in order.
+  --with-pmix=[PATH]      specify path where pmix include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: pmix
+  --with-pmix-include=PATH
+                          specify path where pmix include directory can be
+                          found
+  --with-pmix-lib=PATH    specify path where pmix lib directory can be found
+  --with-blcr=[PATH]      specify path where blcr include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: blcr
+  --with-blcr-include=PATH
+                          specify path where blcr include directory can be
+                          found
+  --with-blcr-lib=PATH    specify path where blcr lib directory can be found
+  --with-ftb=[PATH]       specify path where ftb include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: ftb
+  --with-ftb-include=PATH specify path where ftb include directory can be
+                          found
+  --with-ftb-lib=PATH     specify path where ftb lib directory can be found
+  --with-ch3-rank-bits=16/32     Number of bits allocated to the rank field (16 or 32)
+  --with-papi=path - specify path where papi include and lib directories can be found
+  --with-knem=path - specify path where knem include directory can be found
+  --with-knem-include=path - specify path to knem include directory
+  --with-nemesis-local-lmt=method - specify an implementation for local large message transfers (LMT).  Method is one of: 'default', 'shm_copy', 'knem', or 'none'.  'default' is the same as 'shm_copy'.
+  --with-mxm=[PATH]       specify path where mxm include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: mxm
+  --with-mxm-include=PATH specify path where mxm include directory can be
+                          found
+  --with-mxm-lib=PATH     specify path where mxm lib directory can be found
+  --with-libmemcached=[PATH]
+                          specify path where libmemcached include directory
+                          and lib directory can be found
+    # PAC_SET_HEADER_LIB_PATH: libmemcached
+  --with-libmemcached-include=PATH
+                          specify path where libmemcached include directory
+                          can be found
+  --with-libmemcached-lib=PATH
+                          specify path where libmemcached lib directory can be
+                          found
+  --with-ibverbs=[PATH]   specify path where ibverbs include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: ibverbs
+  --with-ibverbs-include=PATH
+                          specify path where ibverbs include directory can be
+                          found
+  --with-ibverbs-lib=PATH specify path where ibverbs lib directory can be
+                          found
+  --with-llc=[PATH]       specify path where llc include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: llc
+  --with-llc-include=PATH specify path where llc include directory can be
+                          found
+  --with-llc-lib=PATH     specify path where llc lib directory can be found
+  --with-ch4-rank-bits=16/32     Number of bits allocated to the rank field (16 or 32)
+  --with-ucx=[PATH]       specify path where ucx include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: ucx
+  --with-ucx-include=PATH specify path where ucx include directory can be
+                          found
+  --with-ucx-lib=PATH     specify path where ucx lib directory can be found
+  --with-libfabric=[PATH] specify path where libfabric include directory and
+                          lib directory can be found
+    # PAC_SET_HEADER_LIB_PATH: libfabric
+  --with-libfabric-include=PATH
+                          specify path where libfabric include directory can
+                          be found
+  --with-libfabric-lib=PATH
+                          specify path where libfabric lib directory can be
+                          found
+  --with-portals4=[PATH]  specify path where portals4 include directory and
+                          lib directory can be found
+    # PAC_SET_HEADER_LIB_PATH: portals4
+  --with-portals4-include=PATH
+                          specify path where portals4 include directory can be
+                          found
+  --with-portals4-lib=PATH
+                          specify path where portals4 lib directory can be
+                          found
+  --with-ofi=[PATH]       specify path where ofi include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: ofi
+  --with-ofi-include=PATH specify path where ofi include directory can be
+                          found
+  --with-ofi-lib=PATH     specify path where ofi lib directory can be found
+  --with-slurm=[PATH]     specify path where slurm include directory and lib
+                          directory can be found
+    # PAC_SET_HEADER_LIB_PATH: slurm
+  --with-slurm-include=PATH
+                          specify path where slurm include directory can be
+                          found
+  --with-slurm-lib=PATH   specify path where slurm lib directory can be found
+
+Some influential environment variables:
+  MPICHLIB_CFLAGS
+              extra CFLAGS used in building MPICH libraries
+  MPICHLIB_CPPFLAGS
+              extra CPPFLAGS used in building MPICH libraries
+  MPICHLIB_CXXFLAGS
+              extra CXXFLAGS used in building MPICH libraries
+  MPICHLIB_FFLAGS
+              extra FFLAGS used in building MPICH libraries
+  MPICHLIB_FCFLAGS
+              extra FCFLAGS used in building MPICH libraries
+  # ----------------------------
+  CC          C compiler command
+  CFLAGS      C compiler flags
+  LDFLAGS     linker flags, e.g. -L<lib dir> if you have libraries in a
+              nonstandard directory <lib dir>
+  LIBS        libraries to pass to the linker, e.g. -l<library>
+  CPPFLAGS    (Objective) C/C++ preprocessor flags, e.g. -I<include dir> if
+              you have headers in a nonstandard directory <include dir>
+  CPP         C preprocessor
+  LT_SYS_LIBRARY_PATH
+              User-defined run-time library search path.
+  CXX         C++ compiler command
+  CXXFLAGS    C++ compiler flags
+  CXXCPP      C++ preprocessor
+  FC          Fortran compiler command
+  FCFLAGS     Fortran compiler flags
+  F77         Fortran 77 compiler command
+  FFLAGS      Fortran 77 compiler flags
+  # ----------------------------
+  MPILIBNAME  can be used to override the name of the MPI library (default:
+              "mpi")
+  PMPILIBNAME can be used to override the name of the MPI profiling library
+              (default: "p$MPILIBNAME")
+  MPICXXLIBNAME
+              can be used to override the name of the MPI C++ library
+              (default: "${MPILIBNAME}cxx")
+  MPIFCLIBNAME
+              can be used to override the name of the MPI fortran library
+              (default: "${MPILIBNAME}fort")
+  MPLLIBNAME  can be used to override the name of the MPL library (default:
+              "mpl")
+  OPALIBNAME  can be used to override the name of the OpenPA library (default:
+              "opa")
+  ZMLIBNAME   can be used to override the name of the Izem library (default:
+              "zm")
+  # -----------------
+  HWLOC_MS_LIB
+              Path to Microsoft's Visual Studio `lib' tool
+  PKG_CONFIG  path to pkg-config utility
+  HWLOC_PCIACCESS_CFLAGS
+              C compiler flags for PCIACCESS, overriding pkg-config
+  HWLOC_PCIACCESS_LIBS
+              linker flags for PCIACCESS, overriding pkg-config
+  XMKMF       Path to xmkmf, Makefile generator for X Window System
+  HWLOC_LIBXML2_CFLAGS
+              C compiler flags for LIBXML2, overriding pkg-config
+  HWLOC_LIBXML2_LIBS
+              linker flags for LIBXML2, overriding pkg-config
+  # -----------------
+  AR_FLAGS    AR command flags
+  GCOV        name/path for the gcov utility
+

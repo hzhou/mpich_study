@@ -1,0 +1,21 @@
+subcode: config_conditional
+    subcode: am_cond(am_var, sh_var, @val)
+        $(if:val)
+            AM_CONDITIONAL($(am_var), [test x$(sh_var) = x$(val)])
+        $(else)
+            AM_CONDITIONAL($(am_var), [test x$(sh_var) = xyes])
+
+    AM_CONDITIONAL([INSTALL_MPIF77],[test "$F77" != "$FC" -a "$FFLAGS" != "$FCFLAGS"])
+    $call am_cond, BUILD_PROFILING_LIB, $NEEDSPLIB
+    HWLOC_DO_AM_CONDITIONALS
+    $call am_cond, have_hwloc, ${have_hwloc}
+    $call am_cond, use_embedded_hwloc, ${use_embedded_hwloc}
+    $call am_cond, BUILD_ROMIO, $enable_romio
+    $call am_cond, BUILD_F08_BINDING, $f08_works
+    $call am_cond, BUILD_BASH_SCRIPTS, $bashWorks
+    $call am_cond, BUILD_DEBUGGER_DLL, $BUILD_TVDLL
+    $call am_cond, BUILD_NAMEPUB_FILE,$nameserv_name, file
+    $call am_cond, BUILD_NAMEPUB_PMI,$nameserv_name, pmi
+    $call am_cond, BUILD_CXX_BINDING,$enable_cxx
+    $call am_cond, BUILD_F77_BINDING,$enable_f77
+    # $call am_cond, BUILD_FC_BINDING,$enable_fc

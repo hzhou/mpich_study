@@ -1,0 +1,70 @@
+subcode: config_openpa
+    $call @check_default_libopa
+    opasrcdir=""
+    opalibdir=""
+    opalib=""
+    $if "$with_openpa_prefix" = "embedded"
+        $if -e "${use_top_srcdir}/src/openpa" 
+            $call set_openpa_embedded
+        $else
+            AC_MSG_WARN([Attempted to use the embedded OpenPA source tree in "src/openpa", but it is missing.  Configuration or compilation may fail later.])
+    $elif "$with_openpa_prefix" = "system" 
+        PAC_PREPEND_FLAG([-l${OPALIBNAME}],[WRAPPER_LIBS])
+    $elif "$with_openpa_prefix" = "no"
+        # The user doesn't want to use OPA.  This may or may not cause MPICH to
+        # fail to configure/build, depending on many other factors.
+        :
+    $else
+        $call check_user_specified
+    subcode: check_default_libopa
+        OPALIBNAME=${OPALIBNAME:-"opa"}
+        export OPALIBNAME
+        $if "$with_openpa_prefix" = default
+            # see if OPA is already installed on the system
+            PAC_PUSH_FLAG([LIBS])
+            PAC_PREPEND_FLAG([-l${OPALIBNAME}],[LIBS])
+
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([dnl
+            #include "opa_primitives.h"
+            ],[
+            OPA_int_t i;
+            OPA_store_int(i,10);
+            OPA_fetch_and_incr_int(&i,5);
+            ])dnl
+            ],
+            # if-true
+            [with_openpa_prefix=system],
+            # if-false
+            [with_openpa_prefix=embedded])
+
+            PAC_POP_FLAG([LIBS])
+
+    subcode: set_openpa_embedded
+        opasrcdir="src/openpa"
+        opalib="src/openpa/src/lib${OPALIBNAME}.la"
+        PAC_APPEND_FLAG([-I${use_top_srcdir}/src/openpa/src],[CPPFLAGS])
+        PAC_APPEND_FLAG([-I${master_top_builddir}/src/openpa/src],[CPPFLAGS])
+        # OPA defaults to "auto", but in MPICH we want "auto_allow_emulation" to
+        # easily permit using channels like ch3:sock that don't care about atomics
+        # no need for libtool versioning when embedding OPA
+        opa_subdir_args="--disable-versioning --enable-embedded"
+        $if "$with_atomic_primitives" = "not_specified" 
+            PAC_APPEND_FLAG([--with-atomic-primitives=auto_allow_emulation], [opa_subdir_args])
+
+        PAC_CONFIG_SUBDIR_ARGS([src/openpa],[$opa_subdir_args],[],[AC_MSG_ERROR([OpenPA configure failed])])
+
+    subcode: check_user_specified
+        $(set:I=${with_openpa_prefix}/include)
+        $if -s "$(I)/opa_primitives.h" && -s "$(I)/opa_config.h"
+            NOOP;
+        $else
+            AC_MSG_ERROR([the OpenPA installation in "$with_openpa_prefix" appears broken])
+        PAC_APPEND_FLAG([-I${with_openpa_prefix}/include],[CPPFLAGS])
+        PAC_PREPEND_FLAG([-l${OPALIBNAME}],[WRAPPER_LIBS])
+        $if -d "${with_openpa_prefix}/lib64"
+            PAC_APPEND_FLAG([-L${with_openpa_prefix}/lib64],[WRAPPER_LDFLAGS])
+            opalibdir="-L${with_openpa_prefix}/lib64"
+        $else
+            opalibdir="-L${with_openpa_prefix}/lib"
+        PAC_APPEND_FLAG([-L${with_openpa_prefix}/lib],[WRAPPER_LDFLAGS])
+

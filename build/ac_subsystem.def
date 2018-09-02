@@ -1,0 +1,78 @@
+subcode:: all_modules
+    # all subconfigure.m4 are included here
+    m4_include([subsys_include.m4])
+
+#---- subsystems utils ---------------------------------- 
+subcode: checkadd_subdir(rel_dir)
+    $(set:dir=$use_top_srcdir/src/$(rel_dir))
+
+    $(set:type=unknown)
+    $(if:rel_dir~mpid)
+        $(set:type=mpid)
+    $(if:rel_dir~pmi)
+        $(set:type=pmi)
+    $(elif:rel_dir~pm)
+        $(set:type=pm)
+    $(elif:rel_dir~nameserv)
+        $(set:type=nameserv)
+
+    $if ! -d $(dir)
+        $call _no_dir_$(type)
+    $else
+        $if -f $(dir)/subconfigure.m4
+            NOOP;
+        $elif -x $(dir)/configure
+            $call _subsystem_$(type)
+        $else
+            $call _no_config_$(type)
+
+    # ---------------------
+    subcode: _no_dir_unknown
+        $warn unknown
+    subcode: _subsystem_unknown
+        $warn unknown
+    subcode: _no_config_unknown
+        $warn unknown
+    # ---------------------
+    subcode: _no_dir_mpid
+        AC_MSG_ERROR([Device $device_name is unknown])
+    subcode: _no_dir_pm
+        AC_MSG_WARN([$(dir) does not exist. PM is unknown])
+        hasError=yes
+    subcode: _no_dir_pmi
+        AC_MSG_WARN([$(dir) does not exist. PMI is unknown])
+    subcode: _no_dir_nameserv
+        AC_MSG_WARN([Unknown name publisher $dir])
+
+    subcode: _subsystem_mpid
+        devsubsystems="$devsubsystems src/$(rel_dir)"
+    subcode: _subsystem_pm
+        subsystems="subsystems src/$(rel_dir)"
+    subcode: _subsystem_pmi
+        subsystems="subsystems src/$(rel_dir)"
+    subcode: _subsystem_nameserv
+        subsystems="subsystems src/$(rel_dir)"
+
+    subcode: _no_config_mpid
+        $call warn_config
+    subcode: _no_config_pm
+        $call warn_config
+        pm_name=""
+        hasError=yes
+    subcode: _no_config_pmi
+        $call warn_config
+        pmi_name=""
+    subcode: _no_config_nameserv
+        $call warn_config
+
+    subcode: warn_config
+        $if -s $(dir)/configure
+            AC_MSG_WARN([The configure in $(dir) exists but is not executable])
+        $else
+            AC_MSG_WARN([$(dir) has neither configure nor subconfigure.m4])
+
+subcode: source_setup(path)
+    $if -f $(path)
+        echo sourcing $(path)
+        . $(path)
+
