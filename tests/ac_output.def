@@ -1,7 +1,15 @@
 include: build/config_output.def
 
-page: all_subst.ac
+page: t.ac
     module: sh
 
-    $call all_ac_output
+    $(if:0)
+        $call all_ac_output
+    $(elif:1) # ch4
+        &call ac_output
+            src/mpid/ch4/src/mpid_ch4_net_array.c
+            src/mpid/ch4/include/netmodpre.h
+            src/mpid/ch4/include/shmpre.h
+            src/mpid/ch4/include/coll_algo_params.h
+            src/mpid/ch4/src/ch4_coll_globals_default.c
 

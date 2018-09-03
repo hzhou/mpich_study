@@ -1,3 +1,13 @@
+#-- perl maint/gen_subcfg_m4 -> subsys_include.m4
+#-      collects all subconfigure.m4, toplogical sorted
+#-      subsys_include.m4: m4_include all subconfigure.m4, set PAC_SUBCFG_MODULE_LIST
+#----------------------------------------------- 
+#-- notes on AM_COND_IF
+#-      AM_CONDITIONAL([COND], [test])
+#-      in Makefile.am: if COND\n...\nendif
+#-      -> Makefile.in: @COND_TRUE@...
+#-      -> Makefile: COND_TRUE is '#' if false, otherwise empty
+#----------------------------------------------- 
 subcode:: all_modules
     # all subconfigure.m4 are included here
     m4_include([subsys_include.m4])

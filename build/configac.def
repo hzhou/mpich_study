@@ -26,8 +26,8 @@ page: t.ac, mpich_ac_frame
     PAC_ARG_CACHING
     PAC_ARG_STRICT
     PAC_VPATH_CHECK(src/include/mpi.h src/env/mpicc,lib)
-
     $call @default_library_names
+    #----------------------------------------------- 
     AC_LANG_C
     AC_PATH_PROG(PERL,perl)
     $map check_progs, ar, ranlib, killall, xargs, install, mkdir, make
@@ -44,15 +44,37 @@ page: t.ac, mpich_ac_frame
     $call @set_MPI_AINT
     $call @check_checkpointing
     PAC_CREATE_BASE_CACHE
-    $call @configure_device
+    #--------------------------------
+    $call @config_subsystems
     $call @check_MISC
 
 #----------------------------------------------- 
-# ./configure --with-device=ch4:ofi  
-# find src -name subconfigure.m4
-# find src -name configure
-subcode: subconfig
-    m4_map([PAC_SUBCFG_CONFIGURE_SUBSYS],[PAC_SUBCFG_MODULE_LIST])
-    for subsys in $devsubsystems $subsystems ; do
+subcode: prereq_subsystems
+    m4_map([PAC_SUBCFG_DO_PREREQ], [PAC_SUBCFG_MODULE_LIST])
+
+#----------------------------------------------- 
+subcode: config_subsystems
+    user_specified_atomic_primitives=no
+    $if "$DEBUG_SUBDIR_CACHE" = yes 
+        set -x
+
+    m4_map([PAC_SUBCFG_CONFIGURE_SUBSYS], [PAC_SUBCFG_MODULE_LIST])
+    # now configure any actual recursively configures subsystems, such as ROMIO and
+    # hydra, or older components that haven't been updated to a subconfigure.m4 yet
+    $for subsys in $devsubsystems $subsystems 
         PAC_CONFIG_SUBDIR([$subsys],[],[AC_MSG_ERROR([$subsys configure failed])])
 
+    $if "$DEBUG_SUBDIR_CACHE" = yes -a "$enable_echo" != yes
+        set +x
+
+    # Make subsystems available to makefiles.
+    # FIXME does the makefile actually need this?
+    subsystems="$devsubsystems $subsystems $bindingsubsystems"
+
+
+    subcode: subconfig
+        m4_map([PAC_SUBCFG_CONFIGURE_SUBSYS],[PAC_SUBCFG_MODULE_LIST])
+        for subsys in $devsubsystems $subsystems ; do
+            PAC_CONFIG_SUBDIR([$subsys],[],[AC_MSG_ERROR([$subsys configure failed])])
+
+    

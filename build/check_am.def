@@ -8,10 +8,10 @@ page: check_am
     chdir ".."
     $call parse
     $call pre_report
-    # $call report_options
+    $call report_options
     # $call report_vars
     # $map report_list, mpi_sources, mpi_core_sources
-    $call report_tree
+    # $call report_tree
 
 subcode: pre_report
     $(for:mpi_sources, mpi_core_sources)

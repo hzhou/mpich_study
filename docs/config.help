@@ -230,6 +230,7 @@ Optional Features:
        level:
          yes       - Enabled (default)
          no        - Disabled (may improve build times and code size)
+    #default: yes
 
   --enable-ch4-shm=level:module
        Control whether CH4 shared memory is built and/or used. Default
@@ -246,6 +247,7 @@ Optional Features:
        level:
          yes       - Enabled (default)
          no        - Disabled (may improve build times and code size)
+    #default: yes
 
   --enable-visibility     enable visibility feature of certain
                           compilers/linkers (default: enabled on platforms
@@ -272,6 +274,7 @@ Optional Features:
        Enable use of per-communicator message queues for posted recvs/unexpected messages
          yes       - Use per-communicator message queue. (Default)
          no        - Use global queue for posted recvs/unexpected messages.
+    # default=yes
 
   --enable-onsig          Control the handling of processes that signal (e.g.,
                           SEGV) using ptrace. Disabled by default
@@ -411,7 +414,6 @@ Optional Packages:
   --with-ftb-include=PATH specify path where ftb include directory can be
                           found
   --with-ftb-lib=PATH     specify path where ftb lib directory can be found
-  --with-ch3-rank-bits=16/32     Number of bits allocated to the rank field (16 or 32)
   --with-papi=path - specify path where papi include and lib directories can be found
   --with-knem=path - specify path where knem include directory can be found
   --with-knem-include=path - specify path to knem include directory
@@ -446,7 +448,10 @@ Optional Packages:
   --with-llc-include=PATH specify path where llc include directory can be
                           found
   --with-llc-lib=PATH     specify path where llc lib directory can be found
+  --with-ch3-rank-bits=16/32     Number of bits allocated to the rank field (16 or 32)
+    # default: 32
   --with-ch4-rank-bits=16/32     Number of bits allocated to the rank field (16 or 32)
+    # default: 32
   --with-ucx=[PATH]       specify path where ucx include directory and lib
                           directory can be found
     # PAC_SET_HEADER_LIB_PATH: ucx

@@ -1,0 +1,259 @@
+# PACK_SUBCFG_AUTO_SUFFIX
+#     m4_dquote(__file__): "src/mpid/ch4/subconfigure.m4"
+#     -> src_mpid_ch4 (entry in PAC_SUBCFG_MODULE_LIST)
+
+#----------------------------------------------
+subcode: prereq_src_mpid_ch4
+    AM_CONDITIONAL([BUILD_CH4],[test "$device_name" = "ch4"])
+    AM_CONDITIONAL([BUILD_CH4_SHM],[test "$ch4_shm_level" = "yes" -o "$ch4_shm_level" = "exclusive"])
+    AM_CONDITIONAL([BUILD_CH4_COLL_TUNING],[test -e "$srcdir/src/mpid/ch4/src/ch4_coll_globals.c"])
+
+    # the CH4 device depends on the common NBC scheduler code
+    build_mpid_common_sched=yes
+    build_mpid_common_datatype=yes
+    build_mpid_common_thread=yes
+
+    MPID_MAX_THREAD_LEVEL=MPI_THREAD_MULTIPLE
+    MPID_MAX_PROCESSOR_NAME=128
+    MPID_MAX_ERROR_STRING=512
+
+    AM_COND_IF([BUILD_CH4],[
+    $call prereq_ch4
+    ])dnl end AM_COND_IF(BUILD_CH4,...)
+
+    subcode: prereq_ch4
+        AC_MSG_NOTICE([RUNNING PREREQ FOR CH4 DEVICE])
+        $call parse_device_args, ofi
+        export ch4_netmods
+        export netmod_args
+        DEVICE="${device_name}:${ch4_netmods}"
+        $call @set_ch4_netmods_macros
+        $if "${enable_ch4_shm}" = "default" 
+            $if test "${ch4_netmods}" = "ucx"
+                enable_ch4_shm=no
+            $else
+                enable_ch4_shm=exclusive:posix
+
+        # level:module
+        ch4_shm_level=`echo $enable_ch4_shm | sed -e 's/:.*$//'`
+        changequote(<<,>>)
+        ch4_shm=`echo $enable_ch4_shm | sed -e 's/^[^:]*//' -e 's/^://'`
+        changequote([,])
+        $switch "$ch4_shm_level"
+            $of yes
+                AC_DEFINE([MPIDI_BUILD_CH4_SHM], [1], [Define if CH4 will build the default shared memory implementation as opposed to only using a netmod implementation])
+            $of exclusive
+                AC_DEFINE([MPIDI_BUILD_CH4_SHM], [1], [Define if CH4 will build the default shared memory implementation as opposed to only using a netmod implementation])
+                # This variable is set only when the user wants CH4 to handle all shared memory operations
+                AC_DEFINE(MPIDI_CH4_EXCLUSIVE_SHM, 1, [Define if CH4 will be providing the exclusive implementation of shared memory])
+
+                # This variable can be set either when the user asks for CH4 exclusive shared memory
+                # or when the netmod doesn't want to implement its own locality information
+                AC_DEFINE(MPIDI_BUILD_CH4_LOCALITY_INFO, 1, [CH4 should build locality info])
+            $of no
+                NOOP
+            $of *
+                AC_MSG_ERROR([Shared memory level ${ch4_shm_level} is unknown])
+
+        # $ch4_shm - contains the shm mods
+        $if -z "${ch4_shm}"
+            $if "$ch4_shm_level" != "no"
+                ch4_shm="posix"
+        $else
+            ch4_shm=`echo ${ch4_shm} | sed -e 's/,/ /g'`
+        export ch4_shm
+
+        $call set_ch4_shm_macros
+
+        # ---------------------------------
+        subcode: parse_device_args(default)
+            $if -z "$device_args" ; then
+                ch4_netmods=$(default)
+            $else
+                # ch4:ofi,ucx
+                # ch4:ofi:sockets - ch4_netmod=ofi, netmod_args=sockets
+                changequote(<<,>>)
+                netmod_args=`echo ${device_args} | sed -e 's/^[^:]*//' -e 's/^://' -e 's/,/ /g'`
+                changequote([,])
+                ch4_netmods=`echo ${device_args} | sed -e 's/:.*$//' -e 's/,/ /g'`
+        subcode: set_ch4_netmods_macros
+            ch4_nets_func_decl=""
+            ch4_nets_native_func_decl=""
+            ch4_nets_func_array=""
+            ch4_nets_native_func_array=""
+            ch4_nets_strings=""
+            net_index=0
+            $for net in $ch4_netmods 
+                $if ! -d $srcdir/src/mpid/ch4/netmod/${net} 
+                    AC_MSG_ERROR([Network module ${net} is unknown "$srcdir/src/mpid/ch4/netmod/${net}"])
+                $call @append_ch4_macros
+                net_index=`expr $net_index + 1`
+            ch4_nets_array_sz=$net_index
+            $call @ac_subst_ch4
+            $if "$ch4_nets_array_sz" = "1" && "$enable_ch4_netmod_direct" = "yes" 
+                PAC_APPEND_FLAG([-DNETMOD_DIRECT=__netmod_direct_${ch4_netmods}__], [CPPFLAGS])
+
+        subcode: set_ch4_shm_macros
+            ch4_shm_func_decl=""
+            ch4_shm_native_func_decl=""
+            ch4_shm_func_array=""
+            ch4_shm_native_func_array=""
+            ch4_shm_strings=""
+            shm_index=0
+            for shm in $ch4_shm ; do
+                $if ! -d $srcdir/src/mpid/ch4/shm/${shm}
+                    AC_MSG_ERROR([Shared memory module ${shm} is unknown "$srcdir/src/mpid/ch4/shm/${shm}"])
+                $call @append_shm_macros
+                shm_index=`expr $shm_index + 1`
+            done
+            ch4_shm_array_sz=$shm_index
+
+            if test "$ch4_shm_array_sz" = "1"  && test "$enable_ch4_shm_direct" = "yes" ;  then
+            PAC_APPEND_FLAG([-DSHM_DIRECT=__shm_direct_${ch4_shm}__], [CPPFLAGS])
+            fi
+
+        # -------------------------
+#----------------------------------------------- 
+subcode: ac_output_ch4
+    AC_CONFIG_FILES([
+        src/mpid/ch4/src/mpid_ch4_net_array.c
+        src/mpid/ch4/include/netmodpre.h
+        src/mpid/ch4/include/shmpre.h
+        src/mpid/ch4/include/coll_algo_params.h
+        src/mpid/ch4/src/ch4_coll_globals_default.c
+    ])
+
+macros:
+    DECL_list: barrier_params_decl, bcast_params_decl, reduce_params_decl, allreduce_params_decl, alltoall_params_decl, alltoallv_params_decl, alltoallw_params_decl, allgather_params_decl, allgatherv_params_decl, gather_params_decl, gatherv_params_decl, scatter_params_decl, scatterv_params_decl, reduce_scatter_params_decl, reduce_scatter_block_params_decl, scan_params_decl, exscan_params_decl
+
+    ch4_netmod_macro_list: pre_include, coll_globals_default, coll_params_include, amrequest_decl, request_decl, comm_decl, dt_decl, win_decl, addr_decl, op_decl, $(DECL_list)
+    ch4_shm_macro_list: pre_include, coll_globals_default, coll_params_include, request_decl, comm_decl, $(DECL_list)
+
+subcode: ac_subst_ch4
+    AC_SUBST(device_name)
+    AC_SUBST(ch4_netmods)
+    AC_SUBST(ch4_nets_array)
+    AC_SUBST(ch4_nets_array_sz)
+    AC_SUBST(ch4_nets_func_decl)
+    AC_SUBST(ch4_nets_native_func_decl)
+    AC_SUBST(ch4_nets_func_array)
+    AC_SUBST(ch4_nets_native_func_array)
+    AC_SUBST(ch4_nets_strings)
+    $(for:a in $(ch4_netmod_macro_list))
+        AC_SUBST(ch4_netmod_$(a))
+        AC_SUBST_NOTMAKE(ch4_netmod_$(a))
+
+    AC_SUBST(ch4_shm)
+    AC_SUBST(ch4_shm_array)
+    AC_SUBST(ch4_shm_array_sz)
+    AC_SUBST(ch4_shm_func_decl)
+    AC_SUBST(ch4_shm_native_func_decl)
+    AC_SUBST(ch4_shm_func_array)
+    AC_SUBST(ch4_shm_native_func_array)
+    AC_SUBST(ch4_shm_strings)
+    $(for:a in $(ch4_shm_macro_list))
+        AC_SUBST(ch4_netmod_$(a))
+        AC_SUBST_NOTMAKE(ch4_netmod_$(a))
+
+subcode: append_ch4_net_macros
+    net_upper=$(upper:$net)
+    net_macro="MPIDI_CH4_$(upper:$net)"
+    $call append, ch4_nets_array, $net_macro
+
+    $(set:F=MPIDI_NM_${net}_funcs)
+    $(set:f=MPIDI_NM_native_${net}_funcs)
+    $call append, ch4_nets_func_decl, $(F)
+    $call append, ch4_nets_native_func_decl, $(f)
+    $call append, ch4_nets_func_array, &$(F)
+    $call append, ch4_nets_native_func_array, &$(f)
+    $call append, ch4_nets_strings, \"$net\"
+    $(set:I=#include \"../netmod/${net}/${net}_$1\")
+    $call append, ch4_netmod_coll_globals_default, $(I:coll_globals_default.c)
+    $call append, ch4_netmod_pre_include, $(I:pre.h)
+    $call append, ch4_netmod_coll_params_include, $(I:coll_params.h)
+
+    $call append, ch4_netmod_amrequest_decl, MPIDI_${net_upper}_am_request_t ${net};
+    $(set:decl=ch4_netmod_$1_decl, MPIDI_${net_upper}_$1_t ${net};)
+    $(for:a in request, comm, dt, op, win, addr)
+        $call append, $(decl:$(a))
+    $(set:decl=ch4_netmod_$1, MPIDI_${net_upper}_$(eval:uc("$1"));)
+    $(for:a in $(DECL_list))
+        $call append, $(decl:$(a))
+
+subcode: append_shm_macros
+    shm_upper=$(upper:$shm)
+    shm_macro="MPIDI_SHM_$(upper:$shm)"
+    $call append, ch4_shm_array, $shm_macro
+
+    $(set:F=MPIDI_SHM_${shm}_funcs)
+    $(set:f=MPIDI_SHM_native_${shm}_funcs)
+    $call append, ch4_shm_func_decl, $(F)
+    $call append, ch4_shm_native_func_decl, $(f)
+    $call append, ch4_shm_func_array, &$(F)
+    $call append, ch4_shm_native_func_array, &$(f)
+    $call append, ch4_shm_strings, \"$shm\"
+
+    $(set:I=#include \"../shm/${shm}/${shm}_$1\")
+    $call append, ch4_shm_coll_globals_default, $(I:coll_globals_default.c)
+    $call append, ch4_shm_pre_include, $(I:pre.h)
+    $call append, ch4_shm_coll_params_include, $(I:coll_params.h)
+
+    $(set:decl=ch4_shm_$1_decl, MPIDI_${shm_upper}_$1_t ${shm};)
+    $(for:a in request, comm)
+        $call append, $(decl:$(a))
+    $(set:decl=ch4_shm_$1, MPIDI_${shm_upper}_$(eval:uc("$1"));)
+    $(for:a in $(DECL_list))
+        $call append, $(decl:$(a))
+
+#----------------------------------------------- 
+subcode: subcfg_src_mpid_ch4
+    AM_COND_IF([BUILD_CH4],[
+    $call @subconfig_ch4
+    ])dnl end AM_COND_IF(BUILD_CH4,...)
+
+    subcode: subconfig_ch4
+        $call on_with_ch4_rank_bits
+        $call on_enable_ch4r_per_comm_msg_queue
+        $call check_ch4_header_funcs
+        $call ac_output_ch4
+
+    subcode: on_with_ch4_rank_bits
+        AC_MSG_NOTICE([RUNNING CONFIGURE FOR CH4 DEVICE])
+        rankbits=$with_ch4_rank_bits
+        $if "$rankbits" != "16" && "$rankbits" != "32" 
+            AC_MSG_ERROR(Only 16 or 32-bit ranks are supported)
+        AC_DEFINE_UNQUOTED(CH4_RANK_BITS,$rankbits,[Define the number of CH4_RANK_BITS])
+    subcode: on_enable_ch4r_per_comm_msg_queue
+        $if "$enable_ch4r_per_comm_msg_queue" = "yes" 
+            AC_DEFINE([MPIDI_CH4U_USE_PER_COMM_QUEUE], [1],
+                [Define if CH4U will use per-communicator message queues])
+    subcode: check_ch4_header_funcs
+        AC_CHECK_HEADERS(sys/mman.h sys/stat.h fcntl.h)
+        AC_CHECK_FUNC(mmap, [], [AC_MSG_ERROR(mmap is required to build CH4)])
+
+        gl_FUNC_RANDOM_R
+        $if "$HAVE_RANDOM_R" = "1" -a "$HAVE_STRUCT_RANDOM_DATA" = "1" 
+            AC_DEFINE(USE_SYM_HEAP,1,[Define if we can use a symmetric heap])
+            AC_MSG_NOTICE([Using a symmetric heap])
+        $else
+            AC_MSG_NOTICE([Using a non-symmetric heap])
+
+        AC_CHECK_FUNCS(gethostname)
+        $if test "$ac_cv_func_gethostname" = "yes" 
+            # Do we need to declare gethostname?
+            PAC_FUNC_NEEDS_DECL([#include <unistd.h>],gethostname)
+
+# ---------------------
+subcode: append(L, val)
+    $if -z "$$(L)"
+        $(L)="$(val)"
+    $else
+        $(if:val~#include)
+            $(L)="$$(L)
+            $(val)"
+        $(elif:val~.*;)
+            $(L)="$$(L) \\
+            $(val)"
+        $(else)
+            $(L)="$$(L), $(val)"
+
