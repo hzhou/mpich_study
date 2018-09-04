@@ -1,0 +1,41 @@
+#- automake target all-recursive
+#-   am__recursive_targets = $(RECURSIVE_TARGETS) $(RECURSIVE_CLEAN_TARGETS) $(am__extra_recursive_targets)
+#-   ${am__recursive_targets}:
+#-           $call am_recursive
+
+#-   To simply make target non-recursively
+#-       make all-am 
+#-       make -c $subdir all
+#----------------------------------------------- 
+#- this subcode is simply for study, non-functional (due the omissions stated below)
+subcode: am_recursivea 
+    # omitting the leading '@' 
+    # omitting the \ at end of every line (and semicolons)
+    fail=
+    $if ${am__make_keepgoing}
+        failcom='fail=yes'
+    $else
+        failcom='exit 1'
+    dot_seen=no
+    # all-recursive -> all
+    target=`echo $@ | sed s/-recursive//`
+    $switch "$@"
+        $of distclean-* | maintainer-clean-*
+            list='${DIST_SUBDIRS}' 
+        $of *
+            list='${SUBDIRS}'
+    $for subdir in $$list; do \
+        echo "Making $$target in $$subdir" 
+        $if "$$subdir" = "."
+            dot_seen=yes
+            local_target="$$target-am" # all-am
+        $else
+            local_target="$$target"    # all
+        (${am__cd} $$subdir && $(MAKE) $$local_target) || eval $$failcom
+    # implict . at the end
+    $if "$$dot_seen" = "no"
+        $(MAKE) "$$target-am" || exit 1
+    test -z "$$fail"
+
+    macros:
+        MAKE: ${MAKE} ${AM_MAKEFLAGS}
