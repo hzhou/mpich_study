@@ -20,3 +20,5 @@ configure.ac: enable_fortran: FIXME, need clearer logic
 configure.ac: need account for all exports
 
 mpid/ch4/subconfigure.m4: ver 3.3b3 missing: MPICH_SUBCFG_BEFORE=src/mpid/common/bc
+
+aclocal.m4: how did [src/hwloc/config/hwloc*.m4] get included by aclocal? Should be in configure.ac where they are being used.
