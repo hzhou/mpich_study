@@ -5,21 +5,17 @@ subcode: config_hwloc
     hwlocsrcdir=""
     hwloclibdir=""
     hwloclib=""
+
     $if "$with_hwloc_prefix" = "embedded" # default
-        # Disable visibility when setting up hwloc
-        PAC_PUSH_FLAG([enable_visibility])
-        enable_visibility=no;
-        HWLOC_SETUP_CORE([src/hwloc],[have_hwloc=yes],[have_hwloc=no],[1])
-        # Only build hwloc in embedded mode
-        if test "$have_hwloc" = "yes" ; then
-            use_embedded_hwloc=yes
-            hwlocsrcdir="src/hwloc"
-            hwloclib="$HWLOC_EMBEDDED_LDADD"
-            PAC_PREPEND_FLAG([$HWLOC_EMBEDDED_LIBS], [WRAPPER_LIBS])
-            # if possible, do not expose hwloc symbols in libmpi.so
-            PAC_PREPEND_FLAG([$VISIBILITY_CFLAGS], [HWLOC_CFLAGS])
-        fi
-        PAC_POP_FLAG([enable_visibility])
+        &call disable_visibility
+            HWLOC_SETUP_CORE([src/hwloc],[have_hwloc=yes],[have_hwloc=no],[1])
+            $if "$have_hwloc" = "yes" 
+                use_embedded_hwloc=yes
+                hwlocsrcdir="src/hwloc"
+                hwloclib="$HWLOC_EMBEDDED_LDADD"
+                PAC_PREPEND_FLAG([$HWLOC_EMBEDDED_LIBS], [WRAPPER_LIBS])
+                # if possible, do not expose hwloc symbols in libmpi.so
+                PAC_PREPEND_FLAG([$VISIBILITY_CFLAGS], [HWLOC_CFLAGS])
     $else
         AC_CHECK_HEADERS([hwloc.h])
         # hwloc_topology_set_pid was added in hwloc-1.0.0, which is our
@@ -47,9 +43,8 @@ subcode: config_hwloc
         fi
 
     # ---------------------------------
-    if test "$have_hwloc" = "yes" ; then
-    AC_DEFINE(HAVE_HWLOC,1,[Define if hwloc is available])
-    fi
+    $if "$have_hwloc" = "yes" 
+        AC_DEFINE(HAVE_HWLOC,1,[Define if hwloc is available])
 
     HWLOC_DO_AM_CONDITIONALS
     AM_CONDITIONAL([have_hwloc], [test "${have_hwloc}" = "yes"])
@@ -65,4 +60,9 @@ subcode: config_hwloc
         m4_include([src/hwloc/config/hwloc_pkg.m4])
         m4_include([src/hwloc/config/netloc.m4])
 
+    subcode: disable_visibility
+        PAC_PUSH_FLAG([enable_visibility])
+        enable_visibility=no;
+        BLOCK
+        PAC_POP_FLAG([enable_visibility])
 

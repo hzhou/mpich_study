@@ -210,20 +210,32 @@ Optional Features:
 
   --enable-dependency-tracking
                           do not reject slow dependency extractors
+    # skip: AM_INIT_AUTOMAKE
   --disable-dependency-tracking
                           speeds up one-time build
+    # skip: AM_INIT_AUTOMAKE
   --enable-silent-rules   less verbose build output (undo: "make V=1")
+    # skip: AM_INIT_AUTOMAKE
   --disable-silent-rules  verbose build output (undo: "make V=0")
+    # skip: AM_INIT_AUTOMAKE
   --disable-maintainer-mode
                           disable make rules and dependencies not useful (and
                           sometimes confusing) to the casual installer
+    # skip: AM_INIT_AUTOMAKE
   --enable-shared[=PKGS]  build shared libraries [default=yes]
+    # skip: LT_INIT
   --enable-static[=PKGS]  build static libraries [default=yes]
+    # skip: LT_INIT
   --enable-fast-install[=PKGS]
                           optimize for fast installation [default=yes]
+    # skip: LT_INIT
   --disable-libtool-lock  avoid locking (might break parallel builds)
+    # skip: LT_INIT
   --enable-cache          Turn on configure caching
+    # default: notgiven
+    # skip: PAC_ARG_CACHING -- aclocal_cache.m4
   --enable-strict         Turn on strict compilation testing
+    # skip: PAC_ARG_STRICT  -- aclocal_cc.m4
   --enable-sock-debug     Turn on tests of the socket data structures
   --enable-ch4-netmod-direct
        Enables inlined netmod build when a single netmod is used
@@ -247,12 +259,14 @@ Optional Features:
        level:
          yes       - Enabled (default)
          no        - Disabled (may improve build times and code size)
-    #default: yes
+    # default: yes
 
   --enable-visibility     enable visibility feature of certain
                           compilers/linkers (default: enabled on platforms
                           that support it)
+    # skip: PAC_CHECK_VISIBILITY -- aclocal_check_visibility.m4
   --enable-coverage       Turn on coverage analysis using gcc and gcov
+    # skip: PAC_ENABLE_COVERAGE -- aclocal_coverage.m4
   --enable-alloca         Use alloca to allocate temporary memory if available
   --enable-checkpointing  Enable application checkpointing
   --enable-base-cache     Enable the use of a simple cache for the subsidiary

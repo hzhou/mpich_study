@@ -4,8 +4,7 @@
 #-- perlcode: set_macros_from_config_help sets up macros for AC_ARG_ENABLE, AC_ARG_WITH
 
 macros:
-    # AM_INIT_AUTOMAKE(silent-rules)
-    ac_arg_skiplist:: silent-rules, dependency-tracking, maintainer-mode, shared, static, fast-install, libtool-lock, cache, strict
+    ac_arg_skiplist:: skip-in-config-help
     ac_var_skiplist:: CC, CFLAGS, LDFLAGS, LIBS, CPPFLAGS, CPP
     ac_var_skiplist:: LT_SYS_LIBRARY_PATH
     ac_var_skiplist:: CXX, CXXFLAGS, CXXCPP
@@ -80,8 +79,11 @@ perlcode: ac_arg_options
         $call _collect
         $if $H{PAC_SET_HEADER_LIB_PATH}
             push @$out, "PAC_SET_HEADER_LIB_PATH($name)"
+        $elif $H{skip}
+            NOOP
         $else
             $call _dump
+
     subcode: _collect
         my %H={default=>"default"}
         # -------
