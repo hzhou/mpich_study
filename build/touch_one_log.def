@@ -1,0 +1,228 @@
+# vim: syntax=mydef
+
+macros:
+    COMPILE:     /bin/bash ./libtool --tag=CC  --mode=compile gcc
+    l_flags: -O2 -rpath /usr/local/lib -version-info 0:0:0 
+    LINK_F77:    /bin/bash ./libtool --tag=F77 --mode=link gfortran $(l_flags)
+    LINK_FC:     /bin/bash ./libtool --tag=FC  --mode=link gfortran $(l_flags)
+    LINK_CXX:    /bin/bash ./libtool --tag=CXX --mode=link g++      $(l_flags)
+    LINK_static: /bin/bash ./libtool --tag=CC  --mode=link gcc -static -O2
+
+    dir: src/mpi/attr
+    name: attr_delete
+    source: $(dir)/$(name).c
+    target: $(dir)/lib_libmpi_la-$(name).lo
+    shared_target: $(dir)/.libs/lib_libmpi_la-$(name).o
+    static_target: $(dir)/lib_libmpi_la-$(name).o
+
+    Tpo: $(dir)/.deps/lib_libmpi_la-$(name).Tpo
+    Plo: $(dir)/.deps/lib_libmpi_la-$(name).Plo
+    dep_flags: -MT $(target) -MD -MP -MF $(Tpo)
+
+    am_source: `test -f '$(source)' || echo './'`$(source) # which case do we need the ./?
+
+subcode: log
+    $(COMPILE) $(CFLAGS) -O2 $(dep_flags) -c -o $(target) $(am_source)
+    libtool: compile:  gcc $(CFLAGS) -O2 $(dep_flags) -c $(source) -fPIC -DPIC -o $(shared_target)
+    libtool: compile:  gcc $(CFLAGS) -O2 $(dep_flags) -c $(source) -o $(static_target) > /dev/null 2>&1
+    mv -f $(Tpo) $(Plo)
+    # ---------------
+    $(LINK_F77) -o lib/libmpi.la $(lo_list) -lm   -lbacktrace -lpthread  -lrt $(la_list)
+    libtool: link: rm -fr  lib/.libs/libmpi.a lib/.libs/libmpi.la lib/.libs/libmpi.lai lib/.libs/libmpi.so lib/.libs/libmpi.so.0 lib/.libs/libmpi.so.0.0.0
+    libtool: link: gfortran -shared  -fPIC $(obj_dot_list) -Wl,--whole-archive $(a_list) -Wl,--no-whole-archive  -lm -lbacktrace -lpthread -ldl -lrt  -O2   -Wl,-soname -Wl,libmpi.so.0 -o lib/.libs/libmpi.so.0.0.0
+    # static lib
+    libtool: link: (cd "lib/.libs" && rm -f "libmpi.so.0" && ln -s "libmpi.so.0.0.0" "libmpi.so.0")
+    libtool: link: (cd "lib/.libs" && rm -f "libmpi.so" && ln -s "libmpi.so.0.0.0" "libmpi.so")
+    $(for:a, dir in opa, mpl, hwloc_embedded, fabric, romio and openpa/src, mpl, hwloc/hwloc, mpid/ch4/netmod/ofi/libfabric/src, mpi/romio)
+        libtool: link: (cd lib/.libs/libmpi.lax/lib$(a).a && ar x "src/$(dir)/.libs/lib$(a).a")
+
+    copying selected object files to avoid basename conflicts...
+    $(for:func_table, globals, barrier and 1,2,3)
+        $(set:a=lib_libmpi_la-$1)
+        $(set:b=lib/.libs/libmpi.lax/lt$2-$(a))
+        $(if:t=func_table)
+            $(set:dir=src/mpid/ch4/shm/src)
+        $(else)
+            $(set:dir=src/mpid/ch4/shm/posix)
+        libtool: link: ln $(dir)/$(a).o $(b).o || cp $(dir)/$(a).o $(b).o
+
+    libtool: link: ar cr lib/.libs/libmpi.a $(obj_list) $(ch4_obj_list)
+    libtool: link: ranlib lib/.libs/libmpi.a
+    libtool: link: rm -fr lib/.libs/libmpi.lax lib/.libs/libmpi.lax
+    libtool: link: ( cd "lib/.libs" && rm -f "libmpi.la" && ln -s "../libmpi.la" "libmpi.la" )
+    # -------------------
+    $(LINK_FC) -Isrc/binding/fortran/use_mpi -o lib/libmpifort.la $(fort_lo_list) lib/libmpi.la 
+    libtool: link: rm -fr  lib/.libs/libmpifort.a lib/.libs/libmpifort.la lib/.libs/libmpifort.lai lib/.libs/libmpifort.so lib/.libs/libmpifort.so.0 lib/.libs/libmpifort.so.0.0.0
+    libtool: link: gfortran -shared  -fPIC $(fort_dot_o_list) -Wl,-rpath -Wl,/home/hzhou/packages/mpich-ch4/lib/.libs lib/.libs/libmpi.so -L/usr/lib/gcc/x86_64-linux-gnu/6 -L/usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/6/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/6/../../.. -lgfortran -lquadmath -lm -lc -lgcc_s  -O2   -Wl,-soname -Wl,libmpifort.so.0 -o lib/.libs/libmpifort.so.0.0.0
+    libtool: link: (cd "lib/.libs" && rm -f "libmpifort.so.0" && ln -s "libmpifort.so.0.0.0" "libmpifort.so.0")
+    libtool: link: (cd "lib/.libs" && rm -f "libmpifort.so" && ln -s "libmpifort.so.0.0.0" "libmpifort.so")
+    # static lib
+    libtool: link: ar cr lib/.libs/libmpifort.a $(fort_o_list)
+    libtool: link: ranlib lib/.libs/libmpifort.a
+    libtool: link: ( cd "lib/.libs" && rm -f "libmpifort.la" && ln -s "../libmpifort.la" "libmpifort.la" )
+    # ---------------
+    $(LINK_CXX) -o lib/libmpicxx.la src/binding/cxx/initcxx.lo lib/libmpi.la 
+    libtool: link: rm -fr  lib/.libs/libmpicxx.a lib/.libs/libmpicxx.la lib/.libs/libmpicxx.lai lib/.libs/libmpicxx.so lib/.libs/libmpicxx.so.0 lib/.libs/libmpicxx.so.0.0.0
+    libtool: link: g++  -fPIC -DPIC -shared -nostdlib /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/6/crtbeginS.o  src/binding/cxx/.libs/initcxx.o   -Wl,-rpath -Wl,/home/hzhou/packages/mpich-ch4/lib/.libs lib/.libs/libmpi.so -L/usr/lib/gcc/x86_64-linux-gnu/6 -L/usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/6/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/6/../../.. -lstdc++ -lm -lc -lgcc_s /usr/lib/gcc/x86_64-linux-gnu/6/crtendS.o /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/crtn.o  -O2   -Wl,-soname -Wl,libmpicxx.so.0 -o lib/.libs/libmpicxx.so.0.0.0
+    libtool: link: (cd "lib/.libs" && rm -f "libmpicxx.so.0" && ln -s "libmpicxx.so.0.0.0" "libmpicxx.so.0")
+    libtool: link: (cd "lib/.libs" && rm -f "libmpicxx.so" && ln -s "libmpicxx.so.0.0.0" "libmpicxx.so")
+    # static lib
+    libtool: link: ar cr lib/.libs/libmpicxx.a  src/binding/cxx/initcxx.o
+    libtool: link: ranlib lib/.libs/libmpicxx.a
+    libtool: link: ( cd "lib/.libs" && rm -f "libmpicxx.la" && ln -s "../libmpicxx.la" "libmpicxx.la" )
+    # ---------------
+    $(LINK_static) -fvisibility=hidden -O2  -o src/env/mpichversion src/env/mpichversion.o lib/libmpi.la  
+    libtool: link: gcc -fvisibility=hidden -O2 -o src/env/mpichversion src/env/mpichversion.o  lib/.libs/libmpi.a -lm -lbacktrace -lpthread -ldl -lrt
+    /bin/bash ./libtool  --tag=CC   --mode=link gcc -fvisibility=hidden   -O2 -static  -o src/env/mpivars src/env/mpivars.o lib/libmpi.la  
+    libtool: link: gcc -fvisibility=hidden -O2 -o src/env/mpivars src/env/mpivars.o  lib/.libs/libmpi.a -lm -lbacktrace -lpthread -ldl -lrt
+
+subcode: _autoload
+    $call set_macros
+
+page: t
+    module: general
+
+    lo_list: $(lo_list)
+    obj_list: $(obj_list)
+
+perlcode: set_macros
+    $(set:pre=lib_libmpi_la)
+    $call @parse_Makefile
+    my $lo_list = get_list("am_lib_libmpi_la_OBJECTS")
+    my $fort_lo_list=get_list("am_lib_libmpifort_la_OBJECTS")
+    my $cnt = @$lo_list
+    my $cnt_fort = @$fort_lo_list
+
+    $print lo_list: $cnt objects
+    $print fort_lo_list: $cnt_fort objects
+
+    my $macros=$MyDef::def->{macros}
+    $macros->{lo_list} = join(" ", @$lo_list)
+
+    my (@obj_list, @obj_dot_list)
+    $foreach $o in @$lo_list
+        $if $o=~/(.*\/)(.*)\.lo/
+            push @obj_list, "$1/$2.o"
+            push @obj_dot_list, "$1.libs/$2.o"
+    $macros->{obj_list} = join(" ", @obj_list)
+    $macros->{obj_dot_list} = join(" ", @obj_dot_list)
+    $call @sub_get_list
+    # --------------------
+    subcode: parse_Makefile
+        my %objects
+        my $tlist
+        &call open_r, Makefile
+            $if /^(am_lib_.*_la_OBJECTS|am__objects_\d+)\s*=\s*(.*)/ -> $a, $b
+                $tlist=[]
+                $objects{$a} = $tlist
+
+                $call add_b_to_tlist
+            $elif $tlist
+                $if /\s*(.*)/ -> $b
+                    $call add_b_to_tlist
+    subcode: sub_get_list
+        $sub get_list($key)
+            my @t
+            my $tlist = $objects{$key}
+            # $call @debug_get_list
+            $foreach $t in @{$objects{$key}}
+                $if $t=~/\$\((\w+)\)/
+                    my $L = get_list($1)
+                    push @t, @$L
+                $else
+                    push @t, $t
+            return \@t
+        subcode: debug_get_list
+            $(if:1)
+                $print $key: $tlist
+            $(else)
+                $if $tlist
+                    $print $key: @$tlist
+                $else
+                    $print $key undefined
+    # -------------------
+    subcode: open_r(f)
+        open In, "$(f)" or die "Can't open $(f)\n"
+        $while <In>
+            BLOCK
+        close In
+
+    subcode: add_b_to_tlist
+        my $done=1
+        $if $b=~/\\$/
+            $done = 0
+            $b=~s/\s*\\$//
+
+        $if $b
+            push @$tlist, split /\s+/, $b
+        $if $done
+            undef $tlist
+
+subcode: _autoload
+    $call init_CFLAGS
+perlcode: init_CFLAGS
+    $MyDef::def->{macros}->{CFLAGS}=~s/,\s*/ /g
+macros:
+    CFLAGS:: -DHAVE_CONFIG_H
+    CFLAGS:: -I.
+    CFLAGS:: -I./src/include
+    CFLAGS:: -I./src/hwloc/include/private/autogen
+    CFLAGS:: -I./src/hwloc/include/hwloc/autogen
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/hwloc/include
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/hwloc/include
+    CFLAGS:: -I./src/include
+    CFLAGS:: -I./src/mpi/coll/allreduce_group/
+    CFLAGS:: -I./src/mpi/coll/transports/gentran
+    CFLAGS:: -I./src/mpi/coll/transports/stubtran
+    CFLAGS:: -I./src/mpi/coll/transports/common
+    CFLAGS:: -I./src/mpi/coll/algorithms/treealgo
+    CFLAGS:: -I./src/mpi/coll/algorithms/recexchalgo
+    CFLAGS:: -I./src/mpi/coll/algorithms/stubalgo
+    CFLAGS:: -I./src/mpi/coll/algorithms/common
+    CFLAGS:: -I./src/mpi/coll/include/
+    CFLAGS:: -I./src/mpi/datatype
+    CFLAGS:: -I./src/mpi/datatype
+    CFLAGS:: -I./src/mpi/spawn
+    CFLAGS:: -I./src/util/logging/common
+    CFLAGS:: -I./src/util/mem
+    CFLAGS:: -I./src/util/nodemap
+    CFLAGS:: -I./src/util/wrappers
+    CFLAGS:: -I./src/util/wrappers
+    CFLAGS:: -I./src/binding/cxx
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/binding/fortran/mpif_h
+    CFLAGS:: -Isrc/binding/fortran/use_mpi
+    CFLAGS:: -I./src/mpid/include
+    CFLAGS:: -I./src/mpid/ch4/include
+    CFLAGS:: -I./src/mpid/ch4/include
+    CFLAGS:: -I./src/mpid/ch4/src
+    CFLAGS:: -I./src/mpid/ch4/generic
+    CFLAGS:: -I./src/mpid/ch4/netmod/include
+    CFLAGS:: -I./src/mpid/ch4/shm/include
+    CFLAGS:: -I./src/mpid/ch4/shm/src
+    CFLAGS:: -I./src/mpid/common/sched
+    CFLAGS:: -I./src/mpid/common/thread
+    CFLAGS:: -I./src/mpid/common/timers
+    CFLAGS:: -I./src/mpid/common/shm
+    CFLAGS:: -I./src/mpid/common/bc
+    CFLAGS:: -I./src/pmi/simple
+    CFLAGS:: -I./src/pmi/include
+    CFLAGS:: -DNETMOD_INLINE=__netmod_inline_ofi__
+    CFLAGS:: -DSHM_INLINE=__shm_inline_posix__
+    CFLAGS:: -DMPIDI_POSIX_USE_LOCK_FREE_QUEUES
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/mpl/include
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/mpl/include
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/openpa/src
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/openpa/src
+    CFLAGS:: -D_REENTRANT
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/mpi/romio/include
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/mpid/ch4/netmod/ofi/libfabric/include
+    CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/mpid/ch4/netmod/ofi/libfabric/include
+    CFLAGS:: -fvisibility=hidden
+
+macros::
+    la_list: src/openpa/src/libopa.la src/mpl/libmpl.la  /home/hzhou/packages/mpich-ch4/src/hwloc/hwloc/libhwloc_embedded.la    src/mpid/ch4/netmod/ofi/libfabric/src/libfabric.la  src/mpi/romio/libromio.la 
+    a_list: src/openpa/src/.libs/libopa.a src/mpl/.libs/libmpl.a /home/hzhou/packages/mpich-ch4/src/hwloc/hwloc/.libs/libhwloc_embedded.a src/mpid/ch4/netmod/ofi/libfabric/src/.libs/libfabric.a src/mpi/romio/.libs/libromio.a
+
+    ch4_lo_list:: src/mpid/ch4/shm/src/lib_libmpi_la-func_table.lo src/mpid/ch4/shm/posix/lib_libmpi_la-globals.lo src/mpid/ch4/shm/posix/lib_libmpi_la-barrier.lo
+    ch4_obj_list:: lib/.libs/libmpi.lax/lt1-lib_libmpi_la-func_table.o lib/.libs/libmpi.lax/lt2-lib_libmpi_la-globals.o lib/.libs/libmpi.lax/lt3-lib_libmpi_la-barrier.o
+    ch4_obj_list:: lib/.libs/libmpi.lax/libopa.a/opa_primitives.o lib/.libs/libmpi.lax/libopa.a/opa_queue.o lib/.libs/libmpi.lax/libmpl.a/mpl_argstr.o lib/.libs/libmpi.lax/libmpl.a/mpl_bt.o lib/.libs/libmpi.lax/libmpl.a/mpl_dbg.o lib/.libs/libmpi.lax/libmpl.a/mpl_env.o lib/.libs/libmpi.lax/libmpl.a/mpl_msg.o lib/.libs/libmpi.lax/libmpl.a/mpl_shm.o lib/.libs/libmpi.lax/libmpl.a/mpl_shm_mmap.o lib/.libs/libmpi.lax/libmpl.a/mpl_shm_sysv.o lib/.libs/libmpi.lax/libmpl.a/mpl_shm_win.o lib/.libs/libmpi.lax/libmpl.a/mpl_sock.o lib/.libs/libmpi.lax/libmpl.a/mpl_str.o lib/.libs/libmpi.lax/libmpl.a/mpl_thread.o lib/.libs/libmpi.lax/libmpl.a/mpl_thread_argobots.o lib/.libs/libmpi.lax/libmpl.a/mpl_thread_posix.o lib/.libs/libmpi.lax/libmpl.a/mpl_thread_solaris.o lib/.libs/libmpi.lax/libmpl.a/mpl_thread_win.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_clock_gettime.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_device.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_gcc_ia64_cycle.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_gethrtime.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_gettimeofday.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_linux86_cycle.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_mach_absolute_time.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_ppc64_cycle.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_query_performance_counter.o lib/.libs/libmpi.lax/libmpl.a/mpl_timer_win86_cycle.o lib/.libs/libmpi.lax/libmpl.a/mpl_trmem.o lib/.libs/libmpi.lax/libhwloc_embedded.a/base64.o lib/.libs/libmpi.lax/libhwloc_embedded.a/bind.o lib/.libs/libmpi.lax/libhwloc_embedded.a/bitmap.o lib/.libs/libmpi.lax/libhwloc_embedded.a/components.o lib/.libs/libmpi.lax/libhwloc_embedded.a/diff.o lib/.libs/libmpi.lax/libhwloc_embedded.a/distances.o lib/.libs/libmpi.lax/libhwloc_embedded.a/misc.o lib/.libs/libmpi.lax/libhwloc_embedded.a/pci-common.o lib/.libs/libmpi.lax/libhwloc_embedded.a/shmem.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-hardwired.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-linux.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-noos.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-synthetic.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-x86.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-xml-nolibxml.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology-xml.o lib/.libs/libmpi.lax/libhwloc_embedded.a/topology.o lib/.libs/libmpi.lax/libhwloc_embedded.a/traversal.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-abi_1_0.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-common.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-enosys.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-fasthash.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-fi_tostr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_av.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_cm.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_cntr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_eq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_wait.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-hook_xfer.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-indexer.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-iov.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-log.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-mem.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-osd.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-perf.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rbtree.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rdpmc.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_av.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_cntr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_init.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxd_rma.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_conn.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_init.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-rxm_rma.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_atomic.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_av.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_comp.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_init.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_msg.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_progress.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-smr_rma.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_atomic.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_av.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_cntr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_comm.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_conn.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_ctx.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_dom.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_ep_dgram.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_ep_msg.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_ep_rdm.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_eq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_mr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_msg.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_poll.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_progress.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_rma.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_rx_entry.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_trigger.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-sock_wait.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_comm.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_conn_mgr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_init.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-tcpx_progress.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-udpx_init.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_atomic.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_attr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_av.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_buf.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_cntr.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_cq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_domain.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_ep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_eq.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_fabric.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_main.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_mem_monitor.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_mr_cache.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_mr_map.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_ns.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_pep.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_poll.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_shm.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-util_wait.o lib/.libs/libmpi.lax/libfabric.a/src_libfabric_la-var.o lib/.libs/libmpi.lax/libromio.a/ad_aggregate.o lib/.libs/libmpi.lax/libromio.a/ad_aggregate_new.o lib/.libs/libmpi.lax/libromio.a/ad_close.o lib/.libs/libmpi.lax/libromio.a/ad_coll_build_req_new.o lib/.libs/libmpi.lax/libromio.a/ad_coll_exch_new.o lib/.libs/libmpi.lax/libromio.a/ad_darray.o lib/.libs/libmpi.lax/libromio.a/ad_delete.o lib/.libs/libmpi.lax/libromio.a/ad_done.o lib/.libs/libmpi.lax/libromio.a/ad_done_fake.o lib/.libs/libmpi.lax/libromio.a/ad_end.o lib/.libs/libmpi.lax/libromio.a/ad_fcntl.o lib/.libs/libmpi.lax/libromio.a/ad_features.o lib/.libs/libmpi.lax/libromio.a/ad_flush.o lib/.libs/libmpi.lax/libromio.a/ad_fstype.o lib/.libs/libmpi.lax/libromio.a/ad_get_sh_fp.o lib/.libs/libmpi.lax/libromio.a/ad_hints.o lib/.libs/libmpi.lax/libromio.a/ad_init.o lib/.libs/libmpi.lax/libromio.a/ad_io_coll.o lib/.libs/libmpi.lax/libromio.a/ad_iopen.o lib/.libs/libmpi.lax/libromio.a/ad_iread.o lib/.libs/libmpi.lax/libromio.a/ad_iread_coll.o lib/.libs/libmpi.lax/libromio.a/ad_iread_fake.o lib/.libs/libmpi.lax/libromio.a/ad_iwrite.o lib/.libs/libmpi.lax/libromio.a/ad_iwrite_coll.o lib/.libs/libmpi.lax/libromio.a/ad_iwrite_fake.o lib/.libs/libmpi.lax/libromio.a/ad_nfs.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_done.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_fcntl.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_features.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_getsh.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_iread.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_iwrite.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_open.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_read.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_resize.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_setsh.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_wait.o lib/.libs/libmpi.lax/libromio.a/ad_nfs_write.o lib/.libs/libmpi.lax/libromio.a/ad_open.o lib/.libs/libmpi.lax/libromio.a/ad_opencoll.o lib/.libs/libmpi.lax/libromio.a/ad_opencoll_failsafe.o lib/.libs/libmpi.lax/libromio.a/ad_opencoll_scalable.o lib/.libs/libmpi.lax/libromio.a/ad_prealloc.o lib/.libs/libmpi.lax/libromio.a/ad_read.o lib/.libs/libmpi.lax/libromio.a/ad_read_coll.o lib/.libs/libmpi.lax/libromio.a/ad_read_str.o lib/.libs/libmpi.lax/libromio.a/ad_read_str_naive.o lib/.libs/libmpi.lax/libromio.a/ad_resize.o lib/.libs/libmpi.lax/libromio.a/ad_seek.o lib/.libs/libmpi.lax/libromio.a/ad_set_sh_fp.o lib/.libs/libmpi.lax/libromio.a/ad_set_view.o lib/.libs/libmpi.lax/libromio.a/ad_subarray.o lib/.libs/libmpi.lax/libromio.a/ad_testfs.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_close.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_delete.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_done.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_fcntl.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_flush.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_hints.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_iread.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_iwrite.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_open.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_rdcoll.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_read.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_resize.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_seek.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_wait.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_wrcoll.o lib/.libs/libmpi.lax/libromio.a/ad_testfs_write.o lib/.libs/libmpi.lax/libromio.a/ad_threaded_io.o lib/.libs/libmpi.lax/libromio.a/ad_tuning.o lib/.libs/libmpi.lax/libromio.a/ad_ufs.o lib/.libs/libmpi.lax/libromio.a/ad_ufs_open.o lib/.libs/libmpi.lax/libromio.a/ad_wait.o lib/.libs/libmpi.lax/libromio.a/ad_wait_fake.o lib/.libs/libmpi.lax/libromio.a/ad_write.o lib/.libs/libmpi.lax/libromio.a/ad_write_coll.o lib/.libs/libmpi.lax/libromio.a/ad_write_nolock.o lib/.libs/libmpi.lax/libromio.a/ad_write_str.o lib/.libs/libmpi.lax/libromio.a/ad_write_str_naive.o lib/.libs/libmpi.lax/libromio.a/adi_close.o lib/.libs/libmpi.lax/libromio.a/byte_offset.o lib/.libs/libmpi.lax/libromio.a/cb_config_list.o lib/.libs/libmpi.lax/libromio.a/close.o lib/.libs/libmpi.lax/libromio.a/delete.o lib/.libs/libmpi.lax/libromio.a/eof_offset.o lib/.libs/libmpi.lax/libromio.a/error.o lib/.libs/libmpi.lax/libromio.a/file_c2f.o lib/.libs/libmpi.lax/libromio.a/file_f2c.o lib/.libs/libmpi.lax/libromio.a/flatten.o lib/.libs/libmpi.lax/libromio.a/fsync.o lib/.libs/libmpi.lax/libromio.a/get_amode.o lib/.libs/libmpi.lax/libromio.a/get_atom.o lib/.libs/libmpi.lax/libromio.a/get_bytoff.o lib/.libs/libmpi.lax/libromio.a/get_extent.o lib/.libs/libmpi.lax/libromio.a/get_fp_posn.o lib/.libs/libmpi.lax/libromio.a/get_group.o lib/.libs/libmpi.lax/libromio.a/get_info.o lib/.libs/libmpi.lax/libromio.a/get_posn.o lib/.libs/libmpi.lax/libromio.a/get_posn_sh.o lib/.libs/libmpi.lax/libromio.a/get_size.o lib/.libs/libmpi.lax/libromio.a/get_view.o lib/.libs/libmpi.lax/libromio.a/greq_fns.o lib/.libs/libmpi.lax/libromio.a/heap_sort.o lib/.libs/libmpi.lax/libromio.a/hint_fns.o lib/.libs/libmpi.lax/libromio.a/iread.o lib/.libs/libmpi.lax/libromio.a/iread_all.o lib/.libs/libmpi.lax/libromio.a/iread_at.o lib/.libs/libmpi.lax/libromio.a/iread_atall.o lib/.libs/libmpi.lax/libromio.a/iread_sh.o lib/.libs/libmpi.lax/libromio.a/iscontig.o lib/.libs/libmpi.lax/libromio.a/iwrite.o lib/.libs/libmpi.lax/libromio.a/iwrite_all.o lib/.libs/libmpi.lax/libromio.a/iwrite_at.o lib/.libs/libmpi.lax/libromio.a/iwrite_atall.o lib/.libs/libmpi.lax/libromio.a/iwrite_sh.o lib/.libs/libmpi.lax/libromio.a/lock.o lib/.libs/libmpi.lax/libromio.a/malloc.o lib/.libs/libmpi.lax/libromio.a/mpich_fileutil.o lib/.libs/libmpi.lax/libromio.a/mpio_err.o lib/.libs/libmpi.lax/libromio.a/mpio_file.o lib/.libs/libmpi.lax/libromio.a/mpir-mpioinit.o lib/.libs/libmpi.lax/libromio.a/mpir_cst_filesys.o lib/.libs/libmpi.lax/libromio.a/mpiu_external32.o lib/.libs/libmpi.lax/libromio.a/mpiu_greq.o lib/.libs/libmpi.lax/libromio.a/onesided_aggregation.o lib/.libs/libmpi.lax/libromio.a/open.o lib/.libs/libmpi.lax/libromio.a/p2p_aggregation.o lib/.libs/libmpi.lax/libromio.a/prealloc.o lib/.libs/libmpi.lax/libromio.a/rd_atallb.o lib/.libs/libmpi.lax/libromio.a/rd_atalle.o lib/.libs/libmpi.lax/libromio.a/read.o lib/.libs/libmpi.lax/libromio.a/read_all.o lib/.libs/libmpi.lax/libromio.a/read_allb.o lib/.libs/libmpi.lax/libromio.a/read_alle.o lib/.libs/libmpi.lax/libromio.a/read_at.o lib/.libs/libmpi.lax/libromio.a/read_atall.o lib/.libs/libmpi.lax/libromio.a/read_ord.o lib/.libs/libmpi.lax/libromio.a/read_ordb.o lib/.libs/libmpi.lax/libromio.a/read_orde.o lib/.libs/libmpi.lax/libromio.a/read_sh.o lib/.libs/libmpi.lax/libromio.a/register_datarep.o lib/.libs/libmpi.lax/libromio.a/seek.o lib/.libs/libmpi.lax/libromio.a/seek_sh.o lib/.libs/libmpi.lax/libromio.a/set_atom.o lib/.libs/libmpi.lax/libromio.a/set_info.o lib/.libs/libmpi.lax/libromio.a/set_size.o lib/.libs/libmpi.lax/libromio.a/set_view.o lib/.libs/libmpi.lax/libromio.a/shfp_fname.o lib/.libs/libmpi.lax/libromio.a/status_setb.o lib/.libs/libmpi.lax/libromio.a/strfns.o lib/.libs/libmpi.lax/libromio.a/system_hints.o lib/.libs/libmpi.lax/libromio.a/utils.o lib/.libs/libmpi.lax/libromio.a/wr_atallb.o lib/.libs/libmpi.lax/libromio.a/wr_atalle.o lib/.libs/libmpi.lax/libromio.a/write.o lib/.libs/libmpi.lax/libromio.a/write_all.o lib/.libs/libmpi.lax/libromio.a/write_allb.o lib/.libs/libmpi.lax/libromio.a/write_alle.o lib/.libs/libmpi.lax/libromio.a/write_at.o lib/.libs/libmpi.lax/libromio.a/write_atall.o lib/.libs/libmpi.lax/libromio.a/write_ord.o lib/.libs/libmpi.lax/libromio.a/write_ordb.o lib/.libs/libmpi.lax/libromio.a/write_orde.o lib/.libs/libmpi.lax/libromio.a/write_sh.o
