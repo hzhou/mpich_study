@@ -47,6 +47,9 @@ subcode: convert_comma_list(var)
 subcode: convert_to_upper(var)
     $(var)=$( echo $$(var) |tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
+subcode: sed(var, @pat)
+    $(var)=$( echo $$(var) |sed $(pat) )
+
 subcode: parse_simple_list(list, prefix, @val_list)
     $call convert_comma_list, $(list)
     $for a in $$(list)

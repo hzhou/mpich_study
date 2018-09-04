@@ -18,3 +18,5 @@ aclocal_cc.m4: AM_PROG_CC_C_0: silent-rules supported automatically now
 configure.ac: enable_fortran: FIXME, need clearer logic
 
 configure.ac: need account for all exports
+
+mpid/ch4/subconfigure.m4: ver 3.3b3 missing: MPICH_SUBCFG_BEFORE=src/mpid/common/bc
