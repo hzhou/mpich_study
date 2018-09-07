@@ -1,0 +1,121 @@
+page: parse_headers
+    module: perl
+
+    $global $src="templates"
+    
+    $global $I_list
+    $I_list = get_I_list("$src/ch4.makefile")
+    unshift @$I_list, "mpi/attr"
+    $foreach $I in @$I_list
+        $print $I
+
+    $print ------------------------------\n
+    get_h_list("mpi/attr/attr_delete.c", 0)
+
+    $print ------------------------------\n
+    my @tlist
+    $foreach $I in sort keys %I_hash
+        $print -I$I
+        push @tlist, "-I../src/$I"
+    my $cc = "cpp ".join(' ', @tlist)
+    # system "$cc templates/mpi/attr/attr_delete.c >out/ch4.dump"
+    $print $cc
+
+#----------------------------------------------- 
+fncode: get_h_list($file, $level)
+    $global %h_cache
+    $if $h_cache{$file}
+        return
+    $else
+        $h_cache{$file}=1
+    # --------------------
+    my @h_list
+    &call open_r, $src/$file
+        $if /^\s*#include\s*(.*)/ -> $t
+            $if $t=~/^"(.*)"/ -> $h
+                $t = find_file($h)
+                $if $t
+                    push @h_list, $t
+                $else
+                    warn "[$h]\n"
+                    # $print [$h]
+    my $sp = '    'x $level
+    $foreach $f in @h_list
+        $print $sp$f
+        get_h_list($f, $level+1)
+
+fncode: find_file($file)
+    $global %I_hash
+    $foreach $I in @$I_list
+        $if -f "$src/$I/$file"
+            $I_hash{$I}++
+            return "$I/$file"
+#----------------------------------------------- 
+fncode: get_I_list($makefile)
+    $call parse_Makefile, $makefile
+    my $tlist = get_list("COMPILE")
+
+    my @I_list
+    my %cache
+    $foreach $t in @$tlist
+        my $I
+        $if $t=~/^-I\$[({](.+)[)}](.*)/
+            $I = $objects{$1}->[0].$2
+        $elif $t=~/^-I(.*)/
+            $I = $1
+        # --
+        $if $I=~/^src/
+            $I='./'.$I
+        $else
+            $I=~s/^\/home\/.*mpich-ch\d/./
+        $if $I=~/^\.\/src\/(.*)/
+            $if !$cache{$1}
+                $cache{$1}=1
+                push @I_list, $1
+    return \@I_list
+
+subcode: parse_Makefile(makefile)
+    $global %objects
+    my $tlist
+    &call open_r, $(makefile)
+        $if /^(\w+)\s*=\s*(.*)/ -> $a, $b
+            $tlist=[]
+            $objects{$a} = $tlist
+
+            $call add_b_to_tlist
+        $elif $tlist
+            $if /\s*(.*)/ -> $b
+                $call add_b_to_tlist
+
+    subcode: add_b_to_tlist
+        my $done=1
+        $if $b=~/\\$/
+            $done = 0
+            $b=~s/\s*\\$//
+
+        $if $b
+            push @$tlist, split /\s+/, $b
+        $if $done
+            undef $tlist
+
+# --------------------
+fncode: get_list($key)
+    my @t
+    my $tlist = $objects{$key}
+    # $call @debug_get_list
+    $foreach $t in @{$objects{$key}}
+        $if $t=~/^\$\((\w+)\)$/
+            my $L = get_list($1)
+            push @t, @$L
+        $else
+            push @t, $t
+    return \@t
+
+    subcode: debug_get_list
+        $(if:1)
+            $print $key: $tlist
+        $(else)
+            $if $tlist
+                $print $key: @$tlist
+            $else
+                $print $key undefined

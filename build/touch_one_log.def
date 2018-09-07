@@ -76,6 +76,7 @@ subcode: log
     /bin/bash ./libtool  --tag=CC   --mode=link gcc -fvisibility=hidden   -O2 -static  -o src/env/mpivars src/env/mpivars.o lib/libmpi.la  
     libtool: link: gcc -fvisibility=hidden -O2 -o src/env/mpivars src/env/mpivars.o  lib/.libs/libmpi.a -lm -lbacktrace -lpthread -ldl -lrt
 
+#----------------------------------------------- 
 subcode: _autoload
     $call set_macros
 
@@ -106,13 +107,22 @@ perlcode: set_macros
             push @obj_dot_list, "$1.libs/$2.o"
     $macros->{obj_list} = join(" ", @obj_list)
     $macros->{obj_dot_list} = join(" ", @obj_dot_list)
-    $call @sub_get_list
+
+    # $objects{COMPILE}=~s/^\x24(CC)\s+//
+    my $cflag_list = get_list("COMPILE")
+    my $cnt = @$cflag_list
+    $foreach $t in @$cflag_list
+        $t=~s/\$\(top_(src|build)dir\)\///
+        $t=~s/\$\{master_top_(src|build)dir\}\///
+        $t=~s/\/home\/.*mpich-ch4\///
+        $t=~s/\$\(HWLOC_top_(src|build)dir\)/src\/hwloc/
+        $print $t
     # --------------------
     subcode: parse_Makefile
         my %objects
         my $tlist
-        &call open_r, Makefile
-            $if /^(am_lib_.*_la_OBJECTS|am__objects_\d+)\s*=\s*(.*)/ -> $a, $b
+        &call open_r, templates/Makefile
+            $if /^(\w+)\s*=\s*(.*)/ -> $a, $b
                 $tlist=[]
                 $objects{$a} = $tlist
 
@@ -120,13 +130,15 @@ perlcode: set_macros
             $elif $tlist
                 $if /\s*(.*)/ -> $b
                     $call add_b_to_tlist
+    # --------------------
+    $call @sub_get_list
     subcode: sub_get_list
         $sub get_list($key)
             my @t
             my $tlist = $objects{$key}
             # $call @debug_get_list
             $foreach $t in @{$objects{$key}}
-                $if $t=~/\$\((\w+)\)/
+                $if $t=~/^\$\((\w+)\)$/
                     my $L = get_list($1)
                     push @t, @$L
                 $else
@@ -163,10 +175,13 @@ subcode: _autoload
 perlcode: init_CFLAGS
     $MyDef::def->{macros}->{CFLAGS}=~s/,\s*/ /g
 macros:
+    # DEFS
     CFLAGS:: -DHAVE_CONFIG_H
+    # DEFAULT_INCLUDES
     CFLAGS:: -I.
     CFLAGS:: -I./src/include
     CFLAGS:: -I./src/hwloc/include/private/autogen
+    # AM_CPPFLAGS
     CFLAGS:: -I./src/hwloc/include/hwloc/autogen
     CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/hwloc/include
     CFLAGS:: -I/home/hzhou/packages/mpich-ch4/src/hwloc/include
@@ -206,6 +221,7 @@ macros:
     CFLAGS:: -I./src/mpid/common/bc
     CFLAGS:: -I./src/pmi/simple
     CFLAGS:: -I./src/pmi/include
+    # CPPFLAGS
     CFLAGS:: -DNETMOD_INLINE=__netmod_inline_ofi__
     CFLAGS:: -DSHM_INLINE=__shm_inline_posix__
     CFLAGS:: -DMPIDI_POSIX_USE_LOCK_FREE_QUEUES
