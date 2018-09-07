@@ -1,0 +1,70 @@
+subcode: parse_Makefile(makefile)
+    $global %objects
+    my $tlist
+    &call open_r, $(makefile)
+        $if /^(\w+)\s*=\s*(.*)/ -> $a, $b
+            $tlist=[]
+            $objects{$a} = $tlist
+
+            $call add_b_to_tlist
+        $elif $tlist
+            $if /\s*(.*)/ -> $b
+                $call add_b_to_tlist
+
+    subcode: add_b_to_tlist
+        my $done=1
+        $if $b=~/\\$/
+            $done = 0
+            $b=~s/\s*\\$//
+
+        $if $b
+            push @$tlist, split /\s+/, $b
+        $if $done
+            undef $tlist
+
+# --------------------
+fncode: get_list($key)
+    my @t
+    my $tlist = $objects{$key}
+    # $call @debug_get_list
+    $foreach $t in @{$objects{$key}}
+        $if $t=~/^\$\((\w+)\)$/
+            my $L = get_list($1)
+            push @t, @$L
+        $else
+            push @t, $t
+    return \@t
+
+    subcode: debug_get_list
+        $(if:1)
+            $print $key: $tlist
+        $(else)
+            $if $tlist
+                $print $key: @$tlist
+            $else
+                $print $key undefined
+
+#----------------------------------------------- 
+#- return a list of directories to include path
+fncode: get_I_list
+    my $tlist = get_list("COMPILE")
+
+    my @I_list
+    my %cache
+    $foreach $t in @$tlist
+        my $I
+        $if $t=~/^-I\$[({](.+)[)}](.*)/
+            $I = $objects{$1}->[0].$2
+        $elif $t=~/^-I(.*)/
+            $I = $1
+        # --
+        $if $I=~/^src/
+            $I='./'.$I
+        $else
+            $I=~s/^\/home\/.*mpich-ch\d/./
+        $if $I=~/^\.\/src\/(.*)/
+            $if !$cache{$1}
+                $cache{$1}=1
+                push @I_list, $1
+    return \@I_list
+

@@ -1,0 +1,49 @@
+include: build/parse_Makefile.def
+
+page: custom_make
+    module: perl
+
+    $global $src = "templates"
+    $call parse_Makefile, $src/ch4.makefile
+
+    # --------------------
+    my $I_list = get_I_list()
+    my @tlist
+    $foreach $I in @$I_list
+        push @tlist, "-I$I"
+    my $t_I = join(' ', @tlist)
+
+    # --------------------
+    my $obj_list = get_obj_list()
+    my @tlist
+    $foreach $f in @$obj_list
+        $if $f=~/(.*)\.[cf]$/
+            push @tlist, "$1.o"
+        # $print $f
+    my $t_O = join(' ', @tlist)
+
+    &call open_W, custom.make
+        $print "INCLUDE = $t_I"
+        $print "OBJLIST = $t_O"
+        $print
+        $print "libmpi.a: \${OBJLIST}"
+        $print "\tar cr libmpi.a \$^"
+        $print "\tranlib libmpi.a"
+        $print
+        $print "%.o: %.c"
+        $print "\tgcc -O2 \${INCLUDE} -c -o \$@ \$<"
+        $print
+        $print "%.o: %.f"
+        $print "\tgfortran -O2 \${INCLUDE} -c -o \$@ \$<"
+
+fncode: get_obj_list
+    my $lo_list = get_list("am_lib_libmpi_la_OBJECTS")
+    my @tlist
+    $foreach $lo in @$lo_list
+        $if $lo=~/^src\/(.*)\/lib_libmpi_la-(.*)\.lo/
+            push @tlist, "$1/$2.c"
+        $elif $lo=~/^src\/(binding\/fortran\/mpif_h\/setbotf)\.lo$/
+            push @tlist, "$1.f"
+        $else
+            warn "can't parse: $lo\n"
+    return \@tlist

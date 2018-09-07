@@ -78,3 +78,17 @@ subcode: config_subsystems
             PAC_CONFIG_SUBDIR([$subsys],[],[AC_MSG_ERROR([$subsys configure failed])])
 
     
+#------------------------------------------------------------ 
+#-- sub configure:
+#-    src/util/logging/rlog/configure
+#-    src/pm/hydra/configure
+#-    src/pm/hydra/mpl/configure
+#-    src/pm/hydra/tools/topo/hwloc/hwloc/configure
+#-    src/izem/configure
+#-    src/openpa/configure
+#-    src/mpid/ch4/netmod/ofi/libfabric/configure
+#-    src/mpid/ch4/netmod/ucx/ucx/configure
+#-    src/mpl/configure
+#-    src/mpi/romio/configure
+#-    src/mpi/romio/mpl/configure
+#-    src/hwloc/configure

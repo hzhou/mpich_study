@@ -1,0 +1,54 @@
+page: static_inline
+    module: perl
+
+    my $src = "templates"
+    $if -d $ARGV[0]
+        $src = $ARGV[0]
+
+    my @file_list
+    &call open_r, "find $src -name '*.[ch]' |"
+        chomp
+        push @file_list, $_
+
+    my (@all_h, %H, %ret_type)
+    &call each_file
+        $if /MPL_STATIC_INLINE_PREFIX/
+            $if /^(#define.*)/
+                push @all_h, "$f: $1"
+            $call case_static_inline
+            $elif /^MPL_STATIC_INLINE_PREFIX/
+                my $l = <In>
+                chomp $_
+                $_ .= " $l"
+                $call case_static_inline
+
+    subcode: case_static_inline
+        $if /^MPL_STATIC_INLINE_PREFIX\s+(.*?)\s+(\w+)\(/
+            $H{$2}=$f
+            $ret_type{$2}=$1
+            push @all_h, "$f:\t$2 - $1"
+
+    $print ---------------------\n
+    $foreach $l in @all_h
+        $print $l
+
+    my @all_func
+    &call each_file
+        $if !/MPL_STATIC_INLINE_PREFIX/ && /(\w+)\s*\(/ && $H{$1}
+            my $name = $1
+            my $type = $ret_type{$name}
+            $if !/$type\s+$name/
+                push @all_func, "$name:\t$f"
+
+    $print ---------------------\n
+    $foreach $l in @all_func
+        $print $l
+
+
+    subcode: each_file
+        $foreach $file in @file_list
+            my $f = $file
+            $f=~s/^$src\///
+            &call open_r, $file
+                BLOCK
+

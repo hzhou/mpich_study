@@ -11,8 +11,6 @@ configure.ac: with_cross=$MPID_DEFAULT_CROSS_FILE -- where is MPID_... set?
 
 configure.ac: config_namepublisher: FIXME
 
-configure.ac: AC_CANONICAL_TARGET despite the comment "TARGET not needed, MPICH isn't a compiler"
-
 aclocal_cc.m4: AM_PROG_CC_C_0: silent-rules supported automatically now
 
 configure.ac: enable_fortran: FIXME, need clearer logic
@@ -23,4 +21,10 @@ mpid/ch4/subconfigure.m4: ver 3.3b3 missing: MPICH_SUBCFG_BEFORE=src/mpid/common
 
 aclocal.m4: how did [src/hwloc/config/hwloc*.m4] get included by aclocal? Should be in configure.ac where they are being used.
 
+configure.ac: AC_CANONICAL_TARGET despite the comment "TARGET not needed, MPICH isn't a compiler"
 aclocal_check_visibility.m4: case ${target} in -- should be ${host}
+pm/hydra/configure.ac: AC_CANONICAL_TARGET (for the same reason)
+
+build: mpl are configure and built three times under mpl, pm/hydra/mpl, mpi/romio/mpl
+       hwloc are configure and built twice under hwloc and pm/hydra/tools/topo/hwloc/hwloc/configure
+       solution: in sub configure.ac try detect mpl in the parent dir first
