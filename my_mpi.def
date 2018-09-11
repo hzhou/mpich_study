@@ -1,0 +1,35 @@
+include: libmpi.def
+macros:
+    comm: MPI_COMM_WORLD
+
+## frame
+subcode: basic_frame
+    $include stdio
+    $include stdlib
+    $call @global
+    $function main
+        &call mpi_run
+            $call main
+
+subcode: mpi_run
+    $global n_mpi_size, n_mpi_id, is_mpi_main
+    MPI_Init(NULL, NULL)
+    MPI_Comm_size($(comm), &n_mpi_size)
+    MPI_Comm_rank($(comm), &n_mpi_id)
+    $if n_mpi_id==0
+        is_mpi_main = 1
+    $else
+        is_mpi_main = 0
+
+    $global s_mpi_name[MPI_MAX_PROCESSOR_NAME]
+    $local tn_len
+    MPI_Get_processor_name(s_mpi_name, &tn_len)
+
+    BLOCK
+
+    MPI_Finalize()
+    $(if:mpi_distribute)
+        $if pn_mpi_offs
+            free(pn_mpi_offs)
+            free(pn_mpi_size)
+

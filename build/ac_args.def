@@ -70,7 +70,7 @@ perlcode: ac_arg_load
         close In
 
 perlcode: ac_arg_options
-    my @callsubs
+    my (@callsubs, %cache)
     $MyDef::def->{_callsubs} = \@callsubs
     $foreach $L in @{$MyDef::def->{_opts}}
         my $name = shift @$L
@@ -81,7 +81,8 @@ perlcode: ac_arg_options
             push @$out, "PAC_SET_HEADER_LIB_PATH($name)"
         $elif $H{skip}
             NOOP
-        $else
+        $elif !$cache{$name}
+            $cache{$name}=1
             $call _dump
 
     subcode: _collect

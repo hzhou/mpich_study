@@ -25,7 +25,7 @@ perlcode: _FUNC_HOOK
     my $name = $func->{name}
     $if $name =~ /^MPI[A-Z]*_/
         unshift @$open, "#undef FUNCNAME", "#define FUNCNAME $name", "#undef FCNAME", "#define FCNAME MPL_QUOTE(FUNCNAME)"
-        $if -f "docs/$name.txt"
+        $if -f "docs/$name.txt" # these are direct manpages from man/man3/
             $print "      found docs/$name.txt"
             unshift @$open, "INCLUDE_FILE docs/$name.txt"
     # ------------------------

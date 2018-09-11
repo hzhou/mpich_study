@@ -207,9 +207,8 @@ subcode: append_shm_macros
 
 #----------------------------------------------- 
 subcode: subcfg_src_mpid_ch4
-    AM_COND_IF([BUILD_CH4],[
-    $call @subconfig_ch4
-    ])dnl end AM_COND_IF(BUILD_CH4,...)
+    &call subsys_am_cond_if, CH4
+        $call @subconfig_ch4
 
     subcode: subconfig_ch4
         $call on_with_ch4_rank_bits
@@ -218,7 +217,6 @@ subcode: subcfg_src_mpid_ch4
         $call ac_output_ch4
 
     subcode: on_with_ch4_rank_bits
-        AC_MSG_NOTICE([RUNNING CONFIGURE FOR CH4 DEVICE])
         rankbits=$with_ch4_rank_bits
         $if "$rankbits" != "16" && "$rankbits" != "32" 
             AC_MSG_ERROR(Only 16 or 32-bit ranks are supported)

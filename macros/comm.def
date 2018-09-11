@@ -1,3 +1,11 @@
+subcode: _autoload
+    $register_prefix(comm) MPI_Comm
+    $struct MPIR_Comm
+        int remote_size
+        int rank
+        int local_size
+    $typedef(MPIR_Comm) struct MPIR_Comm
+#----------------------- 
 subcode:: mpir_init_1
     $call init_comm, comm_world, 0
     $call init_comm, comm_self,  1

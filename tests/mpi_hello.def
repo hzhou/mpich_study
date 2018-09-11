@@ -1,0 +1,23 @@
+/*
+include: c/mpi.def
+macros:
+    CC: gcc -I/usr/include/mpi
+*/
+
+include: my_mpi.def
+page: hello, basic_frame
+    module: c
+    exe: mpirun -np 4 out/hello
+
+    $print Hello world from $s_mpi_name, $n_mpi_id/$n_mpi_size
+
+    # $call test_p2p
+
+subcode: test_p2p
+    $local tn_data
+    &call mpi_send, 0, 1, &tn_data, MPI_INT, 1
+        &call pack
+            tn_data = rand()
+        &call unpack
+            $print Node $(to): received data from node $(from): $tn_data
+

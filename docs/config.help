@@ -273,6 +273,7 @@ Optional Features:
                           configure scripts
   --enable-allowport      Turn on use of a port for communicating with the
                           processes started by mpiexec
+    # default: yes
   --enable-pmiport - Allow PMI interface to use a host-port pair to contact
                    for PMI services
   --enable-ftb            Enable FTB support (default is no)
@@ -288,16 +289,14 @@ Optional Features:
        Enable use of per-communicator message queues for posted recvs/unexpected messages
          yes       - Use per-communicator message queue. (Default)
          no        - Use global queue for posted recvs/unexpected messages.
-    # default=yes
+    # default: yes
 
   --enable-onsig          Control the handling of processes that signal (e.g.,
                           SEGV) using ptrace. Disabled by default
+    # default: no
   --enable-newsession     Create a new process group session if standard in is
                           not connected to a terminal
-  --enable-onsig          Control the handling of processes that signal (e.g.,
-                          SEGV) using ptrace. Disabled by default
-  --enable-newsession     Create a new process group session if standard in is
-                          not connected to a terminal
+    # default: yes
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]

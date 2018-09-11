@@ -12,7 +12,13 @@ subcode:: all_modules
     # all subconfigure.m4 are included here
     m4_include([subsys_include.m4])
 
-#---- subsystems utils ---------------------------------- 
+#---- subsystems utils -------------------------- 
+subcode: subsys_am_cond_if(NAME)
+    AM_COND_IF([BUILD_$(NAME)], [
+    AC_MSG_NOTICE(RUNNING CONFIGURE __file__)
+    BLOCK
+    ])dnl end AM_COND_IF(BUILD_$(NAME), ...)
+
 subcode: checkadd_subdir(rel_dir)
     $(set:dir=$use_top_srcdir/src/$(rel_dir))
 

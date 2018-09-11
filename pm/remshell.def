@@ -1,0 +1,65 @@
+include: pm/process.def
+
+page: mpiexec, basic_frame
+    module: c
+
+    MPIE_ProcessInit()
+    pUniv.size = 64
+    MPID_CheckEnv(&pUniv, 0, 0)
+    IOLabelCheckEnv()
+
+    MPIE_Args(argc, argv, &pUniv, 0, 0)
+    $call nzcall, MPIE_InitWorldWithSoft(&pUniv.worlds[0], pUniv.size)
+    $if pUniv.fromSingleton
+        MPIE_SetupSingleton(&pUniv)
+    $call zcall, MPIE_ChooseHosts(&pUniv.worlds[0], MPIE_ReadMachines, 0)
+
+    $if MPIE_Debug
+        MPIE_PrintProcessUniverse(stdout, &pUniv)
+
+    $struct SetupInfo
+        PMISetup pmiinfo
+        IOLabelSetup labelinfo
+    $local struct SetupInfo s
+    $local char portString[1024]
+    $call zcall, PMIServSetupPort(&pUniv, portString, sizeof(portString))
+    s.pmiinfo.portName = portString
+
+    PMIServInit(myspawn, &s)
+    s.pmiinfo.pWorld = &pUniv.worlds[0]
+    PMISetupNewGroup(pUniv.worlds[0].nProcess, 0)
+    MPIE_ForwardCommonSingnals()
+
+    $if !pUniv.fromSingleton
+        MPIE_ForkProcess(&pUniv.worlds[0], ...)
+    $else
+        # Singleton Init
+
+    reason = MPIE_IOLoop(pUniv.timeout)
+    $if reason==IOLOOP_TIMEOUT
+        ...
+        MPIE_KillUniverse(&pUniv)
+
+    MPIE_WaitForProcesses(&pUniv, 2)
+    rc = MPIE_ProcessGetStatus(&signaled)
+    $if (rc && printFailure) || signaled
+        MPIE_PrintFailureReasons(stderr)
+
+    $if !rc && erc
+        rc = erc
+
+    return rc
+
+subcode: nzcall(@f)
+    $local int rc
+    rc = $(f)
+    $if !rc
+        MPL_error_printf("Error\n")
+        exit(1)
+
+subcode: zcall(@f)
+    $local int rc
+    rc = $(f)
+    $if rc
+        MPL_error_printf("Error\n")
+        exit(1)

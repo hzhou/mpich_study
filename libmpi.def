@@ -1,0 +1,34 @@
+# A hacking mpi framework
+include: mpi_h.def
+include: macros/args.def
+include: macros/comm.def
+
+subcode: _autoload
+    $define(MPI_MAX_PROCESSOR_NAME) 128
+
+fncode: MPI_Init(p_argc, p_argv)
+fncode: MPI_Finalize
+
+fncode: MPI_Get_processor_name(s, pn_size)
+    n = strlcpy(s, "my_mpi", MPI_MAX_PROCESSOR_NAME)
+    $if pn_size
+        *pn_size = n
+#----------------------------------- 
+fncode: MPI_Comm_size(comm, pn_size)
+    $local MPIR_Comm* comm_ptr
+    MPIR_Comm_get_ptr(comm, comm_ptr)
+    *pn_size = MPIR_Comm_size(comm_ptr)
+
+fncode: MPI_Comm_rank(comm, pn_rank)
+
+#-----------------------------------
+subcode: _autoload
+    $list strlcpy
+
+fncode: strlcpy(s_dst, s_src, n_size): int
+    $for i=0:n_size
+        s_dst[i]=s_src[i]
+        $if !s_src[i]
+            return i
+    s_dst[n_size-1]='\0'
+    return strlen(s_src)
