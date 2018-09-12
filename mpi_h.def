@@ -139,8 +139,10 @@ subcode: MPIR_Getb_ptr(h, ptr, T, bmsk)
         $of HANDLE_KIND_BUILTIN
             $(ptr)=MPIR_$(T)_builtin+($(h)&$(bmsk))
         $of HANDLE_KIND_DIRECT
-            $(ptr)=MPIR_$(T)_direct+($(h)&$(bmsk))
+            $(ptr)=MPIR_$(T)_direct+($(h)&0x3ffffff)
         $of HANDLE_KIND_INDIRECT
+            $(ptr)=(MPIR_$(T)*)MPIR_Handle_get_ptr_indirect($(h), &MPIR_$(T)_mem)
         $of others
             $(ptr)=0
 
+fncode: MPIR_Handle_get_ptr_indirect(int h, MPIR_Object_alloc_t * ptr)
