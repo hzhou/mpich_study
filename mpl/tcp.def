@@ -1,0 +1,43 @@
+include: macros/sockaddr.def
+
+page: test_if, basic_frame
+    $local struct sockaddr_storage addr
+    af_type = AF_INET6
+    $(if:1)
+        ret = MPL_get_sockaddr_if(NULL, &addr)
+    $(else)
+        ret = MPL_get_sockaddr_if("lo0", &addr)
+    $call @check_get_sockaddr
+
+page: tcp, basic_frame
+    module: c
+
+    $local struct sockaddr_storage addr
+    $if 1
+        $if 0
+            ret = MPL_get_sockaddr("google.com", &addr)
+        $elif 0
+            ret = MPL_get_sockaddr("8.8.8.8", &addr)
+        $else
+            af_type = AF_INET6
+            ret = MPL_get_sockaddr("8.8.8.8", &addr)
+        $call @check_get_sockaddr
+
+        $my int fd
+        fd = MPL_socket()
+        ret = MPL_connect(fd, &addr, 80)
+        $if ret
+            $call die "Failed: MPL_connect"
+    $else
+        ret = MPL_get_sockaddr_direct(MPL_SOCKADDR_ANY, &addr)
+        $call check_get_sockaddr
+
+#----------------------------------------------- 
+subcode: check_get_sockaddr
+    $if ret
+        $call die, "Failed: MPL_get_sockaddr"
+
+    $my s[100]
+    MPL_sockaddr_to_str(&addr, s, 100)
+    $print "addr: $s"
+

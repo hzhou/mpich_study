@@ -145,4 +145,42 @@ subcode: MPIR_Getb_ptr(h, ptr, T, bmsk)
         $of others
             $(ptr)=0
 
-fncode: MPIR_Handle_get_ptr_indirect(int h, MPIR_Object_alloc_t * ptr)
+fncode: MPIR_Handle_indirect_init(void** pp, int* pi, n_blocks, int cnt, n_obj_size, int kind)
+    $(mset:blks=*pp, i=*pi)
+    $if !$(blks)
+        $(blks) = malloc(n_blocks*sizeof(void*))
+        $if !$(blks)
+            return 0
+        $(i) = 0
+    $if $(i)>=n_blocks
+        # out of space
+        return 0
+    # --------------
+    $local void * p
+    p = malloc(cnt * n_obj_size)
+    $if !p
+        return 0
+    $my pc = (char*) p
+    $my MPIR_Handle_common * ph
+    $for i=0:cnt
+        ph = (MPIR_Handle_common*)(void*)pc
+        pc += n_obj_size
+        ph->next = pc
+        ph->handle = ((unsigned)0x11<<30)|(kind<<26)|($(n)<<12|i
+    ph->next = 0
+    # --------------
+    ($(blks))[$(i)] = p
+    $(i) += 1
+    return p
+
+fncode: MPIR_Handle_free(void** pp, n_size)
+    $for i=0:n_size
+        free(pp[i])
+    free(pp)
+
+subcode: _autoload
+    $register_name(mpir_obj) MPIR_Object_alloc_t*
+
+fncode: MPIR_Handle_obj_alloc(mpir_obj)
+
+fncode: MPIR_Handle_get_ptr_indirect(int h, mpir_obj)

@@ -1,0 +1,21 @@
+
+fncode: MPL_sockaddr_to_str(p_addr, char* str, int maxlen)
+    #-- ref: inet_ntop
+    $local unsigned char * p
+    # caution for microsoft _snprintf
+    $include <stdio.h>
+    $if p_addr->ss_family == AF_INET
+        p = (void*)&(($(SA4) *)p_addr)->sin_addr
+        snprintf(str, maxlen, "%d.%d.%d.%d", p[0], p[1], p[2], p[3])
+    $elif p_addr->ss_family == AF_INET6
+        p = (void*)&(($(SA6) *)p_addr)->sin6_addr
+        snprintf(str, maxlen, "$(x8::%02x%02x)", $(join:p[*]:, :0-15))
+    return 0
+        
+fncode: MPL_sockaddr_port(p_addr)
+    $if p_addr->ss_family == AF_INET
+        return ntohs((($(SA4) *)p_addr)->sin_port)
+    $elif p_addr->ss_family == AF_INET6
+        return ntohs((($(SA6) *)p_addr)->sin6_port)
+    return 0
+

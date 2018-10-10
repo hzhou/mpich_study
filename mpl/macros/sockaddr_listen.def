@@ -1,0 +1,72 @@
+subcode: _autoload
+    $global static int _use_loopback = 0
+    $global static int _max_conn = SOMAXCONN
+
+fncode: MPL_set_listen_attr(int use_loopback, int max_conn)
+    _use_loopback = use_loopback
+    _max_conn = max_conn
+
+    $define(MPL_LISTEN_PUSH(a,b)) MPL_set_listen_attr(a, b)
+    $define(MPL_LISTEN_POP) MPL_set_listen_attr(0, SOMAXCONN)
+
+subcode: init_listen_addr
+    $local addr
+    $if _use_loopback
+        MPL_get_sockaddr_direct(MPL_SOCKADDR_LOOPBACK, &addr)
+    $else
+        MPL_get_sockaddr_direct(MPL_SOCKADDR_ANY, &addr)
+
+subcode: try_bind(port)
+    ret = -1
+    $if af_type==AF_INET
+        (($(SA4) *)&addr)->sin_port = $(port)
+        ret = bind(socket, (const struct sockaddr *)&addr, sizeof($(SA4)))
+    $elif af_type==AF_INET6
+        (($(SA6) *)&addr)->sin6_port = $(port)
+        ret = bind(socket, (const struct sockaddr *)&addr, sizeof($(SA6)))
+    
+#----------------------------------------------- 
+fncode: MPL_listen(socket, port): int
+    $call @init_listen_addr
+    $call try_bind, htons(port)
+    $if ret
+        return ret
+
+    return listen(socket, _max_conn)
+
+fncode: MPL_listen_anyport(socket, p_port): int
+    $call @init_listen_addr
+    $call try_bind, 0
+    $if ret
+        return ret
+
+    n = sizeof(addr)
+    ret = getsockname(socket, (struct sockaddr*)&addr, &n)
+    $if ret
+        return ret
+
+    $if af_type==AF_INET
+        *p_port = ntohs((($(SA4) *)&addr)->sin_port)
+    $elif af_type==AF_INET6
+        *p_port = ntohs((($(SA6) *)&addr)->sin6_port)
+
+    return listen(socket, _max_conn)
+
+fncode: MPL_listen_portrange(socket, p_port, int low_port, int high_port): int
+    $call @init_listen_addr
+    $local i
+    $for i = low_port; i <= high_port; i++
+        ret = MPL_listen(socket, i)
+        $if ret==0
+            *p_port = i
+            break
+        $elif errno == EADDRINUSE
+            /* Note: EADDRNOTAVAIL refers to the IP part, should not be dealt with here. */
+            $include <errno.h>
+            continue
+        $else
+            return -1
+    $if i>high_port
+        return -2
+
+    return listen(socket, _max_conn)

@@ -1,0 +1,45 @@
+include: macros/sockaddr.def
+
+subcode: _autoload
+    $include "mplconfig.h"
+
+page: mpl_sockaddr, from ../templates/frame.c
+    module: c
+    dump_h: mpl_sockaddr.h from ../templates/frame.h
+
+    $list MPL_get_sockaddr
+    $list MPL_get_sockaddr_direct
+    $list MPL_get_sockaddr_iface
+
+    $list MPL_socket
+    $list MPL_connect
+
+    $list MPL_set_listen_attr
+    $list MPL_listen
+    $list MPL_listen_anyport
+    $list MPL_listen_portrange
+
+    $list MPL_sockaddr_to_str
+    $list MPL_sockaddr_port
+
+template: rationale
+    \x2f* Rationale:
+     *   MPL wrap for handling IPv4 and IPv6.
+     *
+     *   Applications: pm, pmi, ch3.
+     *   ch4 supports tcp sockets indirectly through ucx and ofi.
+     * 
+     * Design consideration:
+     *   Either IPv4 or IPv6, globally set as defalt or with command line option, to simplify logic.
+     *   TCP only, no UDP or unix domain sockets.
+     *
+     *   Application use struct sockaddr_storage exclusively. 
+     *       MPL_get_sockaddr for hostname 
+     *       MPL_get_sockaddr_iface for network interface
+     *       MPL_get_sockaddr_direct for listening socket on ANY or LOOPBACK
+     *
+     *   Simplified MPL_connect and MPL_listen interface. 
+     *       Both have a port parameter.
+     *       MPL_listen combines bind with listen.
+    */
+
