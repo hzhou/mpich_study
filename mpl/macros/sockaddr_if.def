@@ -17,7 +17,7 @@ fncode: MPL_get_sockaddr_iface(const char * s_iface, p_addr)
         $local struct ifaddrs * ifa
         $local int found = 0
         ifa = ifaddr
-        $while ifa; ifa=ifa->ifa_next
+        $while ifa; ifa = ifa->ifa_next
             $if s_iface && ifa->ifa_name && strcmp(s_iface, ifa->ifa_name)!=0
                 ifa = ifa->ifa_next
                 continue

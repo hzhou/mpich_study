@@ -6,6 +6,9 @@ subcode: _autoload
     $include <sys/types.h>  # .._t types
     $include <sys/socket.h> # sockaddr, socket, bind, listen, connect, accept etc.
     $include <netdb.h>      # getaddrinfo etc.
+    # The following seems to be required by freebsd etc.
+    $include <netinet/in.h> # sockaddr_in etc.
+    # $include <netinet/tcp.h # TCP_NODELAY
     # ---------------------------
     # handle cmdline option -ipv6 
     $global static int af_type = AF_INET
@@ -37,7 +40,7 @@ fncode: MPL_connect(socket, p_addr, port): int
         return -1
     
 #----------------------------------------------- 
-fncode: MPL_get_sockaddr(const char * s_host, p_addr)
+fncode: MPL_get_sockaddr(const char * s_hostname, p_addr)
     memset(p_addr, 0, sizeof(*p_addr))
     $(if:0)
         $call @get_ipv4
@@ -46,7 +49,7 @@ fncode: MPL_get_sockaddr(const char * s_host, p_addr)
 
     subcode: get_ipv4
         $local struct hostent * ht
-        ht = gethostbyname(s_host);
+        ht = gethostbyname(s_hostname);
         $if ht == NULL
             return 1
 
@@ -67,7 +70,7 @@ fncode: MPL_get_sockaddr(const char * s_host, p_addr)
         ai_hint.ai_protocol = IPPROTO_TCP;
         ai_hint.ai_flags = AI_ADDRCONFIG|AI_V4MAPPED
         $local struct addrinfo * ai_list
-        ret = getaddrinfo(s_host, NULL, &ai_hint, &ai_list)
+        ret = getaddrinfo(s_hostname, NULL, &ai_hint, &ai_list)
         $if ret
             return ret
         # assert af_type==ai_list->ai_family
@@ -101,7 +104,8 @@ fncode: MPL_get_sockaddr_direct(int type, p_addr)
         $if type==0
             p_addr4->sin_addr.s_addr = htonl(INADDR_ANY)
         $elif type==1
-            p_addr4->sin_addr.s_addr = htonl(INADDR_LOOPBACK)
+            $(set:lo=0x7f000001)
+            p_addr4->sin_addr.s_addr = htonl($(lo))
         return 0
     $elif af_type == AF_INET6
         $my p_addr6 = ($(SA6) *) p_addr
