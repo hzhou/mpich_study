@@ -100,6 +100,7 @@ fncode: MPL_get_sockaddr_direct(int type, p_addr)
 
     $if af_type == AF_INET
         $my p_addr4 = ($(SA4) *) p_addr
+        NEWLINE
         p_addr4->sin_family = AF_INET
         $if type==0
             p_addr4->sin_addr.s_addr = htonl(INADDR_ANY)
@@ -109,6 +110,7 @@ fncode: MPL_get_sockaddr_direct(int type, p_addr)
         return 0
     $elif af_type == AF_INET6
         $my p_addr6 = ($(SA6) *) p_addr
+        NEWLINE
         p_addr6->sin6_family = AF_INET6
         $if type==0
             p_addr6->sin6_addr = in6addr_any

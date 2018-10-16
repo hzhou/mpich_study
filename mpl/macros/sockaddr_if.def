@@ -68,7 +68,8 @@ fncode: is_localhost(struct sockaddr* p_addr): int
         return strncmp(p, "\x7f\x00\x00\x01",4)==0
     $elif p_addr->sa_family==AF_INET6
         p = (void*)&(($(SA6) *)p_addr)->sin6_addr
-        return strncmp(p, "$(x15:\0)\x01", 16)==0 || strncmp(p, "\xfe\x80$(x13:\0)\x01", 16)==0
+        $:: return strncmp(p, "$(x15:\0)\x01", 16)==0 || 
+        $::    strncmp(p, "\xfe\x80$(x13:\0)\x01", 16)==0;
     $else
         return 0
         
