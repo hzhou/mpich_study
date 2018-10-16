@@ -1,0 +1,58 @@
+include: common.def
+
+subcode: _autoload
+    $register_name(comm) MPI_Comm
+    $register_name(comm_ptr) MPIR_Comm *
+    $register_name(request) MPI_Request *
+    $register_name(req_ptr)  MPIR_Request *
+    $register_name(p_reqptr) MPIR_Request **
+    $register_name(sched)    MPIR_Sched_t
+
+    $register_name(p_status) MPI_Status *
+
+page: ibarrier # from templates/mpi/coll/ibarrier/ibarrier.c
+    $include mpiimpl.h
+
+fncode: MPI_Ibarrier(comm, request)
+    &call MPIR_enter, TERSE
+        # missing MPIR_ERRTEST_INITIALIZED_ORDIE()
+        &call Thread_Lock_global
+            $call get_comm_ptr
+            $local MPIR_Request * request_ptr = NULL
+            $fcall MPIR_Ibarrier(comm_ptr, &request_ptr)
+            $if request_ptr
+                *request = request_ptr->handle
+            $else
+                *request = MPI_REQUEST_NULL
+            
+fncode: MPIR_Ibarrier_impl(comm_ptr, p_reqptr) 
+    * p_reqptr = NULL
+    $if comm_ptr->local_size != 1 || comm_ptr->comm_kind == MPIR_COMM_KIND__INTERCOMM
+        $local int tag = -1
+        $fcall MPIR_Sched_next_tag(comm_ptr, &tag)
+        $fcall MPIR_Sched_create(&sched)        
+        $fcall MPIR_Sched_start(&sched, comm_ptr, tag, p_reqptr)
+    $else
+        # trivial case
+        
+#---------------------------------------- 
+page: wait # from templates/mpi/request/wait.c
+
+fncode: MPIR_Wait_impl(req_ptr, p_status)
+    $if req_ptr==NULL
+        goto fn_exit
+
+    $local MPID_Progress_state progress_state
+    MPID_Progress_start(&progress_state)
+    $while !MPIR_Request_is_complete(req_ptr)
+        mpi_errno = MPIR_Grequest_progress_poke(1, &req_ptr, status)
+        $if req_ptr->kind == MPIR_REQUEST_KIND__GREQUEST && req_ptr->u.ureq.greq_fns->wait_fn
+            $call @check_errno
+            continue
+
+        mpi_errno = MPID_Progress_wait(&progress_state)
+        $call @check_errno
+    MPID_Progress_end(&progress_state)
+
+fncode: MPIR_Wait(req_ptr, p_status)
+    
