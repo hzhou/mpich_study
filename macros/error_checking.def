@@ -22,11 +22,7 @@ subcode: set_do_error_checks_2
 #----------------------------------------------- 
 /* Validate parameters if error checking is enabled */
 subcode: error_check_recv
-    &call error_checking,
-        MPIR_Comm_valid_ptr(comm_ptr, mpi_errno, FALSE);
-        $if mpi_errno
-            goto fn_fail;
-
+    &call error_checking
         MPIR_ERRTEST_COUNT(count, mpi_errno);
         MPIR_ERRTEST_RECV_RANK(comm_ptr, source, mpi_errno);
         MPIR_ERRTEST_RECV_TAG(tag, mpi_errno);
@@ -37,10 +33,6 @@ subcode: error_check_recv
 
 subcode: error_check_send
     &call error_checking
-        MPIR_Comm_valid_ptr(comm_ptr, mpi_errno, FALSE);
-        if (mpi_errno)
-            goto fn_fail;
-
         MPIR_ERRTEST_COUNT(count, mpi_errno);
         MPIR_ERRTEST_SEND_RANK(comm_ptr, dest, mpi_errno);
         MPIR_ERRTEST_SEND_TAG(tag, mpi_errno);
@@ -56,6 +48,15 @@ subcode: error_check_comm
         $(if:FunctionName=MPI_Recv)
             /* NOTE: MPI_STATUS_IGNORE != NULL */
             MPIR_ERRTEST_ARGNULL(status, "status", mpi_errno);
+        $(elif:FunctionName=MPI_Ibarrier)
+            MPIR_ERRTEST_ARGNULL(request, "request", mpi_errno);
+
+subcode: error_check_comm_ptr
+    &call error_checking
+        MPIR_Comm_valid_ptr(comm_ptr, mpi_errno, FALSE);
+        $if mpi_errno
+            goto fn_fail;
+
 
 subcode: errtest_datatype
     /* Validate datatype handle */

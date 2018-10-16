@@ -121,6 +121,7 @@ subcode: get_comm_ptr
     $local MPIR_Comm *comm_ptr = NULL
     $call @error_check_comm
     MPIR_Comm_get_ptr(comm, comm_ptr);
+    $call @error_check_comm_ptr
 
 #---- mpi_errno & fn_fail ----
 subcode: check_fail
