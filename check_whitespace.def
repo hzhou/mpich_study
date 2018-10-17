@@ -1,0 +1,40 @@
+page: check_whitespace
+    module: perl
+
+    my $cwd = `pwd`; # must be top mpich directory.
+    chomp $cwd
+
+    my $indent = "$cwd/maint/code-cleanup.sh"
+    $if !-f $indent
+        die "[$indent] not found!\n"
+
+    my @files
+    &call open_r, change.lst
+        chomp
+        my $f = $_
+        $if -f $f
+            $if $f=~/^\//
+                push @files, $f
+            $else
+                push @files, "$cwd/$f"
+
+    $if !@files
+        die "Usage: perl $0 file list\n"
+
+    chdir "/tmp" or die "can't chdir tmp\n"
+    $if -d "t"
+        system "rm -rf t"
+
+    mkdir "t"
+    chdir "t"
+
+    my $i=0
+    $foreach $f in @files
+        $i++
+        $print checking $f ...
+        system "echo ---- [$f] ----- >>t.diff"
+        system "cp $f $i.c"
+        system "$indent $i.c"
+        system "diff $f $i.c >> t.diff"
+    system "cat t.diff"
+
