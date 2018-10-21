@@ -54,5 +54,29 @@ fncode: MPIR_Wait_impl(req_ptr, p_status)
         $call @check_errno
     MPID_Progress_end(&progress_state)
 
-fncode: MPIR_Wait(req_ptr, p_status)
+fncode: MPIR_Wait(request, p_status)
+    $if *request == MPI_REQUEST_NULL
+        MPIR_Status_set_empty(p_status)
+        goto fn_exit
+
+    $local req_ptr=NULL
+    MPIR_Request_get_ptr(*request, req_ptr)
+    $(set:is_complete=MPIR_Request_is_complete(req_ptr))
+    $if !$(is_complete)
+        $if $(anysource_do_MPI_Test)
+            $local int active_flag
+            mpi_errno = MPIR_Test(request, &active_flag, status)
+            goto fn_exit
+        $elif MPIR_Request_has_poll_fn(req_ptr)
+            $while !$(is_complete)
+                $fcall MPIR_Grequest_poll(req_ptr, status)
+        $else
+            $fcall MPID_Wait(req_ptr, status)
+    mpi_errno = MPIR_Request_completion_processing(req_ptr, status, &active_flag)
+    $if !MPIR_Request_is_persistent(req_ptr)
+        MPIR_Request_free(req_ptr)
+        *request = MPI_REQUEST_NULL
+    $if mpi_errno
+        MPIR_ERR_POP(mpi_errno)
+        
     

@@ -1679,7 +1679,25 @@ AC_DEFUN([PAC_C_MACRO_VA_ARGS],[
     [AC_MSG_RESULT([no])])
 ])dnl
 
-# Will AC_DEFINE([HAVE_BUILTIN_EXPECT]) if the compiler supports __builtin_expect.
+dnl
+dnl PAC_C_STATIC_ASSERT - Test whether C11 _Stattic_assert is supported.
+dnl
+dnl will AC_DEFINE([HAVE_C11__STATIC_ASSERT]) if the compiler supports C11 
+dnl _Static_assert.
+dnl 
+AC_DEFUN([PAC_PROG_C_STATIC_ASSERT],[
+    AC_MSG_CHECKING([for C11 _Static_assert functionality])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([
+        int main(){
+            _Static_assert(1, "Impossible happens!");
+            return 1;
+        }])],
+        [AC_DEFINE([HAVE_C11__STATIC_ASSERT],[1],[Define if C11 _Static_assert is supported.])
+         AC_MSG_RESULT([yes])],
+        [AC_MSG_RESULT([no])])
+])
+
+dnl Will AC_DEFINE([HAVE_BUILTIN_EXPECT]) if the compiler supports __builtin_expect.
 AC_DEFUN([PAC_C_BUILTIN_EXPECT],[
 AC_MSG_CHECKING([if C compiler supports __builtin_expect])
 

@@ -1,0 +1,294 @@
+subcode: _autoload
+    $register_name(status) HYD_status
+
+    $register_name(proxy) struct HYD_proxy *
+    $register_name(exec) struct HYD_exec *
+    $register_name(node) struct HYD_node *
+    
+    $plugin fcall
+
+subcode: fcall(fname, @params)
+    status = $(fname)($(params)
+    HYDU_ERR_POP(status, "failed: $(fname)\n")
+
+# from templates/pm/hydra/ui/mpich/mpiexec.c
+page: mpiexec, basic_frame 
+    $local proxy, exec, node
+    int exit_status = 0
+    $local status = HYD_SUCCESS;
+
+    HYDU_FUNC_ENTER();
+    $fcall HYDU_dbg_init, "mpiexec"
+    $fcall HYDU_set_common_signals, signal_cb
+    #- parse command line ----------------
+    $fcall HYD_uii_mpx_get_parameters, argv
+
+    $call @alarm_ckpoint
+
+    $fcall HYDT_dmx_init, &$.demux
+    $(set:this=HYD_server_info.user_global.)
+    $fcall HYDT_bsci_init, $.rmk, $.launcher, $.launcher_exec, $.enablex, $.debug
+
+    $call @check_host_node_exec_proxy_list
+    $call @debug_params
+
+    # Check if the user wants us to use a port within a certain range.
+    $my ts_port_range
+    &call perl_join, cond, [ || ], MPL_env2str("$1", &ts_port_range)
+        MPIR_CVAR_CH3_PORT_RANGE
+        MPIR_PARAM_CH3_PORT_RANGE
+        MPICH_CH3_PORT_RANGE
+        MPIR_CVAR_PORTRANGE
+        MPIR_CVAR_PORT_RANGE
+        MPIR_PARAM_PORTRANGE
+        MPIR_PARAM_PORT_RANGE
+        MPICH_PORTRANGE
+        MPICH_PORT_RANGE
+        MPIEXEC_PORTRANGE
+        MPIEXEC_PORT_RANGE
+    $if $(cond)
+        HYD_server_info.port_range = MPL_strdup(ts_port_range)
+
+    /* Add the stdout/stderr callback handlers */
+    HYD_server_info.stdout_cb = HYD_uiu_stdout_cb;
+    HYD_server_info.stderr_cb = HYD_uiu_stderr_cb;
+
+    /* Create a pipe connection to wake up the process manager */
+    $if pipe(HYD_server_info.cmd_pipe) < 0
+        HYDU_ERR_SETANDJUMP(status, HYD_INTERNAL_ERROR, "pipe error\n")
+
+    /* Launch the processes */
+    $fcall HYD_pmci_launch_procs
+    /* Wait for their completion */
+    $my int timeout
+    $if MPL_env2int("MPIEXEC_TIMEOUT", &timeout) == 0
+        timeout = -1;   /* Infinite timeout */
+    $call @debug_timeout
+    $fcall HYD_pmci_wait_for_completion, timeout
+
+    # Check for the exit status for all the processes 
+    $if HYD_ui_mpich_info.print_all_exitcodes
+        HYDU_dump(stdout, "Exit codes: ");
+        &call each_proxy_with_exit_status
+            HYDU_dump_noprefix(stdout, "[%s] ", proxy->node->hostname);
+            $for i=0:proxy->proxy_process_count
+                HYDU_dump_noprefix(stdout, "%d", proxy->exit_status[i])
+                $if i < proxy->proxy_process_count - 1
+                    HYDU_dump_noprefix(stdout, ",")
+            HYDU_dump_noprefix(stdout, "\n");
+
+    $my int exit_status = 0;
+    &call each_proxy_with_exit_status
+        $for i=0:proxy->proxy_process_count
+            exit_status |= proxy->exit_status[i];
+
+    $fcall HYD_pmci_finalize
+
+    $call @profiling
+    /* Free the mpiexec params */
+    HYD_uiu_free_params();
+    HYDU_free_exec_list(HYD_uii_mpx_exec_list);
+    HYDU_sock_finalize();
+
+    fn_exit:
+    HYDU_dbg_finalize();
+    HYDU_FUNC_EXIT();
+    $if status == HYD_GRACEFUL_ABORT
+        return 0;
+    $elif status != HYD_SUCCESS
+        return -1;
+    $elif WIFSIGNALED(exit_status)
+        $call @wifsignaled
+        return exit_status;
+    $elif WIFEXITED(exit_status)
+        return WEXITSTATUS(exit_status);
+    $elif WIFSTOPPED(exit_status)
+        return WSTOPSIG(exit_status);
+    $else
+        return exit_status;
+
+    fn_fail:
+    goto fn_exit;
+    # -------------------
+    subcode: add_localhost
+        char localhost[MAX_HOSTNAME_LEN] = { 0 };
+
+        /* The RMK didn't give us anything back; use localhost */
+        if (gethostname(localhost, MAX_HOSTNAME_LEN) < 0)
+            HYDU_ERR_SETANDJUMP(status, HYD_SOCK_ERROR, "unable to get local hostname\n");
+
+        status = HYDU_add_to_node_list(localhost, 1, &HYD_server_info.node_list);
+        HYDU_ERR_POP(status, "unable to add to node list\n");
+
+    subcode: set_localhost
+        HYDU_MALLOC_OR_JUMP(HYD_server_info.localhost, char *, MAX_HOSTNAME_LEN, status);
+        $if gethostname(HYD_server_info.localhost, MAX_HOSTNAME_LEN) < 0
+            HYDU_ERR_SETANDJUMP(status, HYD_SOCK_ERROR, "unable to get local hostname\n");
+
+    # ---------------------
+    subcode: each_node
+        $for node = HYD_server_info.node_list; node; node = node->next
+            BLOCK
+
+    subcode: each_exec
+        $for exec = HYD_uii_mpx_exec_list; exec; exec=exec->next
+            BLOCK
+        subcode: check_proc_count
+            $if exec->proc_count <= 0
+                $my int global_core_count = 0;
+                &call each_node
+                    global_core_count += node->core_count;
+                exec->proc_count = global_core_count;
+
+    subcode: each_proxy
+        $for proxy = HYD_server_info.pg_list.proxy_list; proxy; proxy=proxy->next
+            BLOCK
+    subcode: each_proxy_with_exit_status
+        &call each_proxy
+            $if proxy->exit_status == NULL
+                continue;
+            BLOCK
+    # ----------------------
+    subcode: debug_node_list
+        $if $.debug
+            &call each_node
+                HYDU_dump_noprefix(stdout, "host: %s\n", node->hostname);
+    subcode: debug_params
+        if (HYD_server_info.user_global.debug)
+            HYD_uiu_print_params();
+
+    subcode: debug_timeout
+        if (HYD_server_info.user_global.debug)
+            HYDU_dump(stdout, "Timeout set to %d (-1 means infinite)\n", timeout);
+
+    subcode: wifsignaled
+        printf("YOUR APPLICATION TERMINATED WITH THE EXIT STRING: %s (signal %d)\n",
+               strsignal(WTERMSIG(exit_status)), WTERMSIG(exit_status));
+        printf("This typically refers to a problem with your application.\n");
+        printf("Please see the FAQ page for debugging suggestions\n");
+
+    subcode: profiling
+        $(if:ENABLE_PROFILING)
+            if (HYD_server_info.enable_profiling) {
+                HYDU_dump_noprefix(stdout, "\n");
+                HYD_DRAW_LINE(80);
+                HYDU_dump(stdout, "Number of PMI calls seen by the server: %d\n",
+                        HYD_server_info.num_pmi_calls);
+                HYD_DRAW_LINE(80);
+            HYDU_dump_noprefix(stdout, "\n");
+
+
+perlcode: perl_join
+    $require MyDef::ext
+    my $codelist = MyDef::ext::grab_codelist(do_macro=>1)
+    $if $param=~/^(\w+),\s*\[(.+)\],\s*(.*)/ -> $var, $sep, $pat
+        my @tlist
+        $foreach $item in @$codelist
+            my $t = $pat
+            $t=~s/\$1/$item/g
+            push @tlist, $t
+        my $t = join($sep, @tlist)
+        $MyDef::compileutil::deflist->[-1]->{$var}=$t
+
+
+
+        
+
+#---- signal callback ---------------------- 
+fncode: signal_cb(int signum): static void
+    HYDU_FUNC_ENTER()
+
+    $local struct HYD_cmd cmd
+    cmd.type = HYD_SIGNAL
+    cmd.signum = signum
+
+    $if signum == SIGALRM
+        $call sigalrm_local_check
+        cmd.type = HYD_CKPOINT
+    $elif signum == SIGINT 
+        $local static int sigint_count = 0
+        sigint_count++
+        $if sigint_count == 1
+            $call sigint_message
+        $else
+            cmd.type = HYD_CLEANUP;
+
+    HYDU_sock_write(HYD_server_info.cmd_pipe[1], &cmd, sizeof(cmd), &sent, &closed, HYDU_SOCK_COMM_MSGWAIT);
+
+    HYDU_FUNC_EXIT();
+    return;
+
+    #---------------------------------------- 
+    subcode: sigalrm_local_check
+        $if HYD_server_info.user_global.ckpoint_prefix == NULL
+            HYDU_dump(stderr, "No checkpoint prefix provided\n");
+            return;
+        $call @alarm_ckpoint
+
+    subcode: sigint_message
+        HYDU_dump(stdout, "Sending Ctrl-C to processes as requested\n")
+        HYDU_dump(stdout, "Press Ctrl-C again to force abort\n")
+
+#---------------------------------------- 
+subcode: alarm_ckpoint
+    $(if:HAVE_ALARM)
+        $if HYD_ui_mpich_info.ckpoint_int != -1
+            alarm(HYD_ui_mpich_info.ckpoint_int);
+
+#---- inside hydra_exec:main ----
+subcode: check_host_node_exec_proxy_list
+    $my int user_provided_host_list = 0;
+    $if HYD_server_info.node_list
+        user_provided_host_list = 1;
+    $else
+        $fcall HYDT_bsci_query_node_list, &HYD_server_info.node_list
+        $if HYD_server_info.node_list == NULL
+            $call add_localhost
+            user_provided_host_list = 1;
+
+    $if HYD_uii_mpx_exec_list == NULL
+        HYDU_ASSERT($.ckpoint_prefix, status);
+        $fcall HYDU_alloc_exec, &HYD_uii_mpx_exec_list
+        HYD_uii_mpx_exec_list->appnum = 0;
+
+    $call @debug_node_list
+    $if HYD_ui_mpich_info.ppn != -1
+        &call each_node
+            node->core_count = HYD_ui_mpich_info.ppn;
+        user_provided_host_list = 1;
+
+    $if HYD_ui_mpich_info.sort_order != NONE
+        qsort_node_list();
+        user_provided_host_list = 1;
+
+    $if user_provided_host_list
+        i = 0
+        &call each_node
+            node->node_id = i;
+            i++
+
+        $fcall HYDT_bsci_finalize
+        $(set:this=HYD_bsci_info.)
+        $fcall HYDT_bsci_init, "user", $.launcher, $.launcher_exec, $.enablex, $.debug
+
+    HYD_server_info.pg_list.pg_process_count = 0;
+    &call each_exec
+        $call @check_proc_count
+        HYD_server_info.pg_list.pg_process_count += exec->proc_count;
+
+    $fcall HYDU_list_inherited_env, $.global_env.inherited
+    $fcall HYDU_create_proxy_list, HYD_uii_mpx_exec_list, HYD_server_info.node_list, &HYD_server_info.pg_list
+    /* calculate the core count used by the PG */
+    HYD_server_info.pg_list.pg_core_count = 0;
+    &call each_proxy
+        HYD_server_info.pg_list.pg_core_count += proxy->node->core_count;
+
+    $if HYD_server_info.localhost == NULL
+        &call each_node
+            $if MPL_host_is_local(node->hostname)
+                break;
+        $if node
+            HYD_server_info.localhost = MPL_strdup(node->hostname);
+        $else
+            $call @set_localhost
+

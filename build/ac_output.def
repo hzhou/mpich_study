@@ -1,3 +1,8 @@
+#- &call ac_output
+#-     filename
+# 
+# filename.in -> filename (warns if filename.in does not exist)
+
 perlcode: ac_output
     &call check_ac_output_dir
         $call do_output

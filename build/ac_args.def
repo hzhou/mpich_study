@@ -110,7 +110,7 @@ perlcode: ac_arg_options
         $if !$action
             $if $H{define}
                 $if $H{define}=~/(.+):\s*(.+)/ 
-                    $action = "[if test \$withval = $1; then AC_DEFINE($2); fi]"
+                    $action = "[if test \$withval = $1; then AC_DEFINE($2) fi]"
                 $else
                     $action = "AC_DEFINE($H{define})"
             $elif defined $H{empty}

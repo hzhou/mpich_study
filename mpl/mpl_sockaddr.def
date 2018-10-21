@@ -1,9 +1,10 @@
+include: ../mpich_frame.def
 include: macros/sockaddr.def
 
 subcode: _autoload
     $include "mplconfig.h"
 
-page: mpl_sockaddr, from ../templates/frame.c
+page: mpl_sockaddr
     module: c
     dump_h: mpl_sockaddr.h from ../templates/frame.h
 
@@ -22,24 +23,34 @@ page: mpl_sockaddr, from ../templates/frame.c
     $list MPL_sockaddr_to_str
     $list MPL_sockaddr_port
 
-template: rationale
-    \x2f* Rationale:
-     *   MPL wrap for handling IPv4 and IPv6.
-     *
-     *   Applications: pm, pmi, ch3.
-     *   ch4 supports tcp sockets indirectly through ucx and ofi.
-     * 
-     * Design consideration:
-     *   Either IPv4 or IPv6, globally set as defalt or with command line option, to simplify logic.
-     *   TCP only, no UDP or unix domain sockets.
-     *
-     *   Application use struct sockaddr_storage exclusively. 
-     *       MPL_get_sockaddr for hostname 
-     *       MPL_get_sockaddr_iface for network interface
-     *       MPL_get_sockaddr_direct for listening socket on ANY or LOOPBACK
-     *
-     *   Simplified MPL_connect and MPL_listen interface. 
-     *       Both have a port parameter.
-     *       MPL_listen combines bind with listen.
-    */
+subcode: document
+    &call doc, Rationale:
+        MPL wrap for handling IPv4 and IPv6.
+        
+        Applications: pm, pmi, ch3.
+        ch4 supports tcp sockets indirectly through ucx and ofi.
+
+    &call doc, Design considerations:
+        Either IPv4 or IPv6, globally set as defalt or with command line option, to simplify logic.
+        TCP only, no UDP or unix domain sockets.
+        
+        Application use struct sockaddr_storage exclusively. 
+            MPL_get_sockaddr for hostname 
+            MPL_get_sockaddr_iface for network interface
+            MPL_get_sockaddr_direct for listening socket on ANY or LOOPBACK
+        
+        Simplified MPL_connect and MPL_listen interface. 
+            Both have a port parameter.
+            MPL_listen combines bind with listen.
+
+    &call doc, Portability:
+        struct sockaddr_storage:
+            In case this struct is not available (in sys/socket.h), it can be circumvented by declare following (in mpl_sockaddr.h):
+                struct sockaddr_storage {
+                    unsigend short ss_family;
+                    char padding[126];
+                };
+            Only the ss_family field is directly accessed. All the other fields are always accessed by casting to either struct sockaddr_in or struct sockaddr_in6.
+
+        The implementation uses getaddrinfo and getifaddrs. The former, as with sockaddr_storage and sockaddr_in6, are documented in RFC 2553, 1999, and are expected to be supported on most supported platforms. getifaddrs is not in POSIX.1, but it is present on Linux since glibc 2.3.3, and available on BSD systems even earlier.
 

@@ -6,10 +6,13 @@ page: t.ac, ac_frame
     module: sh
     run: cd out && autoconf -o configure t.ac && autoheader t.ac && sh configure
 
-    m4_include(../../confdb/aclocal_util.m4)
-    m4_include(../../confdb/aclocal_cc.m4)
     AC_CONFIG_HEADER(config.h)
-    $call config_cc
+    $(if:0)
+        $call test_cc_basic
+    $(elif:1)
+        $call test_pac_option
+    $(else)
+        $call test_pac
 
     name=test
     Version=1.0.0
@@ -17,5 +20,47 @@ page: t.ac, ac_frame
     $(set:ac_output_dir=out)
     &call ac_output
         t.test
-
     # note: check subs1.awk in out/config.status
+
+subcode: test_cc_basic
+    # CFLAGS=
+    echo CC: $CC, CFLAGS: $CFLAGS
+    AC_PROG_CC([icc gcc clang cc])
+    echo CC: $CC, CFLAGS: $CFLAGS
+
+subcode: test_pac
+    m4_include(confdb/aclocal_util.m4)
+    m4_include(confdb/aclocal_cc.m4)
+    $call config_cc
+
+subcode: test_pac_option
+    m4_include(confdb/aclocal_util.m4)
+    m4_include(confdb/aclocal_runlog.m4)
+    PAC_PROG_CC
+    AC_PROG_CPP
+    $(if:0)
+        m4_include(confdb/aclocal_cc.m4)
+        # PAC_C_CHECK_COMPILER_OPTION(-O2)
+        PAC_C_OPTIMIZATION
+        echo COPTIONS: $COPTIONS
+    $(elif:1)
+        m4_include(aclocal_cc.m4)
+        PAC_C_STATIC_ASSERT
+    $(elif:1)
+        AC_LINK_IFELSE([AC_LANG_SOURCE([int main(){ int foo,bar=0; foo++;return foo;}])],
+            [pac_result=yes], [pac_result=no])
+        echo pac_result: $pac_result
+    $(else)
+        AC_LANG_CONFTEST([
+            #include <stdio.h>
+            const char *hw="Hello, Wolrd.";
+            int main(){
+                fputs(hw, stdout);
+                return 0;
+            }
+        ])
+        cat conftest.c
+        PAC_LINK_IFELSE_LOG([t.log], [], [pac_result=yes], [pac_result=no])
+        echo pac_result: $pac_result
+
+

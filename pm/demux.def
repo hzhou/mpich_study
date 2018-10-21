@@ -1,0 +1,23 @@
+page: demux # from templates/pm/hydra/tools/demux/demux.c
+
+fncode: HYDT_dmx_init(char** demux)
+    $if !(*demux) # user didn't specify anything
+        $(if:HAVE_POLL)
+            $call set_dmxu_fns, poll
+        $(elif:HAVE_SELECT)
+            $call set_dmxu_fns, select
+    $elif *demux $Eq "poll"
+        $(if:HAVE_POLL)
+            $call set_dmxu_fns, poll
+    $elif *demux $Eq "select"
+        $(if:HAVE_SELECT)
+            $call set_dmxu_fns, select
+    $if HYDT_dmxu_fns.wait_for_event==NULL || HYDT_dmxu_fns.stdin_valid==NULL
+        HYDU_ERR_SETANDJUMP(status, HYD_INTERNAL_ERROR, "cannot find an appropraiate demux engine\n")
+
+    $fcall HYDT_dmxu_fns.stdin_valid(&stdin_valid)
+
+subcode: set_dmxu_fns(poll)
+    $(for:wait_for_event, stdin_valid)
+        HYDT_dmxu_fns.$1 = HYDT_dmxu_$(poll)_$1     
+    *demux = MPL_strdup("$(poll)")

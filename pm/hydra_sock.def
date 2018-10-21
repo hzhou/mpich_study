@@ -1,0 +1,34 @@
+page: sock # from templates/pm/hydra/utils/sock/sock.c
+    $list HYDU_sock_listen
+
+subcode: _autoload
+    $register_name(port) uint16_t
+    $register_name(fd) int
+    $register_name(buf) void *
+    $register_name(maxlen) int
+
+fncode: HYDU_sock_listen(p_fd, s_portrange, p_port)
+
+fncode: HYDU_sock_connect(s_hostname, port, p_fd, n_retry, unsigned long delay)
+
+fncode: HYDU_sock_accept(listen_fd, p_fd)
+
+fncode: HYDU_sock_read(fd, buf, maxlen, pn_recv, pb_closed, enum HYDU_sock_comm_flag flag)
+
+fncode: HYDU_sock_write(fd, buf, maxlen, pn_sent, pb_closed, enum HYDU_sock_comm_flag flag)
+
+#---------------------------------------- 
+fncode: HYDU_sock_set_nonblock(fd)
+fncode: HYDU_sock_set_block(fd)
+
+fncode: HYDU_sock_forward_stdio(n_in, n_out, pb_closed)
+    $global static struct fwd_hash* fwd_hash_list=NULL
+    ...
+
+fncode: HYDU_sock_finalize
+
+fncode: HYDU_sock_get_iface_ip(s_iface, char** ip)
+
+fncode: HYDU_sock_create_and_listen_portstr(s_iface, s_hostname, s_portrange, char ** port_str, fn_callback, void* userp)
+
+fncode: HYDU_sock_cloexec(fd)

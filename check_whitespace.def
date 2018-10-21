@@ -9,14 +9,10 @@ page: check_whitespace
         die "[$indent] not found!\n"
 
     my @files
-    &call open_r, change.lst
-        chomp
-        my $f = $_
-        $if -f $f
-            $if $f=~/^\//
-                push @files, $f
-            $else
-                push @files, "$cwd/$f"
+    $if -f "change.lst"
+        $call get_files_from_change_lst
+    $else
+        $call get_files_from_git_diff
 
     $if !@files
         die "Usage: perl $0 file list\n"
@@ -31,10 +27,28 @@ page: check_whitespace
     my $i=0
     $foreach $f in @files
         $i++
-        $print checking $f ...
-        system "echo ---- [$f] ----- >>t.diff"
-        system "cp $f $i.c"
-        system "$indent $i.c"
-        system "diff $f $i.c >> t.diff"
+        $if -f "$cwd/$f"
+            $print checking $cwd/$f ...
+            system "echo ---- $i - $f ----- >>t.diff"
+            system "cp $cwd/$f $i.c"
+            system "$indent $i.c"
+            system "diff $cwd/$f $i.c >> t.diff"
+        $else
+            $print $f not found
     system "cat t.diff"
 
+#---------------------------------------- 
+subcode: get_files_from_change_lst
+    &call open_r, change.lst
+        chomp
+        my $f = $_
+        $if -f $f
+            $if $f=~/^\//
+                push @files, $f
+            $else
+                push @files, "$cwd/$f"
+
+subcode: get_files_from_git_diff
+    &call open_r, "git diff --compact-summary |"
+        $if /^\s*(\S+)\s+\|\s+\d+/
+            push @files, $1

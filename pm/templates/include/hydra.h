@@ -605,7 +605,6 @@ HYD_status HYDU_sock_set_block(int fd);
 HYD_status HYDU_sock_forward_stdio(int in, int out, int *closed);
 void HYDU_sock_finalize(void);
 HYD_status HYDU_sock_get_iface_ip(char *iface, char **ip);
-HYD_status HYDU_sock_is_local(char *host, int *is_local);
 HYD_status
 HYDU_sock_create_and_listen_portstr(char *iface, char *hostname, char *port_range,
                                     char **port_str,
@@ -619,10 +618,8 @@ HYD_status HYDU_sock_cloexec(int fd);
 
 #define HYDU_MALLOC_OR_JUMP(p, type, size, status)                      \
     {                                                                   \
-        (p) = NULL; /* initialize p in case assert fails */             \
-        HYDU_ASSERT(size, status);                                      \
         (p) = (type) MPL_malloc((size), MPL_MEM_PM);                 \
-        if ((p) == NULL)                                                \
+        if ((size != 0) && ((p) == NULL))                               \
             HYDU_ERR_SETANDJUMP((status), HYD_NO_MEM,                   \
                                 "failed to allocate %d bytes\n",        \
                                 (int) (size));                          \
@@ -630,9 +627,8 @@ HYD_status HYDU_sock_cloexec(int fd);
 
 #define HYDU_REALLOC_OR_JUMP(p, type, size, status)                     \
     {                                                                   \
-        HYDU_ASSERT(size, status);                                      \
         (p) = (type) MPL_realloc((p),(size), MPL_MEM_PM);            \
-        if ((p) == NULL)                                                \
+        if ((size != 0) && ((p) == NULL))                               \
             HYDU_ERR_SETANDJUMP((status), HYD_NO_MEM,                   \
                                 "failed to allocate %d bytes\n",        \
                                 (int) (size));                          \

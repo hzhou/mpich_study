@@ -4,7 +4,7 @@
  *      See COPYRIGHT in top-level directory.
  */
 
-$call @rationale
-
+$call @DOC
+NEWLINE?
 DUMP_STUB global_init
 DUMP_STUB meta_init

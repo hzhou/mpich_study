@@ -10,9 +10,9 @@ fncode: MPL_sockaddr_to_str(p_addr, char* str, int maxlen)
     $elif p_addr->ss_family == AF_INET6
         p = (void*)&(($(SA6) *)p_addr)->sin6_addr
         $:: snprintf(str, maxlen,
-        $::     "$(x8::%02x%02x)", 
-        $::     $(join:p[*]:, :0-7),
-        $::     $(join:p[*]:, :8-15));
+        $::          "$(x8::%02x%02x)", 
+        $::          $(join:p[*]:, :0-7),
+        $::          $(join:p[*]:, :8-15));
     return 0
         
 fncode: MPL_sockaddr_port(p_addr)

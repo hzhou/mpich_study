@@ -3,8 +3,8 @@ include: build/ac_args.def
 
 page: t.ac, ac_frame
     module: sh
-    run: cd out && autoconf -o configure t.ac
-    # run: cd out && autoconf -o configure t.ac && sh configure --help
+    # run: cd out && autoconf -o configure t.ac
+    run: cd out && autoconf -o configure t.ac && sh configure --help
 
     $call ac_arg_load, docs/config.help
     $call ac_arg_vars
