@@ -1,0 +1,8 @@
+page: t
+    module: sh
+
+    for a in A B C; do
+        t_$a="yes"
+    done
+
+    echo t_A=$t_A

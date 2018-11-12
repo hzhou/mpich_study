@@ -1,0 +1,82 @@
+page: errutil, from templates/mpi/errhan/errutil.c
+
+subcode: _autoload
+    $global MPIR_Errhandler MPIR_Errhandler_builtin[3] = { {0} }
+    $global MPIR_Errhandler MPIR_Errhandler_direct[MPIR_ERRHANDLER_PREALLOC] = { {0} }
+
+    $global MPIR_Object_alloc_t MPIR_Errhandler_mem = { 0, 0, 0, 0, MPIR_ERRHANDLER, sizeof(MPIR_Errhandler), MPIR_Errhandler_direct, MPIR_ERRHANDLER_PREALLOC, }
+
+fncode: MPIR_Err_init
+    MPIR_Errhandler_builtin[0].handle = MPI_ERRORS_ARE_FATAL
+    MPIR_Errhandler_builtin[1].handle = MPI_ERRORS_RETURN
+    MPIR_Errhandler_builtin[2].handle = MPIR_ERRORS_THROW_EXCEPTION
+    $(if: MPICH_ERROR_MSG_LEVEL >= MPICH_ERROR_MSG__ALL)
+        MPIR_Err_stack_init();
+    did_err_init = TRUE
+
+subcode: POBJ_MUTEX
+    $call mutex, ENTER
+    BLOCK
+    $call mutex, EXIT
+
+    subcode: mutex(ENTER)
+        MPID_THREAD_CS_$(ENTER)(POBJ, MPIR_THREAD_POBJ_COMM_MUTEX(comm_ptr))
+
+
+fncode: MPIR_Err_return_comm(comm_ptr, s_fcname, int errcode)
+    $my const int error_class = ERROR_GET_CLASS(errcode)
+    $my MPIR_Errhandler * errhandler = NULL
+
+    checkValidErrcode(error_class, fcname, &errcode)
+    ...
+    $if comm_ptr
+        &call POBJ_MUTEX
+            errhandler = comm_ptr->errhandler
+
+    $if errhandler == NULL
+        $if MPIR_Process.comm_world
+            comm_ptr = MPIR_Process.comm_world
+
+    $if MPIR_Err_is_fatal(errcode) || comm_ptr==NULL
+        MPIR_Handle_fatal_error(comm_ptr, fcname, errcode)
+        # exit
+
+    $(set:IS=errhandler->handle==MPI_ERRORS_$1)
+    &call POBJ_MUTEX
+        errhandler = comm_ptr->errhandler
+        $if errhandler == NULL || $(IS:ARE_FATAL)
+            MPIR_Handle_fatal_error(comm_ptr, fcname, errcode)
+            $call mutex, EXIT
+
+    errcode = checkForUserErrcode(errcode)
+    $if !($(IS:RETURN) || $(IS:THROW_EXCEPTIONS))
+        $call handle_non_builtin
+
+fncode: MPIR_Err_create_code(int lastcode, int fatal, s_fcname, n_line, error_class, s_generic_msg, s_specific_msg, ...)
+
+fncode: MPIR_Err_create_code_valist(lastcode, fatal, s_fcname, n_line, error_class, s_generic_msg, s_specific_msg, valist Argp)
+    $if lastcode != MPI_SUCCESS && checkErrcodeIsValid(lastcode)
+        n_reason = checkErrcodeIsValid(lastcode);
+        MPL_error_printf
+        lastcode = MPI_SUCCESS
+    $call @check_error_class
+    err_code = error_class
+    generic_idx = FindGenericMsgIndex(generic_msg)
+    $if generic_idx>0
+        err_code |= (generic_idx + 1) << ERROR_GENERIC_SHIFT
+    $else
+        err_code &= ~ERROR_GENERIC_MASK
+        MPL_error_printf("INTERNAL ERROR: Could not find $generic_msg in list of messages\n")
+
+    &call error_ring_mutex_lock
+        ring_idx = error_ring_loc++
+        error_ring_loc %= MAX_ERROR_RING
+        max_error_ring_loc >:= error_ring_loc
+        ring_msg = ErrorRing[ring_idx].msg
+        $if specific_msg
+            specific_idx = FindSpecificMsgIndex(specific_msg)
+            $if specific_idx>=0
+                specific_fmt = specific_err_msgs[specific_idx].long_name
+            $else
+                specific_fmt = specific_msg
+            vsnprintf_mpi(ring_msg, MPIR_MAX_ERROR_LINE, specific_fmt, Argp)

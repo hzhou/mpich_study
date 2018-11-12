@@ -1,0 +1,25 @@
+page: t
+    module: perl
+    &call open_r, ../../mpich-github/src/mpi_t/mpit_err.h
+        $if /^#define\s+(\w+)\((.+)\)/ -> $M, $args
+            $M=~s/^MPIR/MPIT/
+            $args=~s/,?\s*err_$//
+            $if $args
+                $print "#define $M($args) \\"
+            $else
+                $print "#define $M \\"
+        $elif /^\s+do {/
+            NOOP
+        $elif /^\s+}\s*while\s*\(0\)/
+            NOOP
+        $elif /^(\s+)MPIR_ERR_SETANDSTMT.err_,\s*(MPI_T_ERR_\w+), goto fn_fail/ -> $sp, $err
+            print $sp, "mpi_errno = $err; \\\n"
+            print $sp, "goto fn_fail; \\\n"
+        $else
+            s/\s+\\$//
+            $if /^\s*(else\s+)?if\b.*[^{]$/
+                $print "$_ { \\"
+            $elif /^\s*{\s*$/
+                NOOP
+            $else
+                $print $_

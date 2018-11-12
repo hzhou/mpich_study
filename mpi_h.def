@@ -91,6 +91,12 @@ subcode: MPI_Datatype # KIND = 3
     $call def, C_FLOAT_COMPLEX, 0x4c000840
     $call def, C_DOUBLE_COMPLEX,0x4c001041
     $call def, C_LONG_DOUBLE_COMPLEX,0x4c002042
+    # address/offset
+    $call def, AINT,            0x4c000843
+    $call def, OFFSET,          0x4c000844
+    $call def, COUNT,           0x4c000845
+    # extension
+    $call def, C_FLOAT16,       0x4c000243
 
     $define(MPI_LONG_LONG) MPI_LONG_LONG_INT
     $define(MPI_C_COMPLEX) MPI_C_FLOAT_COMPLEX

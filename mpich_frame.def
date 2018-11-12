@@ -1,0 +1,32 @@
+subcode: _autoload
+    $(block:frame_init)
+        $call modeline
+        $call copyright
+        $call @document
+        NEWLINE?
+
+perlcode: doc
+    my $title=$param
+    require MyDef::ext
+    my $codelist = MyDef::ext::grab_codelist(do_macro=>1)
+
+    push @$out, "NEWLINE?"
+    push @$out, "/** $title\n"
+    $foreach @$codelist
+        $if /^\s*$/
+            push @$out, " *\n"
+        $else
+            s/^. /  /;
+            my @t = MyDef::utils::longline_split($_)
+            $foreach @t
+                push @$out, " *    $_\n"
+    push @$out, " */\n"
+
+template: modeline
+    \x2f* -*- Mode: C; c-basic-offset:4 ; indent-tabs-mode:nil ; -*- */
+
+template: copyright
+    \x2f*
+    *  (C) 2018 by Argonne National Laboratory.
+    *      See COPYRIGHT in top-level directory.
+    */

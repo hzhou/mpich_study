@@ -4,11 +4,15 @@ page: t.ac, ac_frame
     module: sh
     run: autoconf -o out/configure out/t.ac && sh out/configure
 
-    echo srcdir: $srcdir
+    builddir=.
+    $(for:srcdir,builddir,abs_srcdir,abs_builddir,top_srcdir,top_builddir)
+        echo $1: -$$1-
+
     $if "$prefix"!="NONE"
         echo prefix: $prefix
     $else
         echo prefix is NONE
-    $call check_prefix
+
+    # $call check_prefix
     # $call ac_basic
     # $call ac_arg_from_config_help, docs/config.help

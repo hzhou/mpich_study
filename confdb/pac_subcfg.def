@@ -1,0 +1,52 @@
+include: macros/ac_utils.def
+page: aclocal_subcfg.m4
+    module: sh
+
+    $call PAC_RESET_ALL_FLAGS
+    $call PAC_RESET_LINK_FLAGS
+
+    # PAC_CONFIG_SUBDIR_ARGS(subdir,configure-args,action-if-success,action-if-failure)
+    $call PAC_CONFIG_SUBDIR_ARGS
+    $call PAC_CONFIG_SUBDIR
+
+    $call PAC_SUBCFG_EXPAND_PATH_SUFFIC_MACRO
+    $call PAC_SUBCFG_CONFIGURE_SUBSYS
+    $call PAC_SUBCFG_DO_PREREQ
+    $call PAC_SUBCFG_AUTO_SUFFIX
+
+
+subcode: Fn_PAC_RESET_ALL_FLAGS
+    $if $FROM_MPICH = "yes"
+        $(for:CFLAGS,CPPFLAGS,CXXFLAGS,FFLAGS,FCFLAGS,LDFLAGS,LIBS)
+            $1="$USER_$1"
+                
+subcode: Fn_PAC_RESET_ALL_FLAGS
+    $if $FROM_MPICH = "yes"
+        $(for:LDFLAGS,LIBS)
+            $1="$USER_$1"
+
+subcode: Fn_PAC_CONFIG_SUBDIR_ARGS
+    pac_dir="$1"
+    pac_sub_configure_args="$2"
+
+    AC_MSG_NOTICE([====== configuring $1 =====])
+
+    $(set:setup=$pac_abs_srcdir/$1/setup)
+    $if -f $(setup)
+        AC_MSG_NOTICE([sourcing $(setup)])
+
+    pac_prev=
+    $for pac_arg
+        $if -n $pac_prev
+            pac_prev=
+            # e.g. --prefix some_path
+            continue
+        $switch $pac_arg
+            $caseof ...
+                # ignore
+            $caseof *
+                $for pac_pvar in $ac_precious_vars
+                    ...
+                    pac_arg="$pac_pvar=$pac_pval"
+    ...
+

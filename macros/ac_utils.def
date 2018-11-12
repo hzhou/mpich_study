@@ -1,0 +1,39 @@
+subcode: pac_defun(NAME, help)
+    dnl
+    dnl $(NAME) - $(help)
+    dnl
+    $call @_doc
+    AC_DEFUN([$(NAME)], [
+        BLOCK
+    ])
+
+subcode: pac_check_define(NAME, MACRO, what)
+    dnl
+    dnl $(NAME) - Test whether $(what) is supported
+    dnl
+    dnl will AC_DEFINE([$(MACRO)]) if $(what) is supported.
+    dnl
+    AC_DEFUN([$(NAME)], [
+        AC_MSG_CHECKING([for $(what) functionality])
+        BLOCK
+    ])
+
+    subcode: yes
+        AC_DEFINE([$(MACRO)],[1],[Define if $(what) is supported.])
+        AC_MSG_RESULT([yes])
+    subcode: no
+        AC_MSG_RESULT([no])
+
+subcode: ac_link_source
+    AC_LINK_IFELSE([AC_LANG_SOURCE([
+    BLOCK
+    ])],[
+    $call @yes
+    ],[
+    $call @no
+    ])
+#---------------------------------------- 
+subcode: pac_push(name)
+    PAC_PUSH_FLAG([$(name)])
+    BLOCK
+    PAC_POP_FLAG([$(name)])

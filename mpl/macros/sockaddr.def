@@ -3,6 +3,7 @@ include: macros/sockaddr_if.def
 include: macros/sockaddr_debug.def
 
 subcode: _autoload
+    $include <assert.h>
     $include <sys/types.h>  # .._t types
     $include <sys/socket.h> # sockaddr, socket, bind, listen, connect, accept etc.
     $include <netdb.h>      # getaddrinfo etc.
@@ -75,7 +76,6 @@ fncode: MPL_get_sockaddr(const char * s_hostname, p_addr)
             return ret
         # assert af_type==ai_list->ai_family
 
-        ret = 0
         $(set:T=p_addr->ss_family)
         $(set:T=af_type)
         $if $(T)==AF_INET
@@ -85,38 +85,37 @@ fncode: MPL_get_sockaddr(const char * s_hostname, p_addr)
 	    memcpy(p_addr, ai_list->ai_addr, sizeof($(SA6)))
             # $call assert, p_addr->ss_family == af_type
         $else
-            ret = 1
+            assert(0)
 
         freeaddrinfo(ai_list)
-        return ret
+        return 0
 
 fncode: MPL_get_sockaddr_direct(int type, p_addr)
     memset(p_addr, 0, sizeof(*p_addr))
 
     $define(MPL_SOCKADDR_ANY) 0
     $define(MPL_SOCKADDR_LOOPBACK) 1
-    $if type <0 || type>1
-        return 1
+    assert(type==MPL_SOCKADDR_ANY || type==MPL_SOCKADDR_LOOPBACK)
 
     $if af_type == AF_INET
         $my p_addr4 = ($(SA4) *) p_addr
         NEWLINE
         p_addr4->sin_family = AF_INET
-        $if type==0
-            p_addr4->sin_addr.s_addr = htonl(INADDR_ANY)
-        $elif type==1
+        $if type==MPL_SOCKADDR_LOOPBACK
             $(set:lo=0x7f000001)
             p_addr4->sin_addr.s_addr = htonl($(lo))
+        $else
+            p_addr4->sin_addr.s_addr = htonl(INADDR_ANY)
         return 0
     $elif af_type == AF_INET6
         $my p_addr6 = ($(SA6) *) p_addr
         NEWLINE
         p_addr6->sin6_family = AF_INET6
-        $if type==0
-            p_addr6->sin6_addr = in6addr_any
-        $elif type==1
+        $if type==MPL_SOCKADDR_LOOPBACK
             p_addr6->sin6_addr = in6addr_loopback
+        $else
+            p_addr6->sin6_addr = in6addr_any
         return 0
     $else
-        return 1
+        assert(0)
 

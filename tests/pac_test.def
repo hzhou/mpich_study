@@ -1,19 +1,31 @@
+
 include: build/ac_basic.def
 
 page: t.ac, ac_frame
     module: sh
     run: autoconf -o out/configure out/t.ac && CPPFLAGS=-I. sh out/configure && cat out/t.test
 
-    Version=1.0.0
-    name=test
-    AC_SUBST(name)
-
-    builddir="build"
     AC_CONFIG_FILES(out/t.test)
+
 
     # automake declares precious FLAGS
     CPPFLAGS = "$CPPFLAGS -I test"
     echo CPPFLAGS = $CPPFLAGS
+
+    m4_include([out/confdb/aclocal_util.m4])
+    AC_PROG_FGREP
+    echo FGREP = $FGREP
+
+    #- Apparently, does not really work
+    if echo "$CPPFLAGS" | $FGREP -e "\<-I test\>" ; then :
+        echo "CPPFLAGS(='$CPPFLAGS') contains '-I test', not appending" 
+    else
+        echo "CPPFLAGS(='$CPPFLAGS') does not contain '-I test', appending" 
+        CPPFLAGS="$CPPFLAGS -I test"
+    fi
+
+    PAC_APPEND_FLAG([-I test], [CPPFLAGS])
+    AC_ARG_VAR([CPPFLAGS])
     AC_OUTPUT
 
 #- Note: it creates config.status, which creates awk scripts to to the actual substituions. Search for "$ac_tmp/subs1.awk".

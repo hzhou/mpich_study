@@ -11,7 +11,7 @@ subcode: fcall(fname, @params)
     status = $(fname)($(params)
     HYDU_ERR_POP(status, "failed: $(fname)\n")
 
-# from templates/pm/hydra/ui/mpich/mpiexec.c
+# from templates/ui/mpich/mpiexec.c
 page: mpiexec, basic_frame 
     $local proxy, exec, node
     int exit_status = 0
@@ -25,7 +25,7 @@ page: mpiexec, basic_frame
 
     $call @alarm_ckpoint
 
-    $fcall HYDT_dmx_init, &$.demux
+    $fcall HYDT_dmx_init, &$.demux # poll or select, checks stdin
     $(set:this=HYD_server_info.user_global.)
     $fcall HYDT_bsci_init, $.rmk, $.launcher, $.launcher_exec, $.enablex, $.debug
 
@@ -55,7 +55,7 @@ page: mpiexec, basic_frame
 
     /* Create a pipe connection to wake up the process manager */
     $if pipe(HYD_server_info.cmd_pipe) < 0
-        HYDU_ERR_SETANDJUMP(status, HYD_INTERNAL_ERROR, "pipe error\n")
+        $call internal_error, "pipe error\n"
 
     /* Launch the processes */
     $fcall HYD_pmci_launch_procs

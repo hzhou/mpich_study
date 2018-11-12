@@ -1,0 +1,28 @@
+page: find_ac_subst
+    module: perl
+    arg: templates/include/mpi.h
+
+    my @files = @ARGV
+    $foreach $f in @files
+        $f=~s/\.in$//
+        $if -f "$f.in"
+            $call get_subst
+            $call report_subst
+        $else
+            warn "ac_output: $f.in not found!\n"
+
+    subcode: get_subst
+        my %subst
+        &call open_r, $f.in
+            $while /@(\w+)@/g
+                $subst{$1} ++
+
+    subcode: report_subst
+        $print "$f:"
+        my $cnt
+        $foreach $v in sort keys %subst
+            $print "    $v"
+            $cnt++
+        $if $cnt
+            $print
+
