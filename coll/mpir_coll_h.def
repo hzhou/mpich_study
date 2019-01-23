@@ -1,0 +1,46 @@
+include: coll_common.def
+
+page: mpir_coll.h, from templates/mpir_coll.h
+
+subcode: decl_mpir_colls
+    $map decl, $(coll_list)
+    $map decl_neighbor, $(neighbor_list)
+
+    subcode: decl(coll)
+        $:: /********** $(coll:ucfirst) **********/
+        #define PARAMS_$(coll:uc) \
+            $call param_$(coll)
+        $:     MPIR_Comm *comm_ptr
+        $call _decl, $(coll), PARAMS_$(coll:uc), MPIR_Errflag_t *errflag
+
+        $call decl_i, $(coll)
+
+    subcode: decl_i(coll)
+        $:: /********** I$(coll) **********/
+        $call _decl, i$(coll), PARAMS_$(coll:uc), MPIR_Request **request
+        $call _decl, i$(coll)_sched, PARAMS_$(coll:uc), MPIR_Sched_t s
+
+    subcode: decl_neighbor(coll)
+        $:: /********** Neighbor_$(coll) **********/
+        $(if:coll=alltoallw)
+            $(set:decl_neighbor=1)
+            $(set:P=PARAMS_NEIGHBOR_ALLTOALLW)
+            #define $(P) \
+                $call param_alltoallw
+            $:     MPIR_Comm *comm_ptr
+        $(else)
+            $(set:P=PARAMS_$(coll:uc))
+
+        $(set:algos_neighbor_$(coll)=intra_auto, inter_auto, allcomm_nb)
+        $call _decl, neighbor_$(coll), $(P)
+        $call _decl, ineighbor_$(coll), $(P), MPIR_Request **request
+        $(set:algos_ineighbor_$(coll)_sched=intra_auto, inter_auto, allcomm_linear)
+        $call _decl, ineighbor_$(coll)_sched, $(P), MPIR_Sched_t s
+
+    # -----
+    subcode: _decl(name, @params)
+        int MPIR_$(name:ucfirst)($(params));
+        $(for:a in impl, $(algos_$(name)))
+            int MPIR_$(name:ucfirst)_$(a)($(params));
+        NEWLINE
+

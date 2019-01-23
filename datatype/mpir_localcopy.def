@@ -1,0 +1,49 @@
+macros:
+    send: const void *sendbuf, MPI_Aint sendcount, MPI_Datatype sendtype
+    recv:       void *recvbuf, MPI_Aint recvcount, MPI_Datatype recvtype
+fncode: MPIR_Localcopy
+    $parameter $(send), $(recv)
+
+    $(for:send,recv)
+        MPIR_Datatype_get_size_macro($1type, $1size)
+        n_$1_size= $1size * $1count
+
+    $call get_copy_sz
+    &call if_both_builtin
+        MPIR_Memcpy(recvbuf, sendbuf, copy_sz)
+        goto fn_exit
+
+    &call if_both_contig
+        $(set:mem=((char*)$1buf+$1_true_lb))
+        MPIR_Memcpy($(mem:recv), $(mem:send), copy_sz)
+        goto fn_exit
+    $elif senttype_iscontig
+        $my MPIR_Segment seg
+        MPIR_Segment_init(recvbuf, recvcount, recvtype, &seg)
+        $my MPI_Aint last = copy_sz
+        MPIR_Segment_unpack(&seg, 0, &last, $(mem:send))
+    $elif recvtype_iscontig
+        MPIR_Segment_init(sendbuf, sendcount, sendtype, &seg)
+        MPIR_Segment_unpack(&seg, 0, &last, $(mem:recv))
+    $else
+        MPIR_CHKLMEM_MALLOC(buf, char *, COPY_BUFFER_SZ, mpi_errno, "buf", MPL_MEM_BUFFER)
+        $(for:send,recv)
+            MPIR_Segment_init($1buf, $1count, $1type, &$1_seg)
+            $while 1
+                ...
+                MPIR_Segment_pack(&sseg, sfirst, &last, buf+buf_off)
+                buf_end = buf+buf_off +(last-sfirst)
+                sfirst = last
+                MPIR_Segment_unpack(&rseg, rfirst, &last, buf)
+                rfirst = last
+                $if rfirst == copy_sz
+                    break
+
+                #- error if sfirst==copy_sz
+                buf_off = sfirst - rfirst
+                $if buf_off>0
+                    memmove(buf, buf_end-buf_off, buf_off)
+
+
+
+

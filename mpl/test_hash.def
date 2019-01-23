@@ -1,0 +1,42 @@
+include: macros/hash.def
+
+page: test_hash, basic_frame
+    module: c
+    cc: gcc -std=c99 -g
+
+    hv = MPL_hash_new()
+    $(if:0)
+        $call test_basic
+    $(elif:0)
+        $call test_stress
+    $(else)
+        $call test_timing
+    &call clock_it, free
+        MPL_hash_free(hv)
+
+subcode: test_basic
+    MPL_hash_set(hv, "key", "MPL_hash key - value")
+    s = MPL_hash_get(hv, "key")
+    $dump s
+
+subcode: test_stress
+    $local char buf[100] = "K000"
+    $for i=0:125
+        buf[1]=(i%1000)/100
+        buf[2]=(i%100)/10
+        buf[3]=(i%10)
+        # $dump i, buf
+        MPL_hash_set(hv, buf, buf)
+    s = MPL_hash_get(hv, "K\x1\x2\x3")
+    $print "%02x%02x%02x%02x", s[0], s[1], s[2], s[3]
+
+subcode: test_timing
+    &call clock_it, test
+        $local char buf[100] = "K000"
+        $for i=0:40000
+            buf[1]='0'+(i%1000)/100
+            buf[2]='0'+(i%100)/10
+            buf[3]='0'+(i%10)
+            MPL_hash_set(hv, buf, buf)
+        s = MPL_hash_get(hv, "K123")
+        $dump s

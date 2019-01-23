@@ -4,6 +4,9 @@ include: macros/sockaddr.def
 subcode: _autoload
     $include "mplconfig.h"
 
+macros:
+    copyright: 2018
+
 page: mpl_sockaddr
     module: c
     dump_h: mpl_sockaddr.h from ../templates/frame.h

@@ -5,6 +5,9 @@ subcode: _autoload
         $call @document
         NEWLINE?
 
+macros:
+    copyright: 2019
+
 perlcode: doc
     my $title=$param
     require MyDef::ext
@@ -25,8 +28,14 @@ perlcode: doc
 template: modeline
     \x2f* -*- Mode: C; c-basic-offset:4 ; indent-tabs-mode:nil ; -*- */
 
-template: copyright
-    \x2f*
-    *  (C) 2018 by Argonne National Laboratory.
-    *      See COPYRIGHT in top-level directory.
-    */
+subcode: copyright
+    $:: \x2f*
+    $:: *  (C) $(copyright) by Argonne National Laboratory.
+    $:: *      See COPYRIGHT in top-level directory.
+    $(if:copyright_intel)
+        NEWLINE
+        $:: *  Portions of this code were written by Intel Corporation.
+        $:: *  Copyright (C) $(copyright_intel) Intel Corporation.  Intel provides this material
+        $:: *  to Argonne National Laboratory subject to Software Grant and Corporate
+        $:: *  Contributor License Agreement dated February 8, 2012.
+    $:: */

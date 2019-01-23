@@ -1,0 +1,3 @@
+
+
+./configure --disable-fortran --disable-cxx --disable-romio --with-pm=none

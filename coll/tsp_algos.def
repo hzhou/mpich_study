@@ -1,0 +1,130 @@
+include: ../mpich_frame.def
+macros:
+    copyright: 2019
+    copyright_intel: 2011-2019
+    _I: #include
+
+#---------------------------------------- 
+page: tsp_algos.h
+    $call comment_include_guard
+    $call comment_params_coll
+    $call comment_algos_h
+    $(_I) "tsp_namespace_def.h"
+    NEWLINE
+    $(for:a in $(algos))
+        $(mset:split:::a->coll,algo)
+        $(if:params_$(coll)_$(algo))
+            $(set:P=PARAMS_$(coll:uc), $(params_$(coll)_$(algo)))
+        $(else)
+            $(set:P=PARAMS_$(coll:uc))
+
+        $call _F, I$(coll)_intra_$(algo), $(P), MPIR_Request ** req
+        $(if:addtag_$(coll)_$(algo))
+            $call _F, I$(coll)_sched_intra_$(algo), $(P), int tag, MPIR_TSP_sched_t * sched
+        $(else)
+            $call _F, I$(coll)_sched_intra_$(algo), $(P), MPIR_TSP_sched_t * sched
+
+        $call @extra_$(coll)_$(algo)
+
+page: tsp_algos.c
+    $call comment_include_guard
+    $call comment_algos_c
+    &call with_tsp, gentran
+        $call tsp_algos_gentran
+
+    subcode: tsp_algos_gentran
+        $(for:a in $(algos))
+            $(mset:split:::a->coll,algo)
+            $(_I) "i$(coll)/i$(coll)_tsp_$(algo)_algos.h"
+
+    subcode: with_tsp(type)
+        $(_I) "tsp_$(type).h"
+        $(_I) "coll_tsp_algos.h"
+        BLOCK
+        $(_I) "tsp_undef.h"
+
+#---- tsp based algos -----
+macros:
+    algos:: bcast:tree
+    algos:: bcast:scatter_recexch_allgather
+    algos:: gather:tree
+    algos:: scatter:tree
+    algos:: allgather:brucks
+    algos:: allgather:recexch
+    algos:: allgatherv:ring
+    algos:: allgatherv:recexch
+    algos:: reduce:tree
+    algos:: allreduce:tree
+    algos:: allreduce:recexch
+    algos:: reduce_scatter:recexch
+    algos:: reduce_scatter_block:recexch
+
+    params_bcast_tree: int tree_type, int k, int maxbytes
+    params_gather_tree: int k
+    params_scatter_tree: int k
+    params_allgather_brucks: int k
+    params_allgather_recexch: int is_dist_halving, int k
+    params_allgatherv_brucks: int k
+    params_allgatherv_recexch: int is_dist_halving, int k
+    params_reduce_tree: int tree_type, int k, int segsize
+    params_allreduce_tree: int tree_type, int k, int segsize
+    params_allreduce_recexch: int per_nbr_buffer, int k
+    params_reduce_scatter_recexch: int k
+    params_reduce_scatter_block_recexch: int k
+
+    addtag_allgatherv_ring: 1
+    addtag_allgatherv_recexch: 1
+    addtag_allreduce_recexch: 1
+    addtag_reduce_scatter_recexch: 1
+    addtag_reduce_scatter_block_recexch: 1
+
+#---------------------------------------- 
+subcode: extra_allgather_recexch
+    $call extra_allgather_recexch_, Iallgather_sched_intra_recexch
+
+subcode: extra_allgatherv_recexch
+    $call extra_allgather_recexch_, Iallgatherv_sched_intra_recexch
+
+subcode: extra_allgather_recexch_(name)
+    $(if:name~Iallgather_)
+        $(set:count=int recvcount)
+        $(set:cnt3=int recvcount)
+    $(else)
+        $(set:count=const int *recvcounts, const int *displs)
+        $(set:cnt3=const int *recvcounts)
+    $(set:a=int rank, int nranks, int k, int p_of_k, int log_pofk, int T)
+    $(set:c=MPIR_Comm * comm, MPIR_TSP_sched_t * sched)
+    # --------------------------------------------------
+    $call _F, $(name)_data_exchange, $(a), void *recvbuf, MPI_Datatype recvtype, size_t recv_extent, $(count), int tag, $(c)
+    $call _F, $(name)_step1, int step1_sendto, int *step1_recvfrom, int step1_nrecvs, int is_inplace, int rank, int tag, const void *sendbuf, void *recvbuf, size_t recv_extent, $(count), MPI_Datatype recvtype, int n_invtcs, int *invtx, $(c)
+    $call _F, $(name)_step2, int step1_sendto, int step2_nphases, int **step2_nbrs, $(a), int *nrecvs_, int **recv_id_, int tag, void *recvbuf, size_t recv_extent, $(count), MPI_Datatype recvtype, int is_dist_halving, $(c)
+    $call _F, $(name)_step3, int step1_sendto, int *step1_recvfrom, int step1_nrecvs, int step2_nphases, void *recvbuf, $(cnt3), int nranks, int k, int nrecvs, int *recv_id, int tag, MPI_Datatype recvtype, $(c)
+
+#---------------------------------------- 
+subcode: _F(name, @params)
+    #undef  MPIR_TSP_$(name)
+    #define MPIR_TSP_$(name) MPIR_TSP_NAMESPACE($(name))
+    int MPIR_TSP_$(name)($(params));
+    NEWLINE
+
+#---------------------------------------- 
+template: comment_include_guard
+    \x2f* Include guard is intentionally omitted. 
+    * include specific tsp namespace before include this file
+    * e.g. #include "tsp_gentran.h"
+    */
+    NEWLINE
+
+template: comment_params_coll
+    \x2f* PARAMS_BCAST, etc. are defined in src/include/mpir_coll.h */
+    NEWLINE
+
+template: comment_algos_h
+    \x2f* Transport based i-collective algorithm functions. */
+    NEWLINE
+
+template: comment_algos_c
+    \x2f* Transport based i-collective algorithm functions.
+    * The actual implementation code is inside icoll/icoll_tsp_xxx_algos.h
+    */
+    NEWLINE

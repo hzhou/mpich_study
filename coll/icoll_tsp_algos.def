@@ -1,0 +1,89 @@
+include: ../mpich_frame.def
+include: coll_common.def
+macros:
+    _I: #include
+
+page: icoll_tsp_algos.c
+    $call comment_icoll_tsp_algos_c
+    $(_I) "mpiimpl.h"
+    NEWLINE
+    $:: \x2f* Declare all transport-namespace algorithms */
+    $(_I) "tsp_gentran.h" /* Gentran_ namespace */
+    $(_I) "coll_tsp_algos.h"
+
+    &call algo_icoll, barrier, intra_recexch
+        return MPII_Gentran_Iallreduce_intra_recexch(MPI_IN_PLACE, NULL, 0, MPI_BYTE, MPI_SUM, comm_ptr, 
+            MPIR_IALLREDUCE_RECEXCH_TYPE_MULTIPLE_BUFFER, $(cvar)_RECEXCH_KVAL,
+            request);
+    
+    $(for:bcast, reduce)
+        &call algo_direct_, $1, intra_tree
+            MPIR_Ibcast_tree_type, $(cvar)_TREE_KVAL, $(cvar)_TREE_PIPELINE_CHUNK_SIZE,
+        $: \x2f* Ring algorithm is equivalent to k-ary tree algorithm with k = 1 */
+        &call algo_direct_, $1, intra_tree, intra_ring
+            MPIR_TREE_TYPE_KARY, 1, $(cvar)_RING_CHUNK_SIZE,
+
+    $call algo_direct, bcast, intra_scatter_recexch_allgather
+
+    $(for:gather,scatter)
+        &call algo_direct_, $1, intra_tree
+            $(cvar)_TREE_KVAL,
+
+    &call algo_direct_, allgather, intra_brucks, intra_gentran_brucks
+        $(cvar)_BRUCKS_KVAL,
+    $call algo_direct, allgatherv, intra_ring, intra_gentran_ring
+    $(for:allgather, allgatherv)
+        &call algo_direct_, $1, intra_recexch, intra_recexch_distance_doubling
+            $(cnst)_RECEXCH_TYPE_DISTANCE_DOUBLING, $(cvar)_RECEXCH_KVAL,
+        &call algo_direct_, $1, intra_recexch, intra_recexch_distance_halving
+            $(cnst)_RECEXCH_TYPE_DISTANCE_HALVING, $(cvar)_RECEXCH_KVAL,
+
+    &call algo_direct_, allreduce, intra_tree, intra_tree_kary
+        MPIR_TREE_TYPE_KARY, $(cvar)_TREE_KVAL, $(cvar)_TREE_PIPELINE_CHUNK_SIZE,
+    &call algo_direct_, allreduce, intra_tree, intra_tree_knomial
+        MPIR_TREE_TYPE_KNOMIAL_1, $(cvar)_TREE_KVAL, $(cvar)_TREE_PIPELINE_CHUNK_SIZE,
+    &call algo_direct_, allreduce, intra_recexch, intra_recexch_single_buffer
+        $(cnst)_RECEXCH_TYPE_SINGLE_BUFFER, $(cvar)_RECEXCH_KVAL,
+    &call algo_direct_, allreduce, intra_recexch, intra_recexch_multiple_buffer
+        $(cnst)_RECEXCH_TYPE_MULTIPLE_BUFFER, $(cvar)_RECEXCH_KVAL,
+
+    $(for:reduce_scatter, reduce_scatter_block)
+        &call algo_direct_, $1, intra_recexch
+            $(cvar)_RECEXCH_KVAL,
+    #---------------------------------------- 
+    subcode: algo_direct_(coll, algo, @algoname)
+        &call algo_icoll, $(coll), $(algo)
+            return $(tsp)($(args_$(coll)),
+                BLOCK
+                request);
+
+    subcode: algo_direct(coll, algo, @algoname)
+        &call algo_icoll, $(coll), $(algo)
+            return $(tsp)($(args_$(coll)),
+                request);
+
+subcode: algo_icoll(name, algo)
+    NEWLINE?
+    $(if:!algoname)
+        $(set:algoname=$(algo))
+    $(set:funcname=MPIR_I$(name)_$(algoname))
+    $(set:tsp=MPII_Gentran_I$(name)_$(algo))
+    $(set:cvar=MPIR_CVAR_I$(name:uc))
+    $(set:cnst=MPIR_I$(name:uc))
+    #undef FUNCNAME
+    #define FUNCNAME $(funcname)
+    #undef FCNAME
+    #define FCNAMP MPL_QUOTE(FUNCNAME)
+    $:: int $(funcname)(PARAMS_$(name:uc), MPIR_Request ** request)
+    $:: {
+        BLOCK
+    $:: }
+
+#---------------------------------------- 
+template: comment_icoll_tsp_algos_c
+    \x2f* i-collective MPIR functions with transport based algorithms.
+    * The actual algorithms are declared in coll_tsp_algos.h and
+    * implemented in icoll/icoll_tsp_xxx_algos.h, where icoll refers
+    * to ibcast, igather, etc.
+    */
+    NEWLINE
