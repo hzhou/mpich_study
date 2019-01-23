@@ -2,6 +2,7 @@ include: macros/sockaddr.def
 
 page: tcp, basic_frame
     module: c
+    CFLAGS: -D_XOPEN_SOURCE=500
 
     $local struct sockaddr_storage addr
     $if 1

@@ -1,34 +1,32 @@
 page: autogen_quick
     module: perl
-    run: time perl autogen_quick.pl
-    all: .autogen/main
+    arg: -j16
+    # all: .autogen/main
 
-    $my %opts
-    $opts{skip_binding}=1
+    $call @sanity_check
+    $call parse_cmdline
+
+    $call update_version
+    $call initiate_maint_config
+    $call extracterrmsgs
+    $call extractstates
+    $call extractcvars
+
+    $call make_subsys_include
+    $call make_subdir_confdb
+    $call make_autogen_subdirs
+    $call make_autoreconf_subdirs
+
+    $call make_bindings
+
+    $call init_autogen
+    $call generate_make
+
     $(if:1)
-        # $call initiate_maint_config
-        $call init_autogen
-        $call generate_make
-    $(else)
-        $call check_user_environment
-        $call parse_cmdline
-        $call check_autotools_location
-        $call check_autotools_versions
-        $call check_submodules
-        # $call relicating_confdb
-        $call update_version
-        $call do_bindings
+       my $j = "-j".$opts{"-j"}
+       system "make -f .autogen/Makefile $j all" || exit 1
 
-        $call extracterrmsgs
-        $call initiate_maint_config
-        $call extractstates
-        $call extractcvars
-
-        $if -d ".autogen"
-            system "rm -r .autogen"
-        system "mkdir .autogen"
-
-        make -f maint/autogen.make all || exit 1
+    # $call patch_libtool
 
 #------------------------------ 
 subcode: init_autogen
@@ -36,46 +34,13 @@ subcode: init_autogen
         system "rm -r .autogen"
     system "mkdir .autogen"
 
-#------------------------------ 
-subcode: check_user_environment
-    $print Verifying the location of autogen... -
-    $if !-d "maint" or ! -s "maint/version.m4"
-        die "must execute at top level directory for now"
-    $global $root_dir
-    $root_dir = `pwd`
-    chomp $root_dir
-    $print done
-
-subcode: check_autotools_location
-    $print *** check_autotools_location: to be implemented
-
-subcode: check_autotools_versions
-    $call check_autotool_version, autoconf
-    $call check_autotool_version, automake
-    $call check_autotool_version, libtool
-
-    subcode: check_autotool_version(prog)
-        $(if:prog=libtool)
-            $(set:P=libtoolize)
-        $(else)
-            $(set:P=$(prog))
-        my $$(prog)_ver
-        my $t = `$(P) --version`
-        $if $t=~/$(P) .* (\d+\.\d+)/
-            $$(prog)_ver = $1
-        $print Checking for $(prog) version... $$(prog)_ver
-
-subcode: check_submodules
-    $print *** check_submodules: to be implemented
-
 subcode: update_version
-    $(for:src/pm/hydra,src/pm/hydra2,src/pm/romio,test/mpi)
-        system "cp -pPR maint/version.m4 $1/"
-    system "automake -l M4sugar maint/Version.base.m4 >maint/Version"
+    # required by mpichversion
+    push @rules, "maint/Version: maint/Version.base.m4 maint/version.m4"
+    push @rules, "\tautom4te -l M4sugar maint/Version.base.m4 >maint/Version"
+    push @rules, ""
+    push @all, "maint/Version"
 
-#------------------------------ 
-subcode: parse_cmdline
-    $print *** parse_cmdline: to be implemented
 
 #--------------------------------------------
 subcode: initiate_maint_config
@@ -83,11 +48,12 @@ subcode: initiate_maint_config
     $call maint_subst
 
     subcode: maint_subst
-        $call @find_vars
+        $call find_vars
 
-        my @files=qw(checkbuilds getcoverage genstates clmake extractstrings extractcvars extractstates extractfixme createcoverage gcovmerge createhtmlindex cvardirs getfuncstack)
+        my @files=qw(checkbuilds getcoverage genstates clmake extractstrings extractcvars extractstates extractfixme createcoverage gcovmerge createhtmlindex getfuncstack)
+        push @files, "cvardirs"
         $foreach $f in @files
-            $print $f
+            # $print $f
             my @lines
             &call open_r, maint/$f.in
                 $if /\@\w+\@/
@@ -123,72 +89,63 @@ subcode: initiate_maint_config
         $else
             $subst{XARGS_NODATA_OPT}=""
 
+        $subst{configure_input}=""
+
+subcode: extracterrmsgs
+    &call open_w, src/mpi/errhan/defmsg.h
+        $(set:print_to=Out)
+        $print "typedef struct { const unsigned int sentinal1; const char *short_name, *long_name; const unsigned int sentinal2; } msgpair;"
+        $print "static const int generic_msgs_len = 0;"
+        $print "static msgpair generic_err_msgs[] = { {0xacebad03, 0, \"no error catalog\", 0xcb0bfa11}, };"
+        $print "static const int specific_msgs_len = 0;"
+        $print "static msgpair specific_err_msgs[] = {  {0xacebad03,0,0,0xcb0bfa11}, };"
+        $print "#if MPICH_ERROR_MSG_LEVEL > MPICH_ERROR_MSG__NONE"
+        $print "#define MPIR_MAX_ERROR_CLASS_INDEX 54"
+        my $t = '0, 'x53 . '0'
+        $print "static int class_to_index[] = { $t };"
+        $print "#endif"
 
 subcode: extractstates
     #    src/include/mpiallstates.h
     #    src/util/logging/common/state_names.h
     &call push_rule_stamp, extractstates
         push @rules, "\t\@echo Creating the enumeration of logging states into src/include/mpiallstates.h"
-        push @rules, "perl maint/extractstates"
+        push @rules, "\tperl maint/extractstates"
+        push @all, $t
 
 subcode: extractcvars
     # @abs_srcdir
     # src/include/mpir_cvars.h
     # src/util/cvar/mpir_cvars.c
     # README.envvar
-    my $cvardirs = `cat maint/cvardirs`
-    chomp $cvardirs
-    &call push_rule_stamp, cvardirs
-        push @rules, "\t\@echo Extracting control variables (cvar)"
-        push @rules, "maint/extractstates --dirs=\"$cvardirs\""
+    my @tlist = qw(src/mpi src/mpi_t src/nameserv src/util src/binding src/include src/mpid src/pmi src/mutex)
+    &call push_rule_stamp, extractcvars
+        push @rules, "\t\@echo Extracting control variables"
+        my $cvardirs=join(' ', @tlist)
+        push @rules, "\tperl maint/extractcvars --dirs=\"$cvardirs\""
+        push @all, $t
 
 #--------------------------------------------
-subcode: extracterrmsgs
-    $print *** extracterrmsgs not implemented
-
-#--------------------------------------------
-subcode: patch_libtool(dir)
+subcode: patch_libtool
     my $patched=0
     $(for:darwin-ifort, oracle-fort, arm-compiler)
-        $if -f "$(dir)/confdb/libtool.m4"
-            $print Patching libtool.m4 with $1.patch... -"
-            system "patch -Nsl $(dir)/confdb/libtool.m4 maint/patches/optional/confdb/$1.patch"
-            $if $? 
-                $patched++
-                system "rm -f $(dir)/confdb/libtool.m4.orig"
-                $print done
-            $else
-                $print failed
+        $print Patching libtool.m4 with $1.patch... -"
+        system "patch -Nsl confdb/libtool.m4 maint/patches/optional/confdb/$1.patch"
+        $if $? 
+            $patched++
+            system "rm -f confdb/libtool.m4.orig"
+            $print done
+        $else
+            $print failed
+    # We should only patch on libtool.m4
     $if $patched
         system "cd $(dir) && autoconf -f" || exit 1
         system "touch -r $(dir)/confdb/ltversion.m4 $(dir)/confdb/libtool.m4"
 
-#------------------------------------------
 #--------------------------------------------
 subcode: generate_make
     $global @all, @rules, %dependency
-    $call make_subsys_include
-    $call make_subdir_confdb
-    $call make_autogen_subdirs
-    $call make_autoreconf_subdirs
-
-    $(if:0)
-        $call make_binding_f77
-        $call make_binding_f90
-        $call make_binding_f08
-        $call make_binding_cxx
-    $(else)
-        system "touch src/binding/fortran/mpif_h/Makefile.mk"
-        system "touch src/binding/fortran/use_mpi/Makefile.mk"
-        system "touch src/binding/fortran/use_mpi_f08/Makefile.mk"
-        system "touch src/binding/cxx/mpicxx.h.in"
-        system "touch src/binding/fortran/mpif_h/mpif.h.in"
-        system "touch src/binding/fortran/use_mpi/mpi_base.f90.in"
-        system "touch src/binding/fortran/use_mpi/mpi_constants.f90.in"
-        system "touch src/binding/fortran/use_mpi_f08/mpi_f08_compile_constants.f90.in"
-        system "touch src/binding/fortran/use_mpi_f08/mpi_c_interface_types.f90.in"
-
-    &call open_W, maint/autogen.make
+    &call open_W, .autogen/Makefile
         $(if:all)
             $print all: $(all)
         $(else)
@@ -229,9 +186,9 @@ subcode: make_subdir_confdb
     my @tlist=(
         "src/mpl",
         "src/pm/hydra",
-        "src/pm/hydra2",
+        # "src/pm/hydra2",
         "src/mpi/romio",
-        "test/mpi",
+        # "test/mpi",
         )
     $foreach $a in @tlist
         $if -l "$a/confdb"
@@ -241,7 +198,9 @@ subcode: make_subdir_confdb
         my $t = "$t2.confdb"
         $dependency{".autogen/$t2"}.=" .autogen/$t"
         &call push_rule_stamp, $t
+            push @rules, "\tif test -d $a/confdb; then rm -r $a/confdb; fi"
             push @rules, "\tcp -pPR confdb $a/confdb"
+            push @rules, "\tcp -pPR maint/version.m4 $a/"
             $if $a ne "src/mpl"
                 push @rules, "\tcp -pPR maint/version.m4 $a/version.m4"
 
@@ -249,10 +208,10 @@ subcode: make_autogen_subdirs
     my @all_autogens=(
         "src/openpa",
         "src/hwloc",
-        "test/mpi",
+        # "test/mpi",
         "src/izem",
-        "src/mpid/ch4/netmode/ucx/ucx",
-        "src/mpid/ch4/netmode/ofi/libfabric",
+        "src/mpid/ch4/netmod/ucx/ucx",
+        "src/mpid/ch4/netmod/ofi/libfabric",
     );
     $foreach $a in @all_autogens
         my $t=$a
@@ -271,10 +230,13 @@ subcode: make_autoreconf_subdirs
     my @all_other=(
         "src/mpl", 
         "src/pm/hydra",
-        "src/pm/hydra2",
+        # "src/pm/hydra2",
         "src/mpi/romio",
         "src/util/logging/rlog",
     )
+
+    $call make_romio_gluecode
+
     $foreach $a in @all_other
         my $t=$a
         $t=~s/\//./g
@@ -282,16 +244,33 @@ subcode: make_autoreconf_subdirs
             push @all, $t
             push @rules, "\t\@echo Running autoreconf in $a"
             push @rules, "\tcd $a && autoreconf -ifv"
-    $call make_romio_gluecode
 
 subcode: make_version
     &call push_rule, "maint/Version"
         push @rules, "\tautomake -l M4sugar maint/Version.base.m4 >maint/Version"
 
 subcode: make_romio_gluecode
-    &call push_rule_stamp, "romio_gluecode"
+    &call push_rule_stamp, romio_gluecode
         push @rules, "\tcd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
         $dependency{".autogen/src.mpi.romio"}.=" $t"
+
+#---------------------------------------- 
+subcode: make_bindings
+    $(if:0)
+        $call make_binding_f77
+        $call make_binding_f90
+        $call make_binding_f08
+        $call make_binding_cxx
+    $(else)
+        system "touch src/binding/fortran/mpif_h/Makefile.mk"
+        system "touch src/binding/fortran/use_mpi/Makefile.mk"
+        system "touch src/binding/fortran/use_mpi_f08/Makefile.mk"
+        system "touch src/binding/cxx/mpicxx.h.in"
+        system "touch src/binding/fortran/mpif_h/mpif.h.in"
+        system "touch src/binding/fortran/use_mpi/mpi_base.f90.in"
+        system "touch src/binding/fortran/use_mpi/mpi_constants.f90.in"
+        system "touch src/binding/fortran/use_mpi_f08/mpi_f08_compile_constants.f90.in"
+        system "touch src/binding/fortran/use_mpi_f08/mpi_c_interface_types.f90.in"
 
 subcode: make_binding_f77
     &call push_rule, ".autogen/binding_f77"
@@ -317,6 +296,47 @@ subcode: make_binding_cxx
     $(set:D=src/binding/cxx)
     &call push_rule, ".autogen/binding_cxx"
         push @rules, "\tcd $(D) && perl buildiface -nosep -initfile=./cxx.vlist"
-#--------------------------------------------
-subcode: run_script(dir, script, @args)
-    system "cd $(dir) && chmod a+x ./$(script) && ./$(script) $(args)"
+
+#---- Sanity checks -------------------------- 
+subcode: check_user_environment
+    $print Verifying the location of autogen... -
+    $if !-d "maint" or ! -s "maint/version.m4"
+        die "must execute at top level directory for now"
+    $global $root_dir
+    $root_dir = `pwd`
+    chomp $root_dir
+    $print done
+
+subcode: check_autotools_location
+    $print *** check_autotools_location: to be implemented
+
+subcode: check_autotools_versions
+    $call check_autotool_version, autoconf
+    $call check_autotool_version, automake
+    $call check_autotool_version, libtool
+
+    subcode: check_autotool_version(prog)
+        $(if:prog=libtool)
+            $(set:P=libtoolize)
+        $(else)
+            $(set:P=$(prog))
+        my $$(prog)_ver
+        my $t = `$(P) --version`
+        $if $t=~/$(P) .* (\d+\.\d+)/
+            $$(prog)_ver = $1
+        $print Checking for $(prog) version... $$(prog)_ver
+
+subcode: check_submodules
+    my @submodules =qw(src/hwloc src/izem src/mpid/ch4/netmod/ucx/ucx src/mpid/ch4/netmod/ofi/libfabric)
+    $foreach $a in @submodules
+        $if ! -f "$a/configure.ac"
+            die "Submodule $a is not checked out\n"
+
+#------------------------------ 
+subcode: parse_cmdline
+    $my %opts=("-j"=>2)
+    $opts{skip_binding}=1
+    $foreach $a in @ARGV
+        $if $a =~ /-j(\d+)/
+            $opts{"-j"}=$1
+
