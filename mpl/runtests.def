@@ -1,0 +1,135 @@
+page: runtests
+    module: perl
+    arg: test/sockaddr.c
+
+    $call chdir_test
+    my @src_list
+
+    my %opts = (srcdir => ".", cc=>"cc")
+    $foreach $a in @ARGV
+        $if $a=~/^(\w+)=(.*)/
+            $opts{$1}=$2
+        $elif $a=~/^(.*\.c)$/
+            push @src_list, "../$a"
+
+    my $srcdir = "../$opts{srcdir}"
+    my $cc = $opts{cc}
+    $cc .= " -I $srcdir/include"
+
+    my $la = "$srcdir/libmpl.la"
+
+    $if !@src_list
+        @src_list = glob("../$opts{srcdir}/test/*.c")
+
+    my ($cnt, $n_ok, $n_fail, $n_xfail, $n_skip) = (0, 0, 0, 0, 0)
+    my $i=0
+    $foreach $f in @src_list
+        my ($base_name) = $f=~/^.*\/(.+)\.c$/
+        $call preprocess
+
+        $foreach $test in @tests
+            my $test_opts = $test->{opts}
+
+            my ($title, $result)
+            $cnt ++
+            $if $test_opts->{TEST}
+                $title = $test_opts->{TEST}
+            $else
+                $title = $base_name
+
+            $i++
+            my $name = "test-$i"
+            $print Test $i: $title ... -
+
+            $if $test_opts->{skip}
+                $result = "SKIP"
+                $n_skip++
+            $else
+                $call dump_source
+                $call set_cmd
+                $call run
+
+            $print $result
+
+    $call report
+
+    $n_fail==0
+
+    #---------------------------------------- 
+    subcode: chdir_test
+        $if -d ".test"
+            $print "Removing old .test folder..."
+            system "rm -rf .test"
+
+        mkdir ".test"
+        chdir ".test"
+    subcode: report
+        $print Ran $cnt tests, $n_ok OK, $n_fail FAIL, $n_xfail XFAIL, $n_skip SKIP
+
+    subcode: preprocess
+        my @tests
+        my (@common, %opts)
+        my $source = []
+        &call open_r, $f
+            $if /^\/\*\s+(\w+):\s*(.+?)\s*\*\//
+                $if $1 eq "TEST"
+                    $if !@common
+                        @common = @$source
+                    $else
+                        $call push_test, continue
+                $opts{$1}=$2
+            $elif /^int\s+(main|test_\w+)\(\s*\)\s*$/
+                push @$source, "int main()\n"
+            $else
+                push @$source, $_
+        $call push_test, final
+
+        subcode: push_test(is_final)
+            my %t_opts = %opts
+            push @tests, {opts=>\%t_opts, source=>$source}
+            $(if:is_final!=final)
+                $source = []
+                push @$source, @common
+                    
+    subcode: dump_source
+        &call open_w, $name.c
+            $foreach $l in @{$test->{source}}
+                print Out $l
+
+    subcode: set_cmd
+        my $cmd
+        $if $test_opts->{MPL_SOURCE}
+            my @segs
+            $foreach $t in split /\s+/, $test_opts->{MPL_SOURCE}
+                push @segs, "$srcdir/$t"
+            $cmd = "$cc -o $name $name.c " . join(' ', @segs) . " && ./$name"
+        $else
+            $cmd = "../libtool --silent --mode=link $cc -o $name $name.c $la". " && ./$name"
+
+    subcode: run
+        system $cmd
+
+        $if $? == -1
+            $n_fail ++ 
+            $result = "FAIL"
+            $call append_fail
+        $elif $? & 0xff
+            $n_fail ++
+            $result = "KILLED"
+            $call append_fail
+        $else
+            my $ret = $?>>8
+            $if $ret == 0
+                $result = "OK"
+                $n_ok++
+            $elif $test_opts->{XFAIL}
+                $n_xfail++
+                $result = "FAIL (expected)"
+            $else
+                $n_fail++
+                $result = "FAIL ($ret)"
+                $call append_fail
+        subcode: append_fail
+            $result .= " - failing command: $cmd"
+
+
