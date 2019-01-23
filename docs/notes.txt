@@ -1,0 +1,9 @@
+# testing hydra separately
+
+    * copy mpl to ./mpl
+    * copy hwloc to ./tool/topo/hwloc/hwloc
+    * copy version.m4 to ./
+    * copy confdb/* to ./confdb/
+    * copy confdb/* to ./mpl/confdb/
+
+    * sh autogen.sh
