@@ -3,40 +3,80 @@ fncode: MPIR_Allgather_intra_brucks
         $call brucks, allgather
 
 subcode: brucks(coll)
-    $if sendcount == 0 && sendbuf!=MPI_IN_PLACE
-        return MPI_SUCCESS
-
-    $(if:coll=allgather)
-        $(set:total_count=recvcount * comm_size)
-    $(elif:coll=allgatherv)
-        $for i=0:comm_size
-            total_count += recvcounts[i]
-        $(set:total_count=total_count)
-
-    $if $(total_count)==0
-        return MPI_SUCCESS
-
-    MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent)
-    MPIR_Type_get_true_extent_impl(recvtype, &recvtype_true_lb, &recvtype_true_extent)
-    $(set:extent=MPL_MAX(recvtype_true_extent, recvtype_extent))
-    MPIR_Ensure_Aint_fits_in_pointer(MPIR_VOID_PTR_CAST_TO_MPI_AINT recvbuf+($(total_count)*$(extent)))
-    recvbuf_extent = $(total_count) * $(extent)
-    MPIR_CHKLMEM_MALLOC(tmp_buf, void *, recvbuf_extent, mpi_errno, "tmp_buf", MPL_MEM_BUFFER)
-    # adjust for potential negative lower bound
-    tmp_buf = (void*)((char*)tmp_buf - recvtype_true_lb)
+    $call allgather_init
     $call local_to_tmp_buf
     $call phase2
-    $call local_rotate_down
+    $call tmp_buf_to_local
     
+    subcode: allgather_init
+        $if sendcount == 0 && sendbuf!=MPI_IN_PLACE
+            return MPI_SUCCESS
+
+        $(if:coll=allgather)
+            $(set:total_count=recvcount * comm_size)
+        $(elif:coll=allgatherv)
+            $for i=0:comm_size
+                total_count += recvcounts[i]
+            $(set:total_count=total_count)
+
+        $if $(total_count)==0
+            return MPI_SUCCESS
+
+        MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent)
+        MPIR_Type_get_true_extent_impl(recvtype, &recvtype_true_lb, &recvtype_true_extent)
+        $(set:extent=MPL_MAX(recvtype_true_extent, recvtype_extent))
+        MPIR_Ensure_Aint_fits_in_pointer(MPIR_VOID_PTR_CAST_TO_MPI_AINT recvbuf+($(total_count)*$(extent)))
+        recvbuf_extent = $(total_count) * $(extent)
+        MPIR_CHKLMEM_MALLOC(tmp_buf, void *, recvbuf_extent, mpi_errno, "tmp_buf", MPL_MEM_BUFFER)
+        # adjust for potential negative lower bound
+        tmp_buf = (void*)((char*)tmp_buf - recvtype_true_lb)
     subcode: local_to_tmp_buf
-        $(set:send=sendbuf, sendcount, sendtype)
-        $(set:tmp =tmp_buf, recvcount, recvtype)
+        position = 0
+        $for i=0:rank
+            position += recvcounts[i]
+
         $if sendbuf == MPI_IN_PLACE
-            $fcall MPIR_Localcopy((char*)recvbuf+rank*recvcount*recvtype_extent, recvcount, recvtype, $(tmp))
-        $else
+            $(if:coll=gather)
+                $(set:send=(char*)recvbuf+rank*recvcount*recvtype_extent, recvcount, recvtype)
+            $(elif:coll=gatherv)
+                $(set:send=(char*)recvbuf+displs[rank]*recvtype_extent)
+            $(set:tmp =tmp_buf, recvcount, recvtype)
             $fcall MPIR_Localcopy($(send), $(tmp))
+        $else
+            $(set:send=sendbuf, sendcount, sendtype)
+            $(set:tmpi=tmp_buf+position*recvtype_extent, recvcounts[rank], recvtype)
+            $fcall MPIR_Localcopy($(send), $(tmpi))
+
+    subcode: tmp_buf_to_local
+        position = 0
+        $for i=0:comm_size
+            $if sendbuf != MPI_IN_PLACE || i!=rank
+                $(set:tmpi=tmp_buf+position*recvtype_extent, recvcounts[i], recvtype)
+                $(set:recv=recvbuf+displs[i]*recvtype_extent, recvcounts[i], recvtype)
+                $fcall MPIR_Localcopy($(tmpi), $(recv))
+            position+=recvcounts[i]
+
+    subcode: phase2
+
 
 fncode: MPIR_Allgather_intra_recursive_doubling
+    subcode: phase2
+        cur_cnt = recvcounts[rank]
+        mask = 0x1
+        i=0
+        $while mask < comm_size; mask<<=1, i++
+            dist = rank ^ mask
+            $if dist < comm_size
+                $(for:send,recv)
+                    $1_offset = 0
+                    $for i=0:$1_tree_root
+                        $1_offset+=$1counts[i]
+                $(set:tmp=(char*)tmp_buf+$1_offset*recvtype_extent)
+                $(set:send=$(tmp:send), curr_cnt, recvtype, dst, MPIR_ALLGATHERV_TAG) 
+                $(set:recv=$(tmp:recv), total_count-recv_offset, recvtype, dst, MPIR_ALLGATHERV_TAG) 
+                $fcall MPIC_Sendrecv($(send), $(recv), comm_ptr, &status, errflag)
+            $if dst_tree_root + mask > comm_size
+                $call @non_power_of_2
 
 #---- Common ------------------------------------ 
 subcode: collective_frame

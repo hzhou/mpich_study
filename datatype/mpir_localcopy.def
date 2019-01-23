@@ -1,6 +1,8 @@
 macros:
     send: const void *sendbuf, MPI_Aint sendcount, MPI_Datatype sendtype
     recv:       void *recvbuf, MPI_Aint recvcount, MPI_Datatype recvtype
+
+#-- ./src/mpi/misc/utils.c
 fncode: MPIR_Localcopy
     $parameter $(send), $(recv)
 
@@ -45,5 +47,23 @@ fncode: MPIR_Localcopy
                     memmove(buf, buf_end-buf_off, buf_off)
 
 
+#-- ./src/mpi/datatype/pack.c
+fncode: MPIR_Pack_impl
+    $(set:send=const void *inbuf, MPI_Aint incount, MPI_Datatype datatype)
+    $(sed:recv=void *outbuf, MPI_Aint outsize)
+    $parameter $(send), $(recv), MPI_Aint * position
+
+    &call if_contig
+        $(set:dst=((char*)outbuf + *position))
+        $(set:src=((char*)inbuf + dt_true_lb))
+        MPIR_Memcpy($(dst), $(src), data_sz)
+        *position = (int) ((MPI_Aint)*position + data_sz)
+    $else
+        segp = MPIR_Segment_alloc()
+        $fcall MPIR_Segment_init(inbuf, incount, datatype, segp)
+        MPIR_Segment_pack(segp, first, &last, (char*)outbuf+*position)
+        *position += last
+
+        MPIR_Segment_free(segp)
 
 

@@ -1,0 +1,32 @@
+#-- iallgather_inter_local_gather_remote_bcast.c
+fncode: MPIR_Iallgather_sched_inter_local_gather_remote_bcast(PARAMS_ALLGATHER, MPIR_Sched_t sched)
+    &call inter_frame
+        $call init_tmp_buf, sendcount*local_size
+        $call @local_gather
+        $if comm_ptr->is_low_group
+            $call bcast_send
+            $call bcast_recv
+        $else
+            $call bcast_recv
+            $call bcast_send
+        MPIR_SCHED_BARRIER(sched)
+        MPIR_SCHED_CHKPMEM_COMMIT(sched)
+
+    subcode: local_gather
+        $if sendcount !=0
+            $fcall MPIR_Igather_sched($(send), $(tmp:sendcount), 0, local_comm, sched)
+            MPIR_SCHED_BARRIER(sched)
+
+    subcode: bcast_send
+        $if sendcount!=0
+            $if rank==0
+                root = MPI_ROOT
+            $else
+                root = MPI_PROC_NULL
+            $fcall MPIR_Ibcast_sched($(tmp:sendcount*local_size), root, comm_ptr, sched)
+
+    subcode: bcast_recv
+        $if recvcount!=0
+            $(set:recv=recvbuf, recvcount*remote_size, recvtype)
+            $fcall MPIR_Ibcast_sched($(recv), 0, comm_ptr, sched)
+

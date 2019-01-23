@@ -1,0 +1,39 @@
+subcode: inter_frame
+    $(if:FunctionName~.*_sched_)
+        MPIR_SCHED_SCHKPMEM_DECL(1);
+
+    $(for:local_size,remote_size, rank)
+        $1 = comm_ptr->$1
+    $if !comm_ptr->local_comm
+        MPII_Setup_intercomm_localcomm(comm_ptr)
+    $my MPIR_Comm *local_comm = comm_ptr->local_comm
+
+    &call coll_frame
+        BLOCK
+
+subcode: intra_frame
+    comm_size = comm_ptr->local_size
+    rank = comm_ptr->rank
+    &call coll_frame
+        BLOCK
+
+    subcode: send_recv(sbuf, scnt, styp, rbuf, rcnt, rtyp)
+        mpi_errno = MPIC_Sendrecv($(sbuf), $(scnt), $(styp), $(to), $(tag), $(rbuf), $(rcnt), $(rtyp), $(from), $(tag), comm_ptr, MPI_STATUS_IGNORE, errflag)
+        $if mpi_errno
+            $if MPI_ERR_GET_CLASS(mpi_errno) == MPIX_ERR_PROC_FAILED
+                *errflag = MPIR_ERR_PROC_FAILED
+            $else
+                *errflag = MPIR_ERR_OTHER
+            MPIR_ERR_SET(mpi_errno, *errflag, "**fail")
+            MPIR_ERR_ADD(mpi_errno_ret, mpi_errno)
+        
+
+subcode: coll_frame
+    BLOCK
+
+    subcode: init_tmp_buf(N)
+        $my unit: MPI_Aint
+        MPIR_Dataype_get_size_macro(sendtype, unit)
+        MPIR_SCHED_CHKPMEM_MALLOC(tmp_buf, void*, $(N)*unit, mpi_errno, "tmp_buf", MPL_MEM_BUFFER)
+        $(export:tmp=tmp_buf, $1*unit, MPI_BYTE)
+

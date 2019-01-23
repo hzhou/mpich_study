@@ -1,0 +1,45 @@
+#-- allgather_intra_ring.c
+fncode: MPIR_Allgather_intra_ring(PARAMS_ALLGATHER, MPIR_Errflag_t * errflag)
+    &call allgather_intra_frame
+        $if sendbuf!=MPI_IN_PLACE
+            $fall MPIR_Localcopy($(send), $(recv:rank))
+        i_l = $(rank:rank-1)
+        i_r = $(rank:rank+1)
+        $for i=0:comm_size-1
+            i_send = $(rank:rank-i)
+            i_recv = $(rank:rank-i-1)
+            $call send_recv, $(recv:i_send), i_r, $(recv:i_recv), i_l
+        
+
+fncode: MPIR_Allgather_intra_brucks
+    &call allgather_intra_frame
+        $call init_tmp_buf, sendcount*comm_size
+        $if sendbuf!= MPI_IN_PLACE
+            $fcall MPIR_Localcopy($(send), $(tmp:0))
+
+#---------------------------------------- 
+subcode: allgather_intra_frame
+    &call allgather_frame
+        &call intra_frame
+            BLOCK
+
+subcode: allgather_frame
+    $call allgather_trivial
+    $call get_recv_size
+    BLOCK
+
+    macros:
+        tag: MPIR_ALLGATHER_TAG
+        rank: ($1+comm_size)%comm_size
+
+    subcode: allgather_trivial
+        $if sendcount==0 && sendbuf != MPI_IN_PLACE
+            return MPI_SUCCESS
+        $if recvcount==0
+            return MPI_SUCCESS
+
+    subcode: get_recv_size
+        $local MPI_Aint recvtype_extent
+        MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent)
+        $(export:recv=(char*)recvbuf+$1*recvcount*recvtype_extent, recvcount, recvtype)
+
