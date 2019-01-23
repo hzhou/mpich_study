@@ -1,0 +1,359 @@
+#---- 17 + 5 collectives ---------------
+macros:
+    coll_list: barrier, bcast, gather, gatherv, scatter, scatterv, allgather, allgatherv, alltoall, alltoallv, alltoallw, reduce, allreduce, reduce_scatter, reduce_scatter_block, scan, exscan
+    neighbor_list: allgather, allgatherv, alltoall, alltoallv, alltoallw
+
+subcode: map_each_coll(sub)
+    $(for:coll in $(coll_list))
+        $call $(sub), $(coll)
+        $call $(sub), i$(coll)
+    $(for:coll in $(neighbor_list))
+        $call $(sub), neighbor_$(coll)
+        $call $(sub), ineighbor_$(coll)
+
+#---- algo choices: [(15+5)*n+2]*2 - (intra,inter,allcomm) except scan and exscan (intra only)
+#-- used in coll_impl.{h,c} defining CVARs
+macros: 
+    #- ordering matters for ABI stability
+    algos_barrier_intra: nb, recursive_doubling
+    algos_barrier_inter: bcast, nb
+    algos_barrier_allcomm: nb
+    algos_ibarrier_intra: recursive_doubling, gentran_recexch
+    algos_ibarrier_inter: bcast
+    algos_ibarrier_allcomm: 
+
+    algos_bcast_intra: binomial, nb, scatter_recursive_doubling_allgather, scatter_ring_allgather
+    algos_bcast_inter: nb, remote_send_local_bcast
+    algos_bcast_allcomm: nb
+    algos_ibcast_intra: binomial, scatter_recursive_doubling_allgather, scatter_ring_allgather, gentran_tree, gentran_scatter_recexch_allgather, gentran_ring
+    algos_ibcast_inter: flat
+    algos_ibcast_allcomm: 
+
+    algos_gather_intra: binomial, nb
+    algos_gather_inter: linear, local_gather_remote_send, nb
+    algos_gather_allcomm: nb
+    algos_igather_intra: binomial, tree
+    algos_igather_inter: long, short
+    algos_igather_allcomm: 
+
+    algos_gatherv_intra: linear, nb
+    algos_gatherv_inter: linear, nb
+    algos_gatherv_allcomm: linear, nb
+    algos_igatherv_intra: linear
+    algos_igatherv_inter: linear
+    algos_igatherv_allcomm: linear
+
+    algos_scatter_intra: binomial, nb
+    algos_scatter_inter: linear, nb, remote_send_local_scatter
+    algos_scatter_allcomm: nb
+    algos_iscatter_intra: binomial, tree
+    algos_iscatter_inter: linear, remote_send_local_scatter
+    algos_iscatter_allcomm: 
+
+    algos_scatterv_intra: linear, nb
+    algos_scatterv_inter: linear, nb
+    algos_scatterv_allcomm: linear, nb
+    algos_iscatterv_intra: linear
+    algos_iscatterv_inter: linear
+    algos_iscatterv_allcomm: linear
+
+    algos_allgather_intra: brucks, nb, recursive_doubling, ring
+    algos_allgather_inter: local_gather_remote_bcast, nb
+    algos_allgather_allcomm: nb
+    algos_iallgather_intra: brucks, recursive_doubling, ring, gentran_recexch_distance_doubling, gentran_recexch_distance_halving, gentran_brucks
+    algos_iallgather_inter: local_gather_remote_bcast
+    algos_iallgather_allcomm: 
+
+    algos_allgatherv_intra: brucks, nb, recursive_doubling, ring
+    algos_allgatherv_inter: nb, remote_gather_local_bcast
+    algos_allgatherv_allcomm: nb
+    algos_iallgatherv_intra: brucks, recursive_doubling, ring, gentran_recexch_distance_doubling, gentran_recexch_distance_halving, gentran_ring
+    algos_iallgatherv_inter: remote_gather_local_bcast
+    algos_iallgatherv_allcomm: 
+
+    algos_alltoall_intra: brucks, nb, pairwise, pairwise_sendrecv_replace, scattered
+    algos_alltoall_inter: nb, pairwise_exchange
+    algos_alltoall_allcomm: nb
+    algos_ialltoall_intra: brucks, inplace, pairwise, permuted_sendrecv
+    algos_ialltoall_inter: pairwise_exchange
+    algos_ialltoall_allcomm: 
+
+    algos_alltoallv_intra: nb, pairwise_sendrecv_replace, scattered
+    algos_alltoallv_inter: nb, pairwise_exchange
+    algos_alltoallv_allcomm: nb
+    algos_ialltoallv_intra: blocked, inplace
+    algos_ialltoallv_inter: pairwise_exchange
+    algos_ialltoallv_allcomm: 
+
+    algos_alltoallw_intra: nb, pairwise_sendrecv_replace, scattered
+    algos_alltoallw_inter: nb, pairwise_exchange
+    algos_alltoallw_allcomm: nb
+    algos_ialltoallw_intra: blocked, inplace
+    algos_ialltoallw_inter: pairwise_exchange
+    algos_ialltoallw_allcomm: 
+
+    algos_reduce_intra: binomial, nb, reduce_scatter_gather
+    algos_reduce_inter: local_reduce_remote_send, nb
+    algos_reduce_allcomm: nb
+    algos_ireduce_intra: binomial, reduce_scatter_gather, gentran_tree, gentran_ring
+    algos_ireduce_inter: local_reduce_remote_send
+    algos_ireduce_allcomm: 
+
+    algos_allreduce_intra: nb, recursive_doubling, reduce_scatter_allgather
+    algos_allreduce_inter: nb, reduce_exchange_bcast
+    algos_allreduce_allcomm: nb
+    algos_iallreduce_intra: naive, recursive_doubling, reduce_scatter_allgather, gentran_recexch_single_buffer, gentran_recexch_multiple_buffer, gentran_tree_kary, gentran_tree_knomial
+    algos_iallreduce_inter: remote_reduce_local_bcast
+    algos_iallreduce_allcomm: 
+
+    algos_reduce_scatter_intra: nb, noncommutative, pairwise, recursive_doubling, recursive_halving
+    algos_reduce_scatter_inter: nb, remote_reduce_local_scatter
+    algos_reduce_scatter_allcomm: nb
+    algos_ireduce_scatter_intra: noncommutative, pairwise, recursive_doubling, recursive_halving, gentran_recexch
+    algos_ireduce_scatter_inter: remote_reduce_local_scatterv
+    algos_ireduce_scatter_allcomm: 
+
+    algos_reduce_scatter_block_intra: nb, noncommutative, pairwise, recursive_doubling, recursive_halving
+    algos_reduce_scatter_block_inter: nb, remote_reduce_local_scatter
+    algos_reduce_scatter_block_allcomm: nb
+    algos_ireduce_scatter_block_intra: noncommutative, pairwise, recursive_doubling, recursive_halving, gentran_recexch
+    algos_ireduce_scatter_block_inter: remote_reduce_local_scatterv
+    algos_ireduce_scatter_block_allcomm: 
+
+    algos_scan_intra: nb, recursive_doubling
+    algos_iscan_intra: recursive_doubling
+
+    algos_exscan_intra: nb, recursive_doubling
+    algos_iexscan_intra: recursive_doubling
+
+    algos_neighbor_allgather_intra: nb
+    algos_neighbor_allgather_inter: nb
+    algos_neighbor_allgather_allcomm: nb
+    algos_ineighbor_allgather_intra: linear
+    algos_ineighbor_allgather_inter: linear
+    algos_ineighbor_allgather_allcomm: linear
+    algos_neighbor_allgatherv_intra: nb
+    algos_neighbor_allgatherv_inter: nb
+    algos_neighbor_allgatherv_allcomm: nb
+    algos_ineighbor_allgatherv_intra: linear
+    algos_ineighbor_allgatherv_inter: linear
+    algos_ineighbor_allgatherv_allcomm: linear
+    algos_neighbor_alltoall_intra: nb
+    algos_neighbor_alltoall_inter: nb
+    algos_neighbor_alltoall_allcomm: nb
+    algos_ineighbor_alltoall_intra: linear
+    algos_ineighbor_alltoall_inter: linear
+    algos_ineighbor_alltoall_allcomm: linear
+    algos_neighbor_alltoallv_intra: nb
+    algos_neighbor_alltoallv_inter: nb
+    algos_neighbor_alltoallv_allcomm: nb
+    algos_ineighbor_alltoallv_intra: linear
+    algos_ineighbor_alltoallv_inter: linear
+    algos_ineighbor_alltoallv_allcomm: linear
+    algos_neighbor_alltoallw_intra: nb
+    algos_neighbor_alltoallw_inter: nb
+    algos_neighbor_alltoallw_allcomm: nb
+    algos_ineighbor_alltoallw_intra: linear
+    algos_ineighbor_alltoallw_inter: linear
+    algos_ineighbor_alltoallw_allcomm: linear
+    
+#---------------------------------------- 
+#- used in mpir_coll.h declaring functions
+#- FIXME: they are not entirly consistent with coll_impl.h
+macros:
+    algos_barrier:: intra_auto, intra_dissemination, intra_smp
+    algos_barrier:: inter_auto, inter_bcast
+    algos_barrier:: allcomm_nb
+    algos_ibarrier:: intra_recexch
+    algos_ibarrier_sched:: intra_auto, intra_recursive_doubling, intra_recexch
+    algos_ibarrier_sched:: inter_auto, inter_bcast
+
+    algos_bcast:: intra_auto, intra_binomial, intra_scatter_recursive_doubling_allgather, intra_scatter_ring_allgather, intra_smp
+    algos_bcast:: inter_auto, inter_remote_send_local_bcast
+    algos_bcast:: allcomm_nb
+    algos_ibcast:: intra_tree, intra_scatter_recexch_allgather, intra_ring
+    algos_ibcast_sched:: intra_auto, intra_binomial, intra_scatter_recursive_doubling_allgather, intra_scatter_ring_allgather, intra_smp
+    algos_ibcast_sched:: inter_auto, inter_flat
+
+    algos_gather:: intra_auto, intra_binomial
+    algos_gather:: inter_auto, inter_linear, inter_local_gather_remote_send
+    algos_gather:: allcomm_nb
+    algos_igather:: intra_tree
+    algos_igather_sched:: intra_auto, intra_binomial
+    algos_igather_sched:: inter_auto, inter_long, inter_short
+
+    algos_gatherv:: intra_auto
+    algos_gatherv:: inter_auto
+    algos_gatherv:: allcomm_linear, allcomm_nb
+    algos_igatherv::
+    algos_igatherv_sched:: inter_auto
+    algos_igatherv_sched:: allcomm_linear
+
+    algos_scatter:: intra_auto, intra_binomial
+    algos_scatter:: inter_auto, inter_linear, inter_remote_send_local_scatter
+    algos_scatter:: allcomm_nb
+    algos_iscatter:: intra_tree
+    algos_iscatter_sched:: intra_auto, intra_binomial
+    algos_iscatter_sched:: inter_auto, inter_linear, inter_remote_send_local_scatter
+
+    algos_scatterv:: intra_auto
+    algos_scatterv:: inter_auto
+    algos_scatterv:: allcomm_linear, allcomm_nb
+    algos_iscatterv:: 
+    algos_iscatterv_sched:: intra_auto
+    algos_iscatterv_sched:: inter_auto
+    algos_iscatterv_sched:: allcomm_linear
+
+    algos_allgather:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_allgather:: inter_auto, inter_local_gather_remote_bcast
+    algos_allgather:: allcomm_nb
+    algos_iallgather:: intra_gentran_brucks, intra_recexch_distance_doubling, intra_recexch_distance_halving
+    algos_iallgather_sched:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_iallgather_sched:: inter_auto, inter_local_gather_remote_bcast
+    algos_ineighbor_allgather::
+
+    algos_allgatherv:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_allgatherv:: inter_auto, inter_remote_gather_local_bcast
+    algos_allgatherv:: allcomm_nb
+    algos_iallgatherv:: intra_recexch_distance_doubling, intra_recexch_distance_halving, intra_gentran_ring
+    algos_iallgatherv_sched:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_iallgatherv_sched:: inter_auto, inter_remote_gather_local_bcast
+    algos_ineighbor_allgatherv::
+
+    algos_alltoall:: intra_auto, intra_brucks, intra_pairwise, intra_pairwise_sendrecv_replace, intra_scattered
+    algos_alltoall:: inter_auto, inter_pairwise_exchange
+    algos_alltoall:: allcomm_nb
+    algos_ialltoall::
+    algos_ialltoall_sched:: intra_auto, intra_brucks, intra_inplace, intra_pairwise, intra_permuted_sendrecv
+    algos_ialltoall_sched:: inter_auto, inter_pairwise_exchange
+    algos_ineighbor_alltoall::
+
+    algos_alltoallv:: intra_auto, intra_pairwise_sendrecv_replace, intra_scattered
+    algos_alltoallv:: inter_auto, inter_pairwise_exchange
+    algos_alltoallv:: allcomm_nb
+    algos_ialltoallv::
+    algos_ialltoallv_sched:: intra_auto, intra_blocked, intra_inplace
+    algos_ialltoallv_sched:: inter_auto, inter_pairwise_exchange
+    algos_ineighbor_alltoallv::
+
+    algos_alltoallw:: $(algos_alltoallv)
+    algos_ialltoallw:: $(algos_ialltoallv)
+    algos_ialltoallw_sched:: $(algos_ialltoallv_sched)
+    algos_ineighbor_alltoallw::
+
+    algos_reduce:: intra_auto, intra_binomial, intra_reduce_scatter_gather, intra_smp
+    algos_reduce:: inter_auto, inter_local_reduce_remote_send
+    algos_reduce:: allcomm_nb
+    algos_ireduce:: intra_tree, intra_ring
+    algos_ireduce_sched:: intra_auto, intra_binomial, intra_reduce_scatter_gather, intra_smp
+    algos_ireduce_sched:: inter_auto, inter_local_reduce_remote_send
+
+    algos_allreduce:: intra_auto, intra_recursive_doubling, intra_reduce_scatter_allgather, intra_smp
+    algos_allreduce:: inter_auto, inter_reduce_exchange_bcast
+    algos_allreduce:: allcomm_nb
+    algos_iallreduce:: intra_recexch_single_buffer, intra_recexch_multiple_buffer, intra_tree_kary, intra_tree_knomial
+    algos_iallreduce_sched:: intra_auto, intra_naive, intra_recursive_doubling, intra_reduce_scatter_allgather, intra_smp
+    algos_iallreduce_sched:: inter_auto, inter_remote_reduce_local_bcast
+
+    algos_reduce_scatter:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_reduce_scatter:: inter_auto, inter_remote_reduce_local_scatter
+    algos_reduce_scatter:: allcomm_nb
+    algos_ireduce_scatter:: intra_recexch
+    algos_ireduce_scatter_sched:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_ireduce_scatter_sched:: inter_auto, inter_remote_reduce_local_scatterv
+
+    algos_reduce_scatter_block:: $(algos_reduce_scatter)
+    algos_ireduce_scatter_block:: $(algos_ireduce_scatter)
+    algos_ireduce_scatter_block_sched:: $(algos_ireduce_scatter_sched)
+
+    algos_scan:: intra_auto, intra_recursive_doubling, intra_smp
+    algos_scan:: allcomm_nb
+    algos_iscan::
+    algos_iscan_sched:: intra_auto, intra_recursive_doubling, intra_smp
+
+    algos_exscan:: intra_auto, intra_recursive_doubling
+    algos_exscan:: allcomm_nb
+    algos_iexscan::
+    algos_iexscan_sched:: intra_auto, intra_recursive_doubling
+
+#---- Used in defining parameters ----
+macros:
+    buf_send: const void *sendbuf, int sendcount, MPI_Datatype sendtype
+    buf_recv:       void *recvbuf, int recvcount, MPI_Datatype recvtype
+    bufv_send: const void *sendbuf, const int *sendcnts, const int *sdispls, const MPI_Datatype sendtype
+    bufv_recv:       void *recvbuf, const int *recvcnts, const int *rdispls, const MPI_Datatype recvtype
+    bufw_send: const void *sendbuf, const int *sendcnts, const int *sdispls, const MPI_Datatype *sendtypes
+    bufw_recv:       void *recvbuf, const int *recvcnts, const int *rdispls, const MPI_Datatype *recvtypes
+
+    bufW_send: const void *sendbuf, const int *sendcnts, const MPI_Aint sdispls[], const MPI_Datatype *sendtypes
+    bufW_recv:       void *recvbuf, const int *recvcnts, const MPI_Aint rdispls[], const MPI_Datatype *recvtypes
+
+    buf_reduce: const void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype
+    bufv_reduce: const void *sendbuf, void *recvbuf, const int *recvcnts, MPI_Datatype datatype
+
+    args_send: sendbuf, sendcount, sendtype
+    args_recv: recvbuf, recvcount, recvtype
+    argsv_send: sendbuf, sendcnts, sdispls, sendtype
+    argsv_recv: recvbuf, recvcnts, rdispls, recvtype
+
+#---- used in mpir_coll.h defining PARAMS_XXX ---------------
+subcode: param_barrier
+subcode: param_bcast
+    $: void *buffer, int count, MPI_Datatype datatype, int root, \
+subcode: param_gather
+    $:: $(buf_send), \
+    $:: $(buf_recv), int root, \
+subcode: param_gatherv
+    $:: $(buf_send), \
+    $:: $(bufv_recv), int root, \
+subcode: param_scatter
+    $:: $(buf_send), \
+    $:: $(buf_recv), int root, \
+subcode: param_scatterv
+    $:: $(bufv_send), \
+    $:: $(buf_recv), int root, \
+subcode: param_allgather    
+    $:: $(buf_send), \
+    $:: $(buf_recv), \
+subcode: param_allgatherv
+    $:: $(buf_send), \
+    $:: $(bufv_recv), \
+subcode: param_alltoall
+    $:: $(buf_send), \
+    $:: $(buf_recv), \
+subcode: param_alltoallv
+    $:: $(bufv_send), \
+    $:: $(bufv_recv), \
+subcode: param_alltoallw
+    $(if:decl_neighbor)
+        $:: $(bufW_send), \
+        $:: $(bufW_recv), \
+    $(else)
+        $:: $(bufw_send), \
+        $:: $(bufw_recv), \
+subcode: param_reduce
+    $:: $(buf_reduce), \
+    $:: MPI_Op op, int root, \
+subcode: param_allreduce
+    $:: $(buf_reduce), MPI_Op op, \
+subcode: param_reduce_scatter
+    $:: $(bufv_reduce), MPI_Op op, \
+subcode: param_reduce_scatter_block
+    $:: $(buf_reduce), MPI_Op op, \
+subcode: param_scan
+    $:: $(buf_reduce), MPI_Op op, \
+subcode: param_exscan
+    $:: $(buf_reduce), MPI_Op op, \
+
+#---- used in tsp_algos.def --------------------------
+macros:
+    args_bcast: buffer, count, datatype, root, comm_ptr
+    args_gather: $(args_send), $(args_recv), root, comm_ptr
+    args_scatter: $(args_send), $(args_recv), root, comm_ptr
+    args_allgather: $(args_send), $(args_recv), comm_ptr
+    args_allgatherv: $(args_send), $(argsv_recv), comm_ptr
+    args_reduce: sendbuf, recvbuf, count, datatype, op, root, comm_ptr
+    args_allreduce: sendbuf, recvbuf, count, datatype, op, comm_ptr
+    args_reduce_scatter: sendbuf, recvbuf, recvcnts, datatype, op, comm_ptr
+    args_reduce_scatter_block: sendbuf, recvbuf, count, datatype, op, comm_ptr
+

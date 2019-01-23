@@ -1,0 +1,77 @@
+include: c/hash.def
+
+macros:
+    HV: hv, (unsigned char*)s_key, strlen(s_key)
+    DO_STRDUP: strpool
+
+subcode: _autoload
+    $(if:DO_STRDUP=strpool)
+        $(set:vals=int *p_val)
+    $(else)
+        $(set:vals=char **p_val)
+
+    $struct(strpool) $(strpool_member)
+    $struct(strhash) $(strhash_member), void * p_val
+    $struct(MPL_hash) $(strhash_member), $(vals)
+
+    $register_prefix(hv) struct MPL_hash *
+
+fncode: MPL_hash_new
+    $local hv
+    $allocate(1,0) hv
+    $(if:DO_STRDUP=strpool)
+        hv->n_val_size = sizeof(int)
+    $(else)
+        hv->n_val_size = sizeof(void *)
+    return hv
+
+fncode: MPL_hash_has(hv, s_key, int len): bool
+    k = f_strhash_lookup($(HV))
+    return hv->p_exist[k]
+
+fncode: MPL_hash_set(hv, s_key, s_value)
+    k = f_strhash_lookup_left($(HV))
+    $(if:DO_STRDUP=strpool)
+        hv->p_val[k] = f_addto_strpool(&hv->pool, s_value, strlen(s_value))
+    $(elif:DO_STRDUP=MPL_strdup)
+        hv->p_val[k] = MPL_strdup(s_value)
+    $(else)
+        hv->p_val[k]=s_value
+
+fncode: MPL_hash_get(hv, s_key): char *
+    k=f_strhash_lookup($(HV))
+    $if hv->p_exist[k]
+        $(if:DO_STRDUP=strpool)
+            $call get_str_pool, &hv->pool, hv->p_val[k]
+            return (char*)($(s))
+        $(else)
+            return hv->p_val[k]
+    $else
+        return NULL
+
+#---- iteration --------------------------
+subcode: MPL_hash_iter(hv)
+    p_strpool = &$(hv)->pool
+    $(set:s=p_strpool->pc_pool+$1)
+    $for 0:$(hv)->n_size
+        $if $(hv)->p_exist[$(i)]
+            $(set:key=$(s:$(hv)->p_key[$(i)]))
+            $(if:DO_STRDUP=strpool)
+                $(set:val=$(s:$(hv)->p_val[$(i)]))
+            $(else)
+                $(set:val=$(hv)->p_val[$(i)])
+            BLOCK
+
+#---- clean up --------------------------
+fncode: MPL_hash_free(hv)
+    $(if:DO_STRDUP=MPL_strdup)
+        $for 0:$(hv)->n_size
+            $if $(hv)->p_exist[$(i)]
+                free(hv->p_val[$(i)])
+    free(hv->p_key)
+    free(hv->p_exist)
+    free(hv->p_val)
+    free(hv->pool.pn_str)
+    free(hv->pool.pc_pool)
+    free(hv)
+

@@ -7,3 +7,6 @@
     * copy confdb/* to ./mpl/confdb/
 
     * sh autogen.sh
+
+# testconfig
+    ./configure --disable-fortran --disable-cxx --disable-romio --with-pm=none

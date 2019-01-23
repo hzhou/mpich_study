@@ -42,3 +42,25 @@ subcode: check_get_sockaddr
     MPL_sockaddr_to_str(&addr, s, 100)
     $print "addr: $s"
 
+#-- Test EADDRINUSE ----------------------
+page: t, basic_frame
+    module: c
+    $my struct sockaddr_storage addr
+    MPL_get_sockaddr_direct(MPL_SOCKADDR_ANY, &addr)
+
+    socket = MPL_socket()
+    n = 1
+    ret = setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n))
+    $dump(setsockopt) ret
+
+    (($(SA4)*)&addr)->sin_port = htons(3000)
+    ret = bind(socket, (struct sockaddr*)&addr, sizeof($(SA4)))
+    $dump(bind) ret
+    $if ret
+        $include errno
+        $print "%s", strerror(errno)
+    $else
+        $include unistd
+        $for i=0:10
+            $print sleep $i
+            sleep(1)

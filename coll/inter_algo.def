@@ -1,0 +1,41 @@
+#---------------------------------------- 
+fncode: MPIR_Ibcast_sched_inter_flat
+    $if root==MPI_PROC_NULL
+        return MPI_SUCCESS
+    $elif root==MPI_ROOT
+        return MPIR_Sched_send(buffer, count, datatype, 0, comm_ptr, s)
+    $else
+        $if comm_ptr->rank == 0
+            $fcall MPIR_Sched_recv(buffer, count, datatype, root, comm_ptr, s)
+        MPIR_SCHED_BARRIER(s)
+        $if comm_ptr->local_comm==NULL
+            $fcall MPII_Setup_intercomm_localcomm(comm_ptr)
+        $fcall MPIR_Ibcast_sched(buffer, count_datatype, root, comm_ptr->local_comm, s)
+
+fncode: MPIR_Bcast_inter_remote_send_local_bcast
+
+#---------------------------------------- 
+fncode: MPIR_Gather_inter_linear
+    $if root == MPI_PROC_NULL
+        return MPI_SUCCESS
+    remote_size = comm_ptr->remote_size
+    $if root == MPI_ROOT
+        $for i=0:remote_size
+            $(set:recv=(char*)recvbuf+recvcount*extent*$1)
+            $fcall MPIC_Recv($(recv:i), recvcount, recvtype, i, MPIR_GATHER_TAG, comm_ptr, &status, errflag)
+    $else
+        $fcall MPIC_Send(sendbuf, sendcount, sendtype, root, MPIR_GATHER_TAG, comm_ptr, errflag)
+fncode: MPIR_Gather_inter_local_gather_remote_send
+
+#---------------------------------------- 
+fncode: MPIR_Alltoall_inter_pairwise_exchange
+    $for i=0:max_size # max(local_size, remote_size)
+        src = $(rank:rank-i)
+        dst = $(rank:rank+i)
+        $(for:src,dst and recv,send)
+            $if $1 >= remote_size
+                $1 = MPI_PROC_NULL
+                $2addr = NULL
+            $else
+                $2addr = (char*) $2buf + $1 * $2count * $2type_extent
+        $fcall MPIC_Sendrecv(sendaddr, sendcount, sendtype, dst, MPIR_ALLTOALL_TAG, recvaddr, recvcount, recvtype, src, MPIR_ALLTOALL_TAG, comm_ptr, &status, errflag)

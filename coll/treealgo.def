@@ -1,0 +1,164 @@
+macros:
+    _p_send: const void *sendbuf, int sendcount, MPI_Datatype sendtype
+    _p_recv: void *recvbuf, int recvcount, MPI_Datatype recvtype
+    param_scatter: $(_p_send), $(_p_recv), int root, MPIR_Comm *comm
+
+#---- iscatter_tsp_tree_algos.h --------------------------- 
+fncode: MPIR_TSP_Iscatter_sched_intra_tree
+    $parameter $(param_scatter), int k, MPIR_TSP_sched_t *sched
+    $call get_logical_rank
+    $if lrank == 0
+        is_inplace = (recvbuf == MPI_IN_PLACE)
+    $call @set_tree_type
+
+    $local MPII_Treealgo_tree_t my_tree
+    $fcall MPII_Treealgo_tree_create(rank, nranks, tree_type, k, root, &my_tree)
+
+    $local int tag
+    $fcall MPIR_Sched_next_tag(comm, &tag)
+    #- unify data type ...
+    $if is_inplace # root
+        recvtype = sendtype
+        recvcount = sendcount
+    $elif lrank>0
+        sendtype = recvtype
+        sendcount = recvcount
+    $call @get_sendtype_extent
+    $call @get_recvtype_extent
+
+    # first-level sub nodes
+    num_children = my_tree.num_children
+    $call MPL_malloc, child_subtree_size, num_children
+    $call MPL_malloc, child_data_offset, num_children
+
+    #- ?
+    $if my_tree.parent !=-1
+        # recursive node
+        $my MPII_Treealgo_tree_t parents_tree
+        MPII_Treealgo_tree_create(my_tree.parent, nranks, tree_type, k, root, &parents_tree)
+    $else
+        utarray_new(parents_tree.children, &ut_int_icd, MPL_MEM_COLL)
+        parents_tree.num_children = 0
+
+    recv_size = 1
+    $(set:lrank=(utarray_eltptr(my_tree.children, $1) - root + nranks) % nranks)
+    $for i=0:num_children
+        current_child = $(lrank:i)
+        $if i<num_children-1
+            next_child = $(lrank:i+1)
+        $else
+            next_child = nranks
+            $for j=0:parents_tree.num_children
+                sibling = $(lrank:j)
+                $if sibling > lrank
+                    next_child = sibling
+                    break
+        child_subtree_size[i] = next_child - current_child
+    MPII_Treealgo_tree_free(&parents_tree)
+    $(set:count = lrank==0?sendcount,recvcount)
+    recv_size *= $(count)
+    offset = $(count)
+
+    num_send_dependencies = 0
+    $for i=0:num_children
+        child_data_offset[i] = offset
+        offset += (child_subtree_size[i] * ($(count))
+    $if root!=0 && lrank == 0
+        # @reorganize_sendbuf_in_tmpbuf
+        tmp_buf = MPIR_TSP_sched_malloc(recv_size * senttype_exten, sched)
+        dtcopy_id[0] = MPIR_TSP_sched_localcopy(...)
+        dtcopy_id[1] = MPIR_TSP_sched_localcopy(...)
+        num_send_dependencies = 2
+    $elif root==0 && lrank == 0
+        temp_buf = (void*)sendbuf
+        num_send_dependencies = 0
+    $elif num_children>0 && lrank>0
+        temp_buf = MPIR_TSP_sched_malloc(recv_size * recvtype_extent, sched)
+        num_send_dependencies = 1
+    $else
+        temp_buf = (void*)recvbuf
+        num_send_dependencies = 0
+
+    $call @receive_from_parent
+    $call @send_data_to_children
+    MPII_Treealgo_tree_free(&my_tree)
+
+fncode: MPIR_TSP_Iscatter_intra_tree
+    $allocate sched
+    MPIR_TSP_sched_create(sched)
+    $fcall MPIR_TSP_Iscatter_sched_intra_tree(...)
+    $fcall MPIR_TSP_sched_start(sched, comm, req)
+
+    # ---------------------
+    subcode: get_logical_rank
+        nranks = MPIR_Comm_size(comm)
+        rank = MPIR_Comm_rank(comm)
+        $call get_lrank
+
+#---------------------------------------- 
+macros:
+    rank: ($1 + nranks) % nranks
+subcode: get_lrank
+    lrank = $(rank:rank-root)
+
+#---- treealgo.c --------------------------- 
+fncode: MPII_Treealgo_init
+    return MPI_SUCCESS
+fncode: MPII_Treealgo_comm_init
+    return MPI_SUCCESS
+fncode: MPII_Treealgo_comm_cleanup
+    return MPI_SUCCESS
+
+fncode: MPII_Treealgo_tree_create
+    $parameter $(param_create)
+    $switch tree_type
+        $(for:a in kary, knomial_1, knomial_2)
+            $of MPIR_TREE_TYPE_$(a:uc)
+                $fcall MPII_Treeutil_tree_$(a)_init(rank, nranks, k, root, ct)
+        $of others
+            # error
+
+fncode: MPII_Treealgo_tree_free(ct)
+    utarray_free(ct->children)
+
+#---- treeutil.c --------------------------- 
+fncode: tree_add_child(MPII_Treealgo_tree_t * t, int rank)
+    utarray_push_back(t->children, &rank, MPL_MEM_COLL)
+    t->num_children++
+    return MPI_SUCCESS
+
+macros:
+    _p_rank: int rank, int nranks
+    _p_k_tree: int k, int root, MPII_Treealgo_tree_t * ct
+    param_create: $(_p_rank), int tree_type, $(_p_k_tree)
+    param_init: $(_p_rank), $(_p_k_tree)
+
+#- k-ary tree: each node has <=k children
+fncode: MPII_Treeutil_tree_kary_init
+    $parameter $(param_init)
+    ct->rank = rank
+    ct->nranks = nranks
+    ct->parent = -1
+    utarray_new(ct->children, &ut_int_icd, MPL_MEM_COLL)
+    ct->num_children = 0
+
+    $if nranks>0
+        $my int lrank
+        $call get_lrank
+        $if lrank == 0 # root
+            ct->parent = -1
+        $else
+            ct->parent = ((lrank-1) / k + root ) % nranks
+        $for i=1 to k
+            n = lrank * k + i
+            $if n>=nranks
+                break
+            $fcall tree_add_child(ct, (i+root)%nranks)
+    return mpi_errno
+
+fncode: MPII_Treeutil_tree_knomial_1_init
+    $parameter $(param_init)
+
+
+fncode: MPII_Treeutil_tree_knomial_2_init
+    $parameter $(param_init)
