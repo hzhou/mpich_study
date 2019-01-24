@@ -35,5 +35,41 @@ subcode: coll_frame
         $my unit: MPI_Aint
         MPIR_Dataype_get_size_macro(sendtype, unit)
         MPIR_SCHED_CHKPMEM_MALLOC(tmp_buf, void*, $(N)*unit, mpi_errno, "tmp_buf", MPL_MEM_BUFFER)
-        $(export:tmp=tmp_buf, $1*unit, MPI_BYTE)
+        $(export:tmp=tmp_buf+$1*unit, $2*unit, MPI_BYTE)
+
+    subcode: get_recv_size
+        $local MPI_Aint recvtype_extent
+        MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent)
+        $(export:recv=(char*)recvbuf+$1*recvcount*recvtype_extent, recvcount, recvtype)
+
+#---------------------------------------- 
+subcode: gather_intra_frame
+    &call gather_frame
+        &call intra_frame
+            BLOCK
+subcode: allgather_intra_frame
+    &call allgather_frame
+        &call intra_frame
+            BLOCK
+#---------------------------------------- 
+subcode: gather_frame
+    $call gather_trivial
+    $if rank == root
+        $call get_recv_size
+    BLOCK
+
+subcode: allgather_frame
+    $call allgather_trivial
+    $call get_recv_size
+    BLOCK
+
+    macros:
+        tag: MPIR_ALLGATHER_TAG
+        rank: ($1+comm_size)%comm_size
+
+    subcode: allgather_trivial
+        $if sendcount==0 && sendbuf != MPI_IN_PLACE
+            return MPI_SUCCESS
+        $if recvcount==0
+            return MPI_SUCCESS
 

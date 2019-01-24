@@ -1,4 +1,3 @@
-#-- allgather_intra_ring.c
 fncode: MPIR_Allgather_intra_ring(PARAMS_ALLGATHER, MPIR_Errflag_t * errflag)
     &call allgather_intra_frame
         $if sendbuf!=MPI_IN_PLACE
@@ -16,30 +15,25 @@ fncode: MPIR_Allgather_intra_brucks
         $call init_tmp_buf, sendcount*comm_size
         $if sendbuf!= MPI_IN_PLACE
             $fcall MPIR_Localcopy($(send), $(tmp:0))
+        $else
+            $fcall MPIR_Localcopy($(recv:rank), $(tmp:0))
 
-#---------------------------------------- 
-subcode: allgather_intra_frame
-    &call allgather_frame
-        &call intra_frame
-            BLOCK
+        n = 1
+        $while n<= comm_size/2; n*=2
+            i_s = $(rank:rank+n)
+            i_r = $(rank:rank-n)
+            $(export:tmp=tmp_buf+$1*unit, $2*unit, MPI_BYTE)
+            $call send_recv, $(tmp:0,n), i_s, $(tmp:n,n), i_r
 
-subcode: allgather_frame
-    $call allgather_trivial
-    $call get_recv_size
-    BLOCK
+        $if comm_size>n # not power of 2
+            i_s = $(rank:rank+n)
+            i_r = $(rank:rank-n)
+            rem = comm_size-n
+            $call send_recv, $(tmp:0,rem),i_s, $(tmp:n:rem), i_r
 
-    macros:
-        tag: MPIR_ALLGATHER_TAG
-        rank: ($1+comm_size)%comm_size
-
-    subcode: allgather_trivial
-        $if sendcount==0 && sendbuf != MPI_IN_PLACE
-            return MPI_SUCCESS
-        $if recvcount==0
-            return MPI_SUCCESS
-
-    subcode: get_recv_size
-        $local MPI_Aint recvtype_extent
-        MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent)
-        $(export:recv=(char*)recvbuf+$1*recvcount*recvtype_extent, recvcount, recvtype)
+        $call @rotate_down
+    subcode: rotate_down
+        n = comm_size - rank
+        $fcall MPIR_Localcopy($(tmp:0:n), $(recv:rank))
+        $fcall MPIR_Localcopy($(tmp:n:rank), $(recv:0))
 
