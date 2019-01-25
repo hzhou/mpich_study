@@ -1,0 +1,57 @@
+page: t
+    module: perl
+    # patch: FCNAME
+    patch: FCNAME_defs
+
+    my $root = "$ENV{HOME}/work/mpich-github"
+    chdir $root or die
+
+    $call grep_$(patch)
+
+    $foreach $f in @files
+        $print patching $f... -
+        my $cnt = patch($f)
+        $print $cnt lines changed
+
+fncode: patch($f)
+    $global $idx=0
+    $idx++
+    $(set:tmp=/tmp/_$idx.tmp)
+    system "mv $f $(tmp)"
+    my $cnt = 0
+    &call open_w, $f
+        &call open_r, $(tmp)
+            $call patch_$(patch)
+            print Out $_
+    system "rm $(tmp)"
+    return $cnt
+
+#---------------------------------------- 
+subcode: grep_FCNAME
+    my $grep_cmd="find . -name '*.[ch]' |xargs grep FCNAME |grep -v ':#'"
+    my %files
+    &call open_r, $grep_cmd |
+        $if /^\.\/(src\S*):/
+            $files{$1}++
+
+    my @files = sort keys %files
+
+subcode: patch_FCNAME
+    $if /FCNAME/ && !/#(define|undef)/
+        s/FCNAME/__func__/g
+        $cnt++
+
+#---------------------------------------- 
+subcode: grep_FCNAME_defs
+    my $grep_cmd="find . -name '*.[ch]' |xargs grep -l 'FCNAME\\|FUNCNAME'"
+    my @files
+    &call open_r, $grep_cmd |
+        chomp
+        push @files, $_
+    push @files, "maint/extractcvars.in"
+    push @files, "src/binding/fortran/mpif_h/buildiface"
+
+subcode: patch_FCNAME_defs
+    $if /^#(define|undef)\s+(FCNAME|FUNCNAME)/
+        $cnt++
+        next
