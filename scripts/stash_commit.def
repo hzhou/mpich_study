@@ -1,0 +1,35 @@
+page: stash_commit
+    module: perl
+
+    #-- USELESS
+
+    my $root = "$ENV{HOME}/work/mpich-github"
+    my $commit = "00da28468ad80e0ce127b66735655f1f7ce1d565"
+    my $branch = "1901_refactor_fcname"
+
+    chdir $root or die
+    &call with_tmp_dir
+        system "git checkout $commit"
+        $call @get_files
+        system "git checkout $branch"
+        $call @copy_files
+
+    subcode: get_files
+        my @files 
+        &call open_r, git show --pretty='' --name-only $commit |
+            chomp
+            push @files, $_
+
+        $foreach $i, $f in @files
+            # $print file $i: [$f]
+            system "cp -v $f $tmp/$i"
+
+    subcode: copy_files
+        $foreach $i, $f in @files
+            system "cp -v $tmp/$i $f"
+
+    subcode: with_tmp_dir
+        my $tmp = "/tmp/stash_commit"
+        mkdir $tmp or die
+        BLOCK
+        system "rm -rv $tmp"

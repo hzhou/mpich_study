@@ -1,0 +1,9 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: BEGIN_FUNC
+
+subcode: grep_BEGIN_FUNC
+    $call grep_l, 'BEGIN_FUNC'
+
+subcode: filter_lines_BEGIN_FUNC

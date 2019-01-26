@@ -1,0 +1,48 @@
+subcode: patch_frame
+    my $root = "$ENV{HOME}/work/mpich-github"
+    chdir $root or die
+
+    $call grep_$(patch)
+
+    $foreach $f in @files
+        $print patching $f... -
+        my $cnt = patch($f)
+        $print $cnt changes
+
+fncode: patch($f)
+    $call get_file_lines, $f
+    my $cnt = 0
+
+    my $i=0
+    my $n_lines = @lines
+    $while $i<$n_lines; $i++
+        $(set:l=$lines[$i])
+        $(set:L=$lines[$i+$1])
+        $call filter_lines_$(patch)
+
+    $if $cnt>0
+        &call open_w, $f
+            $foreach $l in @lines
+                $if $l ne "-DELETE"
+                    print Out $l
+    return $cnt
+
+subcode: delete(l)
+    $(l) = "-DELETE"
+
+#---------------------------------------- 
+subcode: grep_cmd(@cmd)
+    my $grep_cmd="find . -name '*.[ch]' |xargs $(cmd) "
+    my %files
+    &call open_r, $grep_cmd |
+        $if /^\.\/(src\S*):/
+            $files{$1}++
+
+    my @files = sort keys %files
+
+subcode: grep_l(@pat)
+    my $grep_cmd="find . -name '*.[ch]' |xargs grep -l $(pat)"
+    my @files
+    &call open_r, $grep_cmd |
+        chomp
+        push @files, $_

@@ -1,0 +1,102 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    # patch: SCHED_BARRIER
+    patch: ERRPOP
+
+#---------------------------------------- 
+subcode: grep_SCHED_BARRIER
+    $call grep_l, 'MPIR_SCHED_BARRIER.*;'
+
+subcode: filter_lines_SCHED_BARRIER
+    $if $(l)=~/MPIR_SCHED_BARRIER.*;/
+        $cnt++
+        $(l) =~s/MPIR_SCHED_BARRIER\((.*)\);/MPIR_CALL(MPIR_Sched_barrier($1));/
+
+#---------------------------------------- 
+subcode: grep_ERRPOP
+    $(if:1)
+        $call grep_l, 'MPIR_ERR_POP\\>'
+    $(else)
+        # my @files=("src/mpid/ch4/src/ch4_init.h")
+        my @files=("src/mpid/ch3/src/mpid_rma.c")
+        # my @files=("src/mpi/coll/reduce_scatter/reduce_scatter.c")
+
+subcode: filter_lines_ERRPOP
+    $if $(l)=~/^(\s*)mpi_errno\s*=\s*(.*)/ -> $sp, $t
+        $call check_call
+
+        $(set:ERR_POP=MPIR_ERR_POP\(\s*mpi_errno\s*\))
+        $if $type
+            $call check_ERR_POP
+
+        $if $(L:1) ne "-DELETE"
+            $call debug_other
+
+    subcode: check_call
+        my $i0 = $i
+        my ($type, $fncall)
+        $if $t=~/^$/ and $(L:1)=~/^\s*(\w+.*)/
+            $type = 10
+            $t = $1
+            $i++
+            $i0++
+        # -----------------------------
+        $(set:cmt=(\s*\/\*.*\*\/)?)
+        $if $t=~/^(\w+[^\s(]*\s*\(.*\))\s*;\s*$/
+            $type += 1
+            $fncall = $1
+        $elif $t=~/^(\w+[^\s(]*\s*\(.*[,\-\+]$(cmt))\s*$/
+            $type += 2
+            $fncall = $1
+            $while $i<$n_lines and $(l)!~/\)\s*;/
+                $i++
+        my $i1 = $i
+        # $print type:$type, [$fncall], $i0-$i1
+
+    subcode: debug_other
+        $for $j=$i0:$i+8
+            $if $lines[$j]=~/$(ERR_POP)/
+                $print \n==========
+                $for $j2 = $i0-1:$j+1
+                    $print $lines[$j2] -
+                last
+
+    subcode: check_ERR_POP
+        $call @skip_blank_line
+        $(set:c1=mpi_errno)
+        $(set:c2=mpi_errno != MPI_SUCCESS)
+        $(set:c3=MPI_SUCCESS != mpi_errno)
+        $if $(L:1)=~/^(\s*)if\s*\(($(c1)|$(c2)|$(c3))\)/
+            $if length($1)>=length($sp)
+                $call check_errpop
+        subcode: check_errpop
+            $if $(L:2)=~/^\s*$(ERR_POP)/
+                $if $(L:1)=~/\s*{\s*$/ && $(L:3)=~/^\s*}\s*$/
+                    $map delete, $(L:1), $(L:2), $(L:3)
+                $else
+                    $map delete, $(L:1), $(L:2)
+                $call set_CALL
+            $elif $(L:1)=~/^\s*if\s*\(.*\)\s*(\{ )?$(ERR_POP);( \})?\s*$/
+                $call delete, $(L:1)
+                $call set_CALL
+
+    subcode: set_CALL
+        $cnt++
+        $if $type>10
+            $type-=10
+            $call delete, $lines[$i0-1] 
+        # ---------
+        $if $type==1
+            $lines[$i0] = $sp."MPIR_CALL($fncall);\n"
+        $elif $type==2
+            $lines[$i0] = $sp."MPIR_CALL($fncall\n"
+            $lines[$i1] =~ s/;/\);/ 
+        $if $i>$i1
+            $for $j=$i1+1:$i+1
+                $call delete, $lines[$j]
+
+    subcode: skip_blank_line
+        $if $(L:1)=~/^\s*$/
+            $i++
+
