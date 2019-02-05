@@ -19,18 +19,21 @@ macros:
 page: mymake
     module: perl
 
+    my $pwd=`pwd`
+    chomp $pwd
     $call parse_args
     $call set_mymake
-    my @extra_make_rules
 
     $(set:errhan=src/mpi/errhan/$1)
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
     $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
-    $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
+    $if !-f "src/include/mpir_cvars.h"
+        system "perl $mymake\_cvars.pl"
+    # $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
     # $call push_autogen_rule, logs, src/include/mpiallstates.h
 
     push @extra_make_rules, "src/glue/romio/all_romio_symbols.c:"
-    push @extra_make_rules, "\t(cd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
+    push @extra_make_rules, "\t(cd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in)"
 
     $call make_hwloc
     $call compile_mpl
@@ -40,12 +43,19 @@ page: mymake
     $call compile_mpich
 
     subcode: set_mymake
-        $use File::Basename
-        my $mymake=dirname(__FILE__)."/mymake"
+        my $mymake
+        $if $0=~/^(\/.*)\//
+            $mymake = $1
+        $elif $0=~/^(.*)\//
+            $mymake .= "$pwd/$1"
+        $mymake .="/mymake"
+
+        $(for:errmsg,cvars,logs,hydra)
+            push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl srcdir=$srcdir modules=$moddir"
 
     subcode: push_autogen_rule(name, file)
         push @extra_make_rules, "$(file):"
-        push @extra_make_rules, "\tperl $mymake\_$(name).pl"
+        push @extra_make_rules, "\t\x24(DO_$(name))"
         push @extra_make_rules, ""
 
 include: macros_mymake/errmsgs.def

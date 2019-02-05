@@ -4,11 +4,6 @@ subcode: extractcvars
     &call each_ch_file
         $call get_cvars, $f
 
-    $(if:0)
-        push @cvars, "MPIR_CVAR_CH4_OFI_ENABLE_DATA"
-        $cvars{MPIR_CVAR_CH4_OFI_ENABLE_DATA}={class=>"device", type=>"int", default=>-1}
-    # my @cvars = sort @cvars
-
     $call dump_cvars_h
     $call dump_cvars_c
 

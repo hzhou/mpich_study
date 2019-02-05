@@ -10,23 +10,45 @@ subcode: make_hwloc
     push @extra_make_rules, ""
 
 #---------------------------------------- 
+subcode: prepare_mpl
+    $if !-f "src/mpl/include/mplconfig.h"
+        &call compile_subdir, src/mpl
+            system "rsync -r ../../confdb/ confdb/" 
+            system "autoreconf -ivf"
+            system "./configure --disable-versioning --enable-embedded"
+
 subcode: compile_mpl
     my @t
     push @t, "cd src/mpl"
-    push @t, "rsync -r ../../confdb/ confdb/"
-    push @t, "autoreconf -ivf"
-    push @t, "./configure --disable-versioning --enable-embedded"
+    $(if:0)
+        # need run first because of "mplconfig.h"
+        push @t, "rsync -r ../../confdb/ confdb/"
+        push @t, "autoreconf -ivf"
+        push @t, "./configure --disable-versioning --enable-embedded"
+    $(else)
+        $call prepare_mpl
     push @t, "\x24(MAKE)"
 
     push @extra_make_rules, "$(Lmpl):"
     push @extra_make_rules, "\t(". join(' && ', @t). ")"
     push @extra_make_rules, ""
 
+#---------------------------------------- 
+subcode: prepare_opa
+    $if !-f "src/openpa/src/opa_config.h"
+        &call compile_subdir, src/openpa
+            system "autoreconf -ivf"
+            system "./configure --disable-versioning --enable-embedded"
+
 subcode: compile_opa
     my @t
     push @t, "cd src/openpa"
-    push @t, "autoreconf -ivf"
-    push @t, "./configure --disable-versioning --enable-embedded"
+    $(if:0)
+        # need run first because of "opa_config.h"
+        push @t, "autoreconf -ivf"
+        push @t, "./configure --disable-versioning --enable-embedded"
+    $(else)
+        $call prepare_opa
     push @t, "\x24(MAKE)"
 
     push @extra_make_rules, "$(Lopa):"
@@ -52,13 +74,15 @@ subcode: prepare_hydra
             $t.=" -I$(Impl) -I$(Ihwloc)"
 
     subcode: set_libs_custom
-        $libs=~s/\s*\S*\/libmpl.la//g
-        $libs.=" $(Lmpl) $(Lhwloc)"
+        $t=~s/\s*\S*\/libmpl.la\s*//g
+        $t=~s/-lhydra/libhydra.la/g
+        $t=~s/-lpm/libpm.la/g
+        $t.=" $(Lmpl) $(Lhwloc)"
 
 subcode: compile_hydra
     push @extra_make_rules, ".PHONY: hydra"
     push @extra_make_rules, "hydra:"
-    push @extra_make_rules, "\t(cd src/pm/hydra && perl $mymake\_hydra.pl && \x24(MAKE) -f custom.make)"
+    push @extra_make_rules, "\t(cd src/pm/hydra && \x24(DO_hydra) && \x24(MAKE) -f custom.make)"
     push @extra_make_rules, ""
 
 #---------------------------------------- 

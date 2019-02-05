@@ -84,6 +84,7 @@ subcode: dump_custom_make
     $call dump_rules, programs
 
     $print "\x23--------------------\n"
+    $global @extra_make_rules
     $foreach $l in @extra_make_rules
         $print $l
     $print "\x23--------------------\n"
@@ -92,6 +93,10 @@ subcode: dump_custom_make
     $print
     $print "%.lo: %.c"
     $print "\t\x24(LTCC) -c -o \$\@ \$<"
+    $print
+    $print ".PHONY: clean"
+    $print "clean:"
+    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -v)"
     $print
 
     # ----------------------------
