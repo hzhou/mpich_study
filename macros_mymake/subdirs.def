@@ -58,7 +58,8 @@ subcode: prepare_hydra
 subcode: compile_hydra
     push @extra_make_rules, ".PHONY: hydra"
     push @extra_make_rules, "hydra:"
-    push @extra_make_rules, "\t(cd src/pm/hydra && perl $mymake\_hydra.pl && $(MAKE) -f custom.make)"
+    push @extra_make_rules, "\t(cd src/pm/hydra && perl $mymake\_hydra.pl && \x24(MAKE) -f custom.make)"
+    push @extra_make_rules, ""
 
 #---------------------------------------- 
 subcode: compile_subdir(dir)
@@ -73,10 +74,6 @@ subcode: compile_subdir(dir)
         system "autoreconf -ivf"
         system "./configure --disable-versioning --enable-embedded"
 
-    subcode: dump_rule
-        # build rule: 
-        #     src/mpl/libmpl.la: ${MPL_OBJ_LIST}
-        #              cd src/mpl && $(MAKE)
 #---------------------------------------- 
 subcode: subst_hwloc(dir)
     &call open_W, confdb/subst_hwloc.m4

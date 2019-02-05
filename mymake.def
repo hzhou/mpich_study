@@ -14,7 +14,7 @@ macros:
     Ihwloc: $moddir/hwloc/include
     Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
 
-    do_make: 16
+    # do_make: 16
 
 page: mymake
     module: perl
@@ -22,24 +22,31 @@ page: mymake
     $call parse_args
     $call set_mymake
     my @extra_make_rules
-    $(if:0)
-        # $call make_hwloc
-        #"src/mpi/errhan/defmsg.h"
-        $call defmsg_h
-        #"src/util/cvar/mpir_cvars.c"
-        $call extractcvars
-        #"src/include/mpiallstates.h"
-        $call logging_states
 
-        $call compile_mpl
-        $call compile_opa
-        $call compile_hydra
-    $(if:1)
-        $call compile_mpich
+    $(set:errhan=src/mpi/errhan/$1)
+    push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
+    $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
+    $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
+    # $call push_autogen_rule, logs, src/include/mpiallstates.h
+
+    push @extra_make_rules, "src/glue/romio/all_romio_symbols.c:"
+    push @extra_make_rules, "\t(cd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
+
+    $call make_hwloc
+    $call compile_mpl
+    $call compile_opa
+    $call compile_hydra
+
+    $call compile_mpich
 
     subcode: set_mymake
         $use File::Basename
         my $mymake=dirname(__FILE__)."/mymake"
+
+    subcode: push_autogen_rule(name, file)
+        push @extra_make_rules, "$(file):"
+        push @extra_make_rules, "\tperl $mymake\_$(name).pl"
+        push @extra_make_rules, ""
 
 include: macros_mymake/errmsgs.def
 page: mymake_errmsg

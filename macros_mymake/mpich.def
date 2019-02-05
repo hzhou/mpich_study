@@ -1,15 +1,16 @@
 subcode: compile_mpich
-    $(if:0)
+    $if !-f "subsys_include.m4"
         system "perl maint/gen_subcfg_m4"
-        $call romio_glue_code
+    $if !-f "configure"
         &call modify_configure_ac
             system "autoreconf -ivf"
+    $if !-f "Makefile"
         system "./configure --disable-cxx --disable-fortran --disable-romio"
     $call parse_Makefile, Makefile
     &call open_W, custom.make
         $call dump_custom_make
     $(if:do_make)
-        # system "make -f custom.make -j$(do_make)"
+        system "make -f custom.make -j$(do_make)"
 
     subcode: dump_variable_custom
         $(if:key=AM_CPPFLAGS)
