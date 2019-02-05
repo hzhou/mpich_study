@@ -152,9 +152,8 @@ subcode: get_err_usage(f)
         $if /(MPI[OUR]_E\w+)\s*(\(.*)$/ -> $name, $args
             $if !$KnownErrRoutines{$name}
                 next
-            $use Regexp::Common qw(balanced)
             $while 1
-                $if $args=~/^($RE{balanced}{-parens=>'()'})/
+                $if $args=~/^$(RE_PAREN)/
                     $args=substr($1, 1, -1)
                     last
                 $args=~s/\\$// # macros
@@ -188,7 +187,7 @@ fncode: arg_split($t)
         my $i=@strs
         push @strs, $2
         $t=$1."str:$i".$3
-    $t=~s/$RE{balanced}{-parens=>'()'}/--/g
+    $t=~s/$(RE_PAREN)/--/g
     my @t = split /\s*,\s*/, $t
     $foreach $t in @t
         $if $t =~/^str:(\d+)/

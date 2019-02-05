@@ -1,18 +1,45 @@
-subcode: compile_mpl
-    &call compile_subdir, src/mpl
-        $call sync_confdb
-        $call config_embed
+subcode: make_hwloc
+    my @t
+    push @t, "cd $moddir/hwloc"
+    push @t, "sh autogen.sh"
+    push @t, "./configure --enable-embedded-mode --enable-visibility"
+    push @t, "\x24(MAKE)"
 
-subcode: compile_opa
-    &call compile_subdir, src/openpa
-        $call config_embed
+    push @extra_make_rules, "$(Lhwloc):"
+    push @extra_make_rules, "\t(". join(' && ', @t). ")"
+    push @extra_make_rules, ""
 
 #---------------------------------------- 
-subcode: compile_hydra
+subcode: compile_mpl
+    my @t
+    push @t, "cd src/mpl"
+    push @t, "rsync -r ../../confdb/ confdb/"
+    push @t, "autoreconf -ivf"
+    push @t, "./configure --disable-versioning --enable-embedded"
+    push @t, "\x24(MAKE)"
+
+    push @extra_make_rules, "$(Lmpl):"
+    push @extra_make_rules, "\t(". join(' && ', @t). ")"
+    push @extra_make_rules, ""
+
+subcode: compile_opa
+    my @t
+    push @t, "cd src/openpa"
+    push @t, "autoreconf -ivf"
+    push @t, "./configure --disable-versioning --enable-embedded"
+    push @t, "\x24(MAKE)"
+
+    push @extra_make_rules, "$(Lopa):"
+    push @extra_make_rules, "\t(". join(' && ', @t). ")"
+    push @extra_make_rules, ""
+
+#---------------------------------------- 
+subcode: prepare_hydra
     &call compile_subdir, src/pm/hydra
         $(if:1)
             $call sync_confdb
             $call subst_hwloc, tools/topo/hwloc
+            system "cp ../../../maint/version.m4 ."
             system "autoreconf -ivf"
             system "./configure"
         $call parse_Makefile, Makefile
@@ -28,8 +55,14 @@ subcode: compile_hydra
         $libs=~s/\s*\S*\/libmpl.la//g
         $libs.=" $(Lmpl) $(Lhwloc)"
 
+subcode: compile_hydra
+    push @extra_make_rules, ".PHONY: hydra"
+    push @extra_make_rules, "hydra:"
+    push @extra_make_rules, "\t(cd src/pm/hydra && perl $mymake\_hydra.pl && $(MAKE) -f custom.make)"
+
 #---------------------------------------- 
 subcode: compile_subdir(dir)
+    $print =========== $(dir) ============
     chdir "$(dir)" or die "can't chdir $(dir)\n"
     BLOCK
     chdir $srcdir

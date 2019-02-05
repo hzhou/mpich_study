@@ -1,9 +1,6 @@
 subcode: compile_mpich
     $(if:0)
         system "perl maint/gen_subcfg_m4"
-        # $call gen_subsys_include
-        # $call subst_hwloc, src
-        # $call fortran_buildiface
         $call romio_glue_code
         &call modify_configure_ac
             system "autoreconf -ivf"
@@ -11,6 +8,9 @@ subcode: compile_mpich
     $call parse_Makefile, Makefile
     &call open_W, custom.make
         $call dump_custom_make
+    $(if:do_make)
+        # system "make -f custom.make -j$(do_make)"
+
     subcode: dump_variable_custom
         $(if:key=AM_CPPFLAGS)
             $t=~s/\@HWLOC_\S+\@\s*//
@@ -19,7 +19,11 @@ subcode: compile_mpich
             $t.=" -I$(Impl) -I$(Iopa) -I$(Ihwloc)"
         $(elif:key=AM_CFLAGS)
             $t=~s/\@HWLOC_\S+\@\s*//
+
     subcode: set_libs_custom
+        $(if:which=ltlibs)
+            $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
+            $t.=" $(Lmpl) $(Lopa) $(Lhwloc)"
 
 #-------------------------
 subcode: fortran_buildiface
@@ -47,6 +51,10 @@ subcode: modify_configure_ac
     &call modify, src/Makefile.mk
         $if $l=~/^include .*\/binding\//
             next
+    &call modify, Makefile.am
+        $if $l=~/ACLOCAL_AMFLAGS/
+            $l ="ACLOCAL_AMFLAGS = -I confdb"
+
     $foreach $m in @mod_list
         # $f, $f_.orig, $f_.mod
         system "cp $m->[0] $m->[1]"

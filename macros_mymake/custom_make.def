@@ -83,6 +83,10 @@ subcode: dump_custom_make
     $call dump_rules, ltlibs
     $call dump_rules, programs
 
+    $print "\x23--------------------\n"
+    $foreach $l in @extra_make_rules
+        $print $l
+    $print "\x23--------------------\n"
     $print "%.o: %.c"
     $print "\t\x24(COMPILE) -c -o \$\@ \$<"
     $print
@@ -98,8 +102,8 @@ subcode: dump_custom_make
 
     subcode: dump_object(key, tlist)
         $print "$(key) = \\"
-        my $last_item = pop @$(tlist)
-        $foreach $t in @$(tlist)
+        my $last_item = pop $(tlist)
+        $foreach $t in $(tlist)
             $print "    $t \\"
         $print "    $last_item"
 
@@ -121,33 +125,44 @@ subcode: dump_custom_make
             $a=~s/[\.\/]/_/g
 
             my $cmd = "\x24(LTLD)"
-            $call set_libs
+            my $dep = ""
+            $call set_objects
+            my $libs="\x24(LIBS)"
+            $call set_add
             $call set_ldflags
-
-            my $o= "${a}_OBJECTS"
-            my $tlist = get_list($o)
-            $foreach $t in @$tlist
-                $t=~s/[^\/]+-//
-
-            $if @$tlist>1
-                $call dump_object, $o, $tlist
-                $print $p: \x24($o)
-                $print \t$cmd -o \$\@ \x24($o) $libs
-            $else
-                $print $p: $tlist->[0]
-                $print \t$cmd -o \$\@ $tlist->[0] $libs
-                $if @$tlist==0
-                    warn "EMPTY: $o!\n"
+            $print $p: custom.make $dep
+            $print \t$cmd -o \$\@ $dep $libs
             $print
 
-        subcode: set_libs
-            my $libs
+        subcode: set_objects
+            my $o= "${a}_OBJECTS"
+            my $tlist = get_list($o)
+            my @tlist = sort @$tlist
+            $foreach $t in @tlist
+                $t=~s/[^\/]+-//
+
+            $call attach_to_dep, $o, tlist
+
+        subcode: attach_to_dep(o, tlist)
+            $if @$(tlist)<4 && length(join(' ', @$(tlist)))<40
+                $dep .= " ". join(' ', @$(tlist))
+            $else
+                $call dump_object, $(o), @$(tlist)
+                $dep .= " \x24($(o))"
+
+        subcode: set_add
             $(if:which=programs)
-                $if $objects{"${a}_LDADD"}
-                    $libs = get_object("${a}_LDADD")." \x24(LIBS)"
-                $else
-                    $libs = "\x24(LIBS)"
+                my $add = $a."_LDADD"
+            $(elif:which=ltlibs)
+                my $add = $a."_LIBADD"
+
+            $if $objects{$add}
+                my $t = get_object($add)
                 $call @set_libs_custom
+                $t=~s/^\s+//
+                my @tlist = split /\s+/, $t
+                $call attach_to_dep, $add, tlist
+
         subcode: set_ldflags
             $(if:which=programs)
                 $(for:CFLAGS,LDFLAGS)

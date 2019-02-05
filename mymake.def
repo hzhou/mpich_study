@@ -3,7 +3,8 @@ include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
 
 macros:
-    SRCDIR: $ENV{HOME}/work/mpich-compile
+    # SRCDIR: $ENV{HOME}/work/mpich-compile
+    SRCDIR: $ENV{HOME}/work/tests/mpich
     MODULES: $ENV{HOME}/work/modules
     
     Impl: $srcdir/src/mpl/include
@@ -13,12 +14,16 @@ macros:
     Ihwloc: $moddir/hwloc/include
     Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
 
+    do_make: 16
+
 page: mymake
     module: perl
 
     $call parse_args
-    $call extractcvars
+    $call set_mymake
+    my @extra_make_rules
     $(if:0)
+        # $call make_hwloc
         #"src/mpi/errhan/defmsg.h"
         $call defmsg_h
         #"src/util/cvar/mpir_cvars.c"
@@ -29,8 +34,12 @@ page: mymake
         $call compile_mpl
         $call compile_opa
         $call compile_hydra
-    $(if:0)
+    $(if:1)
         $call compile_mpich
+
+    subcode: set_mymake
+        $use File::Basename
+        my $mymake=dirname(__FILE__)."/mymake"
 
 include: macros_mymake/errmsgs.def
 page: mymake_errmsg
@@ -52,6 +61,12 @@ page: mymake_logs
 
     $call parse_args
     $call logging_states
+
+page: mymake_hydra
+    module: perl
+
+    $call parse_args
+    $call prepare_hydra
 
 #---------------------------------------- 
 subcode: parse_args
