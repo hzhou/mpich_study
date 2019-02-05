@@ -1,0 +1,100 @@
+include: macros_mymake/custom_make.def
+include: macros_mymake/subdirs.def
+include: macros_mymake/mpich.def
+
+macros:
+    SRCDIR: $ENV{HOME}/work/mpich-compile
+    MODULES: $ENV{HOME}/work/modules
+    
+    Impl: $srcdir/src/mpl/include
+    Lmpl: $srcdir/src/mpl/libmpl.la
+    Iopa: $srcdir/src/openpa/src
+    Lopa: $srcdir/src/openpa/src/libopa.la
+    Ihwloc: $moddir/hwloc/include
+    Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
+
+page: mymake
+    module: perl
+
+    $call parse_args
+    $call extractcvars
+    $(if:0)
+        #"src/mpi/errhan/defmsg.h"
+        $call defmsg_h
+        #"src/util/cvar/mpir_cvars.c"
+        $call extractcvars
+        #"src/include/mpiallstates.h"
+        $call logging_states
+
+        $call compile_mpl
+        $call compile_opa
+        $call compile_hydra
+    $(if:0)
+        $call compile_mpich
+
+include: macros_mymake/errmsgs.def
+page: mymake_errmsg
+    module: perl
+
+    $call parse_args
+    $call defmsg_h
+
+include: macros_mymake/cvars.def
+page: mymake_cvars
+    module: perl
+
+    $call parse_args
+    $call extractcvars
+
+include: macros_mymake/logstates.def
+page: mymake_logs
+    module: perl
+
+    $call parse_args
+    $call logging_states
+
+#---------------------------------------- 
+subcode: parse_args
+    my %opts
+    $foreach $a in @ARGV
+        $if $a=~/^(\w+)=(.*)/
+            $opts{$1}=$2
+    my $srcdir = "$(SRCDIR)"
+    my $moddir = "$(MODULES)"
+    $if $opts{srcdir}
+        $srcdir = $opts{srcdir}
+    $if $opts{modules}
+        $moddir = $opts{modules}
+
+    chdir $srcdir or die;
+
+#---------------------------------------- 
+macros:
+    mpi_src_dirs: mpi mpi_t nameserv util binding include mpid pmi
+
+subcode: find_files(dir, name)
+    &call open_r, find $(dir) -name '$(name)' |
+        chomp
+        push @files, $_
+
+subcode: each_ch_file
+    my @files
+    $foreach $dir in qw($(mpi_src_dirs))
+        $call find_files, src/$dir, *.[ch]
+    $call load_err_patterns
+    $foreach $f in @files
+        BLOCK
+
+subcode: each_name_file(name)
+    my @files
+    $call find_files, ., $(name)
+    $foreach $f in @files
+        BLOCK
+
+#---------------------------------------- 
+subcode: hdr_guard(name)
+    $print "#ifndef $(name:uc)_H_INCLUDED"
+    $print "#define $(name:uc)_H_INCLUDED"
+    $print
+    BLOCK
+    $print "#endif /* $(name:uc)_H_INCLUDED */"

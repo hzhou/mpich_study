@@ -1,0 +1,61 @@
+subcode: compile_mpl
+    &call compile_subdir, src/mpl
+        $call sync_confdb
+        $call config_embed
+
+subcode: compile_opa
+    &call compile_subdir, src/openpa
+        $call config_embed
+
+#---------------------------------------- 
+subcode: compile_hydra
+    &call compile_subdir, src/pm/hydra
+        $(if:1)
+            $call sync_confdb
+            $call subst_hwloc, tools/topo/hwloc
+            system "autoreconf -ivf"
+            system "./configure"
+        $call parse_Makefile, Makefile
+        &call open_W, custom.make
+            $call dump_custom_make
+
+    subcode: dump_variable_custom
+        $(if:key=AM_CPPFLAGS)
+            $t=~s/\s*-I\S*mpl\/include//g
+            $t.=" -I$(Impl) -I$(Ihwloc)"
+
+    subcode: set_libs_custom
+        $libs=~s/\s*\S*\/libmpl.la//g
+        $libs.=" $(Lmpl) $(Lhwloc)"
+
+#---------------------------------------- 
+subcode: compile_subdir(dir)
+    chdir "$(dir)" or die "can't chdir $(dir)\n"
+    BLOCK
+    chdir $srcdir
+
+    subcode: sync_confdb
+        system "rsync -r $srcdir/confdb/ confdb/"
+    subcode: config_embed
+        system "autoreconf -ivf"
+        system "./configure --disable-versioning --enable-embedded"
+
+    subcode: dump_rule
+        # build rule: 
+        #     src/mpl/libmpl.la: ${MPL_OBJ_LIST}
+        #              cd src/mpl && $(MAKE)
+#---------------------------------------- 
+subcode: subst_hwloc(dir)
+    &call open_W, confdb/subst_hwloc.m4
+        $print "AC_DEFUN([HWLOC_SETUP_CORE], ["
+        $print "    have_hwloc=yes"
+        $print "    AC_SUBST([HWLOC_EMBEDDED_CPPFLAGS],[])"
+        $print "    AC_SUBST([HWLOC_EMBEDDED_CFLAGS],[])"
+        $print "    AC_SUBST([HWLOC_EMBEDDED_LDADD],[])"
+        $print "    AC_SUBST([HWLOC_EMBEDDED_LIBS],[])"
+        $print "] )"
+        $print "AC_DEFUN([HWLOC_DO_AM_COND], [])"
+    # autoreconf complains
+    $if !-d "$(dir)/hwloc/config"
+        system "mkdir -p $(dir)/hwloc/config"
+

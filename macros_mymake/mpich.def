@@ -1,0 +1,69 @@
+subcode: compile_mpich
+    $(if:0)
+        system "perl maint/gen_subcfg_m4"
+        # $call gen_subsys_include
+        # $call subst_hwloc, src
+        # $call fortran_buildiface
+        $call romio_glue_code
+        &call modify_configure_ac
+            system "autoreconf -ivf"
+        system "./configure --disable-cxx --disable-fortran --disable-romio"
+    $call parse_Makefile, Makefile
+    &call open_W, custom.make
+        $call dump_custom_make
+    subcode: dump_variable_custom
+        $(if:key=AM_CPPFLAGS)
+            $t=~s/\@HWLOC_\S+\@\s*//
+        $(elif:key=CPPFLAGS)
+            $t=~s/^-I.*\/(mpl|openpa)\/\S+\s*//g
+            $t.=" -I$(Impl) -I$(Iopa) -I$(Ihwloc)"
+        $(elif:key=AM_CFLAGS)
+            $t=~s/\@HWLOC_\S+\@\s*//
+    subcode: set_libs_custom
+
+#-------------------------
+subcode: fortran_buildiface
+    chdir "src/binding/fortran/mpif_h"
+    system "perl buildiface"
+    chdir $srcdir
+
+subcode: romio_glue_code
+    chdir "src/glue/romio"
+    system "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
+    chdir $srcdir
+
+#---------------------------------------- 
+subcode: modify_configure_ac
+    my @mod_list
+    &call modify, configure.ac
+        $if $l=~/AC_CONFIG_SUBDIRS/
+            next
+        $elif $l=~/^\s*HWLOC_/
+            next
+        $elif $l=~/^\s*src\/binding\//
+            next
+        $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
+            $l = "$1: \x23 $2\n"
+    &call modify, src/Makefile.mk
+        $if $l=~/^include .*\/binding\//
+            next
+    $foreach $m in @mod_list
+        # $f, $f_.orig, $f_.mod
+        system "cp $m->[0] $m->[1]"
+        system "cp $m->[2] $m->[0]"
+    BLOCK
+    $foreach $m in @mod_list
+        system "cp $m->[1] $m->[0]"
+
+    subcode: modify(f)
+        my $f = "$(f)"
+        my $f_ = $f
+        $f_=~s/[\.\/]/_/g
+        push @mod_list, [$f, "$f_.orig", "$f_.mod"]
+
+        $call get_file_lines, $f
+        &call open_W, $f_.mod
+            $foreach $l in @lines
+                BLOCK
+                print Out $l
+

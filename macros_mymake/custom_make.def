@@ -1,0 +1,157 @@
+subcode: parse_Makefile(makefile)
+    $global %objects 
+    %objects=()
+    my $tlist
+    &call open_r, $(makefile)
+        $if /^(\w+)\s*=\s*(.*)/ -> $a, $b
+            $tlist=[]
+            $objects{$a} = $tlist
+
+            $call add_b_to_tlist
+        $elif $tlist
+            $if /\s*(.*)/ -> $b
+                $call add_b_to_tlist
+    $call @overwrite_makefile_vars
+
+    subcode: add_b_to_tlist
+        my $done=1
+        $if $b=~/\\$/
+            $done = 0
+            $b=~s/\s*\\$//
+
+        $if $b
+            push @$tlist, split /\s+/, $b
+        $if $done
+            undef $tlist
+
+#---------------------------------------- 
+fncode: get_list($key)
+    my @t
+    my $tlist = $objects{$key}
+    # $call @debug_get_list
+    $foreach $t in @{$objects{$key}}
+        $if $t=~/^\$\((\w+)\)$/
+            my $L = get_list($1)
+            push @t, @$L
+        $else
+            $t=~s/\$\((\w+)\)/get_object($1)/ge
+            push @t, $t
+    return \@t
+
+    subcode: debug_get_list
+        $(if:1)
+            $print $key: $tlist
+        $(else)
+            $if $tlist
+                $print $key: @$tlist
+            $else
+                $print $key undefined
+
+fncode: get_object($key)
+    my $arr = $objects{$key}
+    $if defined $arr
+        my $t
+        $if ref($arr) eq "ARRAY"
+            $t = join(' ', @$arr)
+        $else
+            $t = $arr
+        $t=~s/\$\(am__v_[\w]+\)//g
+        $t=~s/\$\((\w+)\)/get_object($1)/ge
+        $t=~s/\s+/ /g
+        return $t
+    $else
+        return ""
+
+#---------------------------------------- 
+subcode: dump_custom_make
+    my $cc = get_object("CC")
+    my $ccld = get_object("CCLD")
+
+    my $LD="\x24(LINK)"
+    $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
+    $print
+    $print "COMPILE = \x24(CC) \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
+    $print "LTCC = /bin/sh ./libtool --tag=CC --mode=compile \x24(COMPILE)"
+    $print "LTLD = /bin/sh ./libtool --tag=CC --mode=link $ccld"
+    $print
+
+    $call collect_programs_libs
+
+    $print "all: @ltlibs @programs"
+    $print
+
+    $call dump_rules, ltlibs
+    $call dump_rules, programs
+
+    $print "%.o: %.c"
+    $print "\t\x24(COMPILE) -c -o \$\@ \$<"
+    $print
+    $print "%.lo: %.c"
+    $print "\t\x24(LTCC) -c -o \$\@ \$<"
+    $print
+
+    # ----------------------------
+    subcode: dump_variable(key)
+        my $t = get_object("$(key)")
+        $call @dump_variable_custom
+        $print "$(key) = $t"
+
+    subcode: dump_object(key, tlist)
+        $print "$(key) = \\"
+        my $last_item = pop @$(tlist)
+        $foreach $t in @$(tlist)
+            $print "    $t \\"
+        $print "    $last_item"
+
+    
+    subcode: collect_programs_libs
+        my @programs
+        my $tlist = get_list("PROGRAMS")
+        $foreach $t in @$tlist
+            push @programs, $t
+    
+        my @ltlibs
+        my $tlist = get_list("LTLIBRARIES")
+        $foreach $t in @$tlist
+            push @ltlibs, $t
+
+    subcode: dump_rules(which)
+        $foreach $p in @$(which)
+            my $a = $p
+            $a=~s/[\.\/]/_/g
+
+            my $cmd = "\x24(LTLD)"
+            $call set_libs
+            $call set_ldflags
+
+            my $o= "${a}_OBJECTS"
+            my $tlist = get_list($o)
+            $foreach $t in @$tlist
+                $t=~s/[^\/]+-//
+
+            $if @$tlist>1
+                $call dump_object, $o, $tlist
+                $print $p: \x24($o)
+                $print \t$cmd -o \$\@ \x24($o) $libs
+            $else
+                $print $p: $tlist->[0]
+                $print \t$cmd -o \$\@ $tlist->[0] $libs
+                $if @$tlist==0
+                    warn "EMPTY: $o!\n"
+            $print
+
+        subcode: set_libs
+            my $libs
+            $(if:which=programs)
+                $if $objects{"${a}_LDADD"}
+                    $libs = get_object("${a}_LDADD")." \x24(LIBS)"
+                $else
+                    $libs = "\x24(LIBS)"
+                $call @set_libs_custom
+        subcode: set_ldflags
+            $(if:which=programs)
+                $(for:CFLAGS,LDFLAGS)
+                    $if $objects{"${a}_$1"}
+                        $cmd.= ' '. get_object("${a}_$1")
+                        $cmd .= " \x24($1)"
+

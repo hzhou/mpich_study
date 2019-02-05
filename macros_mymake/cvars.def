@@ -1,0 +1,292 @@
+subcode: extractcvars
+    $(set:fn_ns=MPIR_T_cvar)
+    $call init_cvar_type_hash
+    &call each_ch_file
+        $call get_cvars, $f
+
+    $(if:0)
+        push @cvars, "MPIR_CVAR_CH4_OFI_ENABLE_DATA"
+        $cvars{MPIR_CVAR_CH4_OFI_ENABLE_DATA}={class=>"device", type=>"int", default=>-1}
+    # my @cvars = sort @cvars
+
+    $call dump_cvars_h
+    $call dump_cvars_c
+
+subcode: get_cvars(f)
+    $global (%cvars, @cvars, %cats, @cats)
+    my ($in_block, $which, $cvar, $cat)
+    &call open_r, $(f)
+        $if /^===\s*BEGIN_MPI_T_CVAR_INFO_BLOCK\s*===/
+            $in_block=1
+            undef $cvar
+            undef $cat
+            next
+        $elif /^===\s*END_MPI_T_CVAR_INFO_BLOCK\s*===/
+            $in_block=0
+            next
+
+        $if !$in_block
+            next
+
+        $if /^(categories|cvars)\s*:/
+            $which = $1
+            undef $cvar
+            undef $cat
+        $elif /^\s*-\s*name\s*:\s*(MPIR_CVAR_\w+)/ -> $name
+            push @cvars, $name
+            $cvar={file=>$(f)}
+            $cvars{$name} = $cvar
+        $elif /^\s*-\s*name\s*:\s*(\w+)/ -> $name
+            push @cats, $name
+            $cat = {file=>$(f)}
+            $cats{$name} = $cat
+        $elif $cvar and /^\s*(category|type|default|class|verbosity|scope|alt-env)\s*:\s*(.+?)\s*$/
+            $cvar->{$1}=$2
+        $elif /^\s*(description)\s*:\s*(.+?)\s*$/ -> $a, $t
+            $call parse_yaml_block_in_t
+            $if $cat
+                $cat->{$a}=$t
+            $elif $cvar
+                $cvar->{$a}=$t
+
+#---------------------------------------- 
+subcode: dump_cvar_globals
+    my $n = @cvars
+    $print "/* $n cvars */"
+    &call each_cvar
+        $if $h->{class} eq "device"
+            $if $v=~/MPIR_CVAR_(\w+)/
+                $print "#if defined MPID_$1"
+                $print "$type $v = MPID_$1;"
+                $print "#else"
+                $print "$type $v = $value;"
+                $print "#endif"
+        $else
+            $print "$type $v = $value;"
+        $print
+
+subcode: dump_cvar_register_static
+    $(set:cast=1)
+    &call each_cvar
+        $call get_cvar_mpi_type
+        $print "    defaultval.$mpi_field = $value;"
+        my $desc = $h->{description}
+        $desc=~s/"/\\"/g
+        $desc=~s/\n/\\\n/g
+        $print "    MPIR_T_CVAR_REGISTER_STATIC("
+        $print "        $mpi_type,"
+        $print "        $v, /* name */"
+        $print "        &$v, /* address */"
+        $print "        $mpi_count, /* count */"
+        $print "        $h->{verbosity},"
+        $print "        $h->{scope},"
+        $print "        defaultval,"
+        $print "        \"$h->{category}\", /* category */"
+        $print "        \"$desc\");"
+        $if $h->{type} eq "string"
+            $print "    MPIR_CVAR_GET_DEFAULT_STRING($v, &tmp_str);"
+
+        my @t
+        $if $h->{"alt-env"}
+            $foreach $t in split /[:,;\s]+/, $h->{"alt-env"}
+                $t=~s/\s+$//
+                push @t, $t
+        push @t, $v
+
+        $foreach $env in @t
+            $env=~s/^MPIR_CVAR_//
+            $(for:MPICH,MPIR_PARAM,MPIR_CVAR)
+                $call @dump_mplenv, $1_$env
+        $if $h->{type} eq "string"
+            $call dump_copy_tmp_str
+        $print
+
+subcode: dump_cvar_finalize
+    &call each_cvar
+        $if $h->{type} eq "string"
+            $print "    if ($v != NULL) {"
+            $print "        MPL_free($v);"
+            $print "        $v = NULL;"
+            $print "    }"
+            $print
+
+subcode: dump_cat_add_desc
+    $foreach $c in @cats
+        my $h=$cats{$c}
+        my $desc = $h->{description}
+        $desc=~s/"/\\"/g
+        $print "    /* $h->{file} */"
+        $print "    MPIR_T_cat_add_desc(\"$c\","
+        $print "        \"$desc\");"
+        $print
+
+#---- util --------------------------
+subcode: init_cvar_type_hash
+    # NOTE: yet to have a double cvar
+    my %type_hash=(
+        int=>"int",
+        double=>"double",
+        string=>"char *",
+        boolean=>"int",
+        range=>"MPIR_T_cvar_range_value_t",
+    );
+    my %mpi_hash=(
+        int=>"MPI_INT:1:d",
+        double=>"MPI_DOUBLE:1:d",
+        string=>"MPI_CHAR:MPIR_CVAR_MAX_STRLEN:str",
+        boolean=>"MPI_INT:1:d",
+        range=>"MPI_INT:2:range",
+    );
+    my %env_hash=(
+        int=>"int",
+        double=>"double",
+        string=>"str",
+        boolean=>"bool",
+        range=>"range",
+    );
+
+    my %value_hash=(
+        true=>"1",
+        false=>"0",
+    );
+
+subcode: each_cvar
+    $foreach $v in @cvars
+        my $h=$cvars{$v}
+        my $type=$type_hash{$h->{type}}
+        $call get_cvar_value
+        BLOCK
+
+    subcode: get_cvar_value
+        my $value=$h->{default}
+        $if defined $value_hash{$value}
+            $value=$value_hash{$value}
+        $elif $type eq "char *"
+            $if $value eq "NULL"
+                NOOP
+            $elif $value!~/^"/
+                $value="\"$value\""
+        $elif $h->{type} eq "range"
+            $if $value=~/(\d+):(\d+)/
+                $(if:cast)
+                    $value="(MPIR_T_cvar_range_value_t){$1,$2}"
+                $(else)
+                    $value="{$1,$2}"
+
+    subcode: get_cvar_mpi_type
+        my ($mpi_type,$mpi_count,$mpi_field)=split /:/, $mpi_hash{$h->{type}}
+        my $mplenv = "MPL_env2$env_hash{$h->{type}}"
+
+    subcode: dump_mplenv(name)
+        $if $h->{type} eq "string"
+            $print "    rc = $mplenv(\"$(name)\", &tmp_str);"
+        $elif $h->{type} eq "range"
+            $print "    rc = $mplenv(\"$(name)\", &$v.low, &$v.high);"
+        $else
+            $print "    rc = $mplenv(\"$(name)\", &$v);"
+        $call check
+        subcode: check
+            $print "    MPIR_ERR_CHKANDJUMP1((-1 == rc),mpi_errno,MPI_ERR_OTHER,\"**envvarparse\",\"**envvarparse %s\",\"$(name)\");"
+
+    subcode: dump_copy_tmp_str
+        $print "    if (tmp_str != NULL) {"
+        $print "        $v = MPL_strdup(tmp_str);"
+        $print "        MPIR_CVAR_assert($v);"
+        $print "        if ($v == NULL) {"
+        $print "            MPIR_CHKMEM_SETERR(mpi_errno, strlen(tmp_str), \"dup of string for $v\");"
+        $print "            goto fn_fail;"
+        $print "        }"
+        $print "    }"
+        $print "    else {"
+        $print "        $v = NULL;"
+        $print "    }"
+
+
+subcode: parse_yaml_block_in_t
+    $if $t=~/^([>|])-\s*(.*)/
+        my $style=$1
+        $t = $2
+        my $sp
+        $while 1
+            $_=<In>
+            $if !$sp and /^(\s*)/
+                $sp = length($1)
+            $if /^\s*$/
+                last
+            $else
+                chomp
+                $if $t
+                    $if $style eq ">"
+                        $t.=" "
+                    $else
+                        $t.="\n"
+                $t.=substr($_,$sp)
+    $elif $t=~/^[>\|]/
+        $print "Unsupported YAML style: [$_]"
+
+#---------------------------------------- 
+subcode: dump_cvars_c
+    &call open_W, src/util/cvar/mpir_cvars.c
+        $print #include "mpiimpl.h"
+        $print 
+        $call dump_cvar_globals
+        $print "#define FCNAME __func__"
+        &call dump_fn_init
+            $call dump_cat_add_desc
+            $call dump_cvar_register_static
+        &call dump_fn_finalize
+            $call dump_cvar_finalize
+    # ----------------------
+    subcode: dump_fn_init
+        $print int $(fn_ns)_init(void)
+        $print {
+        $print "    int mpi_errno = MPI_SUCCESS;"
+        $print "    int rc;"
+        $print "    const char *tmp_str;"
+        $print "    static int initialized = FALSE;"
+        $print "    MPIR_T_cvar_value_t defaultval;"
+        $print
+        $print "    /* FIXME any MT issues here? */"
+        $print "    if (initialized)"
+        $print "        return MPI_SUCCESS;"
+        $print "    initialized = TRUE;"
+        $print
+        BLOCK
+        $print "fn_exit:"
+        $print "    return mpi_errno;"
+        $print "fn_fail:"
+        $print "    goto fn_exit;"
+        $print "}"
+        $print
+    subcode: dump_fn_finalize
+        $print int $(fn_ns)_finalize(void)
+        $print {
+        $print "    int mpi_errno = MPI_SUCCESS;"
+        $print
+        BLOCK
+        $print "    return mpi_errno;"
+        $print }
+
+
+
+#--------------------------
+subcode: dump_cvars_h
+    &call open_W, src/include/mpir_cvars.h
+        &call hdr_guard, mpir_cvars
+            $print #include "mpitimpl.h" /* for MPIR_T_cvar_range_value_t */
+            $print "int $(fn_ns)_init(void);"
+            $print "int $(fn_ns)_finalize(void);"
+            $print
+
+            &call each_cvar
+                $print "/* $h->{file} */"
+                $print "extern $type $v;"
+            $print
+
+            $print "/* TODO: this should be defined elsewhere */"
+            $print "#define MPIR_CVAR_assert MPIR_Assert"
+            $print
+            $print "/* Arbitrary, simplifies interaction with external interfaces like MPI_T_ */"
+            $print "#define MPIR_CVAR_MAX_STRLEN (384)"
+            $print
+
