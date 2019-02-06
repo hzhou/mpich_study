@@ -141,7 +141,10 @@ subcode: dump_custom_make
             $call set_ldflags
             $print $p: custom.make $dep
             $if $dst_hash{$p}=~/\/lib$/
-                $print \t$cmd -o \$\@ -rpath $dst_hash{$p} $dep $libs
+                my $opt="-rpath $dst_hash{$p}"
+                $if $conf{so_version}
+                    $opt.=" -version-info $conf{so_version}"
+                $print \t$cmd -o \$\@ $opt $dep $libs
             $else
                 $print \t$cmd -o \$\@ $dep $libs
             $print

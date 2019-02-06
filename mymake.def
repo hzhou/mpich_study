@@ -19,7 +19,6 @@ macros:
 
 page: mymake
     module: perl
-    run: perl out/mymake.pl srcdir=$HOME/work/mpich
 
     my $pwd=`pwd`
     chomp $pwd
