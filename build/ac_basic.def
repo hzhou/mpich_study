@@ -76,6 +76,8 @@ subcode: am_cond(am_var, sh_var, val)
     AM_CONDITIONAL($(am_var), [test x$(sh_var) = x$(val)])
 
 #----------------------------------------------- 
+macros:
+    abs_path: `(cd $1 && pwd)`
 subcode: check_prefix
     # --prefix=/path/to, default NONE
     # --srcdir=/path/to, default where configure is from

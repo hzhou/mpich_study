@@ -6,6 +6,7 @@ macros:
     # SRCDIR: $ENV{HOME}/work/mpich-compile
     SRCDIR: $ENV{HOME}/work/tests/mpich
     MODULES: $ENV{HOME}/work/modules
+    PREFIX: $ENV{HOME}/MPI
     
     Impl: $srcdir/src/mpl/include
     Lmpl: $srcdir/src/mpl/libmpl.la
@@ -18,6 +19,7 @@ macros:
 
 page: mymake
     module: perl
+    run: perl out/mymake.pl srcdir=$HOME/work/mpich
 
     my $pwd=`pwd`
     chomp $pwd
@@ -28,7 +30,7 @@ page: mymake
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
     $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
     $if !-f "src/include/mpir_cvars.h"
-        system "perl $mymake\_cvars.pl"
+        system "perl $mymake\_cvars.pl srcdir=$srcdir modules=$moddir"
     # $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
     # $call push_autogen_rule, logs, src/include/mpiallstates.h
 

@@ -25,6 +25,144 @@ subcode: parse_Makefile(makefile)
             undef $tlist
 
 #---------------------------------------- 
+macros: 
+    LT: /bin/sh ./libtool --mode=$1
+#---------------------------------------- 
+subcode: dump_custom_make
+    my $cc = get_object("CC")
+    my $ccld = get_object("CCLD")
+
+    my $LD="\x24(LINK)"
+    $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
+    $print
+    $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
+    $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+    $print "LTCC = $(LT:compile) \x24(COMPILE)"
+    $print "LTLD = $(LT:link) \x24(LINK)"
+    $print
+
+    $call collect_programs_libs
+
+    $print "all: @ltlibs @programs"
+    $print
+
+    $call dump_rules, ltlibs
+    $call dump_rules, programs
+
+    $print "\x23 --------------------\n"
+    $global @extra_make_rules
+    $foreach $l in @extra_make_rules
+        $print $l
+    $print "\x23 --------------------\n"
+    $print "%.o: %.c"
+    $print "\t\x24(COMPILE) -c -o \$\@ \$<"
+    $print
+    $print "%.lo: %.c"
+    $print "\t\x24(LTCC) -c -o \$\@ \$<"
+    $print
+    $foreach %special_targets
+        $print "%.$k.lo: %.c"
+        $print "\t$v -c -o \$\@ \$<"
+        $print
+
+    $global @install_list
+    $if @install_list
+        $print "\x23 --------------------\n"
+        $print ".PHONY: install"
+        $print "install:"
+        $foreach $l in @install_list
+            $print "\t$l"
+        $print
+
+    $print ".PHONY: clean"
+    $print "clean:"
+    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -v)"
+    $print
+
+    # ----------------------------
+    subcode: dump_variable(key)
+        my $t = get_object("$(key)")
+        $call @dump_variable_custom
+        $print "$(key) = $t"
+
+    subcode: dump_object(key, tlist)
+        $print "$(key) = \\"
+        my $last_item = pop $(tlist)
+        $foreach $t in $(tlist)
+            $print "    $t \\"
+        $print "    $last_item"
+
+    
+    subcode: collect_programs_libs
+        my @programs
+        my $tlist = get_list("PROGRAMS")
+        $foreach $t in @$tlist
+            $call @custom_programs
+            push @programs, $t
+    
+        my @ltlibs
+        my $tlist = get_list("LTLIBRARIES")
+        $foreach $t in @$tlist
+            $call @custom_ltlibs
+            push @ltlibs, $t
+
+    subcode: dump_rules(which)
+        $foreach $p in @$(which)
+            my $a = $p
+            $a=~s/[\.\/]/_/g
+
+            my $cmd = "\x24(LTLD)"
+            my $dep = ""
+            $call set_objects
+            my $libs="\x24(LIBS)"
+            $call set_add
+            $call set_ldflags
+            $print $p: custom.make $dep
+            $print \t$cmd -o \$\@ $dep $libs
+            $print
+
+        subcode: set_objects
+            my $o= "${a}_OBJECTS"
+            my $tlist = get_list($o)
+            my @tlist = sort @$tlist
+            $global %special_targets
+            $if $special_targets{$a}
+                $foreach $t in @tlist
+                    $t=~s/([^\/]+)-(\w+)/$2.$1/
+            $else
+                $foreach $t in @tlist
+                    $t=~s/[^\/]+-//
+
+            $call attach_to_dep, $o, tlist
+
+        subcode: attach_to_dep(o, tlist)
+            $if @$(tlist)<4 && length(join(' ', @$(tlist)))<40
+                $dep .= " ". join(' ', @$(tlist))
+            $else
+                $call dump_object, $(o), @$(tlist)
+                $dep .= " \x24($(o))"
+
+        subcode: set_add
+            $(if:which=programs)
+                my $add = $a."_LDADD"
+            $(elif:which=ltlibs)
+                my $add = $a."_LIBADD"
+
+            $if $objects{$add}
+                my $t = get_object($add)
+                $call @set_libs_custom
+                $t=~s/^\s+//
+                my @tlist = split /\s+/, $t
+                $call attach_to_dep, $add, tlist
+
+        subcode: set_ldflags
+            $(if:which=programs)
+                $(for:CFLAGS,LDFLAGS)
+                    $if $objects{"${a}_$1"}
+                        $cmd.= ' '. get_object("${a}_$1")
+                        $cmd .= " \x24($1)"
+
+#---- utils --------------------------- 
 fncode: get_list($key)
     my @t
     my $tlist = $objects{$key}
@@ -61,117 +199,4 @@ fncode: get_object($key)
         return $t
     $else
         return ""
-
-#---------------------------------------- 
-subcode: dump_custom_make
-    my $cc = get_object("CC")
-    my $ccld = get_object("CCLD")
-
-    my $LD="\x24(LINK)"
-    $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
-    $print
-    $print "COMPILE = \x24(CC) \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
-    $print "LTCC = /bin/sh ./libtool --tag=CC --mode=compile \x24(COMPILE)"
-    $print "LTLD = /bin/sh ./libtool --tag=CC --mode=link $ccld"
-    $print
-
-    $call collect_programs_libs
-
-    $print "all: @ltlibs @programs"
-    $print
-
-    $call dump_rules, ltlibs
-    $call dump_rules, programs
-
-    $print "\x23--------------------\n"
-    $global @extra_make_rules
-    $foreach $l in @extra_make_rules
-        $print $l
-    $print "\x23--------------------\n"
-    $print "%.o: %.c"
-    $print "\t\x24(COMPILE) -c -o \$\@ \$<"
-    $print
-    $print "%.lo: %.c"
-    $print "\t\x24(LTCC) -c -o \$\@ \$<"
-    $print
-    $print ".PHONY: clean"
-    $print "clean:"
-    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -v)"
-    $print
-
-    # ----------------------------
-    subcode: dump_variable(key)
-        my $t = get_object("$(key)")
-        $call @dump_variable_custom
-        $print "$(key) = $t"
-
-    subcode: dump_object(key, tlist)
-        $print "$(key) = \\"
-        my $last_item = pop $(tlist)
-        $foreach $t in $(tlist)
-            $print "    $t \\"
-        $print "    $last_item"
-
-    
-    subcode: collect_programs_libs
-        my @programs
-        my $tlist = get_list("PROGRAMS")
-        $foreach $t in @$tlist
-            push @programs, $t
-    
-        my @ltlibs
-        my $tlist = get_list("LTLIBRARIES")
-        $foreach $t in @$tlist
-            push @ltlibs, $t
-
-    subcode: dump_rules(which)
-        $foreach $p in @$(which)
-            my $a = $p
-            $a=~s/[\.\/]/_/g
-
-            my $cmd = "\x24(LTLD)"
-            my $dep = ""
-            $call set_objects
-            my $libs="\x24(LIBS)"
-            $call set_add
-            $call set_ldflags
-            $print $p: custom.make $dep
-            $print \t$cmd -o \$\@ $dep $libs
-            $print
-
-        subcode: set_objects
-            my $o= "${a}_OBJECTS"
-            my $tlist = get_list($o)
-            my @tlist = sort @$tlist
-            $foreach $t in @tlist
-                $t=~s/[^\/]+-//
-
-            $call attach_to_dep, $o, tlist
-
-        subcode: attach_to_dep(o, tlist)
-            $if @$(tlist)<4 && length(join(' ', @$(tlist)))<40
-                $dep .= " ". join(' ', @$(tlist))
-            $else
-                $call dump_object, $(o), @$(tlist)
-                $dep .= " \x24($(o))"
-
-        subcode: set_add
-            $(if:which=programs)
-                my $add = $a."_LDADD"
-            $(elif:which=ltlibs)
-                my $add = $a."_LIBADD"
-
-            $if $objects{$add}
-                my $t = get_object($add)
-                $call @set_libs_custom
-                $t=~s/^\s+//
-                my @tlist = split /\s+/, $t
-                $call attach_to_dep, $add, tlist
-
-        subcode: set_ldflags
-            $(if:which=programs)
-                $(for:CFLAGS,LDFLAGS)
-                    $if $objects{"${a}_$1"}
-                        $cmd.= ' '. get_object("${a}_$1")
-                        $cmd .= " \x24($1)"
 

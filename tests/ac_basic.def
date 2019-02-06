@@ -2,7 +2,7 @@ include: build/ac_basic.def
 include: build/ac_args.def
 
 subcode: _autoload
-    m4_include(../maint/version.m4)
+    m4_include(orig/maint/version.m4)
 macros:
     Version: MPICH_VERSION_m4
     URL: https://www.mpich.org/

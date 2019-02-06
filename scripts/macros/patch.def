@@ -1,3 +1,4 @@
+
 subcode: patch_frame
     my $root = "$ENV{HOME}/work/mpich-github"
     chdir $root or die
@@ -15,15 +16,19 @@ fncode: patch($f)
 
     my $i=0
     my $n_lines = @lines
+    DUMP_STUB _patch_local
     $while $i<$n_lines; $i++
         $(set:l=$lines[$i])
         $(set:L=$lines[$i+$1])
         $call filter_lines_$(patch)
-
+    $call @pass2_$(patch)
     $if $cnt>0
         &call open_w, $f
             $foreach $l in @lines
-                $if $l ne "-DELETE"
+                $if ref($l) eq "ARRAY"
+                    $foreach $ll in @$l
+                        print Out $ll
+                $elif $l ne "-DELETE"
                     print Out $l
     return $cnt
 
@@ -31,8 +36,11 @@ subcode: delete(l)
     $(l) = "-DELETE"
 
 #---------------------------------------- 
+macros:
+    FIND: find . -name '*.[ch]'
+
 subcode: grep_cmd(@cmd)
-    my $grep_cmd="find . -name '*.[ch]' |xargs $(cmd) "
+    my $grep_cmd="$(FIND) |xargs $(cmd) "
     my %files
     &call open_r, $grep_cmd |
         $if /^\.\/(src\S*):/
@@ -41,7 +49,7 @@ subcode: grep_cmd(@cmd)
     my @files = sort keys %files
 
 subcode: grep_l(@pat)
-    my $grep_cmd="find . -name '*.[ch]' |xargs grep -l $(pat)"
+    my $grep_cmd="$(FIND) |xargs grep -l $(pat)"
     my @files
     &call open_r, $grep_cmd |
         chomp

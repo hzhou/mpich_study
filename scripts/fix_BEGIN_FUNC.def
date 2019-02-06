@@ -7,3 +7,35 @@ subcode: grep_BEGIN_FUNC
     $call grep_l, 'BEGIN_FUNC'
 
 subcode: filter_lines_BEGIN_FUNC
+    $(block:_patch_local)
+        $my $FN_ID
+    $if $(l)=~/^#define\s+FCNAME\s+MPL_QUOTE\((\w+)\)/
+        $FN_ID = "MPID_STATE_".uc($1)
+    $elif $(l)=~/^}/
+        undef $FN_ID
+    $elif $(l)=~/^(\s+)BEGIN_FUNC\(FCNAME\)/
+        $if $FN_ID
+            $cnt++
+            my $t1 = $1."MPIR_FUNC_VERBOSE_STATE_DECL($FN_ID);\n"
+            my $t2 = $1."MPIR_FUNC_VERBOSE_ENTER($FN_ID);\n"
+            $(l)=[$t1, $t2]
+        $else
+            $print unexpected: line $i: $(l)
+    $elif $(l)=~/^(\s+)END_FUNC\(FCNAME\)/
+        $if $FN_ID
+            $cnt++
+            $(l)=$1. "MPIR_FUNC_VERBOSE_EXIT($FN_ID);\n"
+        $else
+            $print unexpected: line $i: $(l)
+    $elif $(l)=~/^(\s+)END_FUNC_RC\(FCNAME\)/
+        $if $FN_ID
+            $cnt++
+            my @t
+            push @t, $1. "fn_exit:\n"
+            push @t, $1. "MPIR_FUNC_VERBOSE_EXIT($FN_ID);\n"
+            push @t, $1. "return mpi_errno;\n"
+            push @t, $1. "fn_fail:\n"
+            push @t, $1. "goto fn_exit;\n"
+            $(l)=\@t
+        $else
+            $print unexpected: line $i: $(l)
