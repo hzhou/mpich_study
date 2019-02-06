@@ -1,7 +1,7 @@
 subcode: compile_mpich
     $call configure
-    $call set_special
     $call parse_Makefile, Makefile
+    $call @set_special
     &call open_W, custom.make
         $call dump_custom_make
     $(if:do_make)
@@ -32,11 +32,14 @@ subcode: compile_mpich
             system "./configure --disable-cxx --disable-fortran --disable-romio --with-pm=none"
     # --------------------
     subcode: set_special
-        $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
-        $(if:PREFIX)
-            $(set:dst=$(PREFIX)/lib)
-            push @install_list, "mkdir -p $(dst)"
-            push @install_list, "$(LT:install) install lib/libmpi.la lib/libpmpi.la $(dst)"
+        $call @check_mpichconf_h
+        $if !$conf{have_weak}
+            $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+        subcode: check_mpichconf_h
+            my %conf
+            &call open_r, "src/include/mpichconf.h"
+                $if /^#define\s+HAVE_.*WEAK.* 1/
+                    $conf{have_weak}=1
 
 #-------------------------
 subcode: fortran_buildiface

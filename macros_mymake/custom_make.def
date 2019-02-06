@@ -65,14 +65,27 @@ subcode: dump_custom_make
         $print "\t$v -c -o \$\@ \$<"
         $print
 
-    $global @install_list
-    $if @install_list
-        $print "\x23 --------------------\n"
-        $print ".PHONY: install"
-        $print "install:"
-        $foreach $l in @install_list
-            $print "\t$l"
-        $print
+    $(if:PREFIX)
+        my (%dirs, @install_list)
+        $foreach %dst_hash
+            $if $v
+                $if !$dirs{$v}
+                    $dirs{$v} = 1
+                $if $v=~/\/lib$/
+                    push @install_list, "$(LT:install) install $k $v"
+                $elif $v=~/\/bin$/
+                    push @install_list, "install $k $v"
+        my @install_list = sort @install_list
+        $foreach $d in keys %dirs
+            unshift @install_list, "mkdir -p $d"
+
+        $if @install_list
+            $print "\x23 --------------------\n"
+            $print ".PHONY: install"
+            $print "install:"
+            $foreach $l in @install_list
+                $print "\t$l"
+            $print
 
     $print ".PHONY: clean"
     $print "clean:"
@@ -94,13 +107,22 @@ subcode: dump_custom_make
 
     
     subcode: collect_programs_libs
-        my @programs
+        $global %dst_hash
+        $(if:PREFIX)
+            my $tlist = get_list("lib_LTLIBRARIES")
+            $foreach $t in @$tlist
+                $dst_hash{$t} = "$(PREFIX)/lib"
+            my $tlist = get_list("bin_PROGRAMS")
+            $foreach $t in @$tlist
+                $dst_hash{$t} = "$(PREFIX)/bin"
+
+        $global @programs
         my $tlist = get_list("PROGRAMS")
         $foreach $t in @$tlist
             $call @custom_programs
             push @programs, $t
     
-        my @ltlibs
+        $global @ltlibs
         my $tlist = get_list("LTLIBRARIES")
         $foreach $t in @$tlist
             $call @custom_ltlibs
@@ -118,7 +140,10 @@ subcode: dump_custom_make
             $call set_add
             $call set_ldflags
             $print $p: custom.make $dep
-            $print \t$cmd -o \$\@ $dep $libs
+            $if $dst_hash{$p}=~/\/lib$/
+                $print \t$cmd -o \$\@ -rpath $dst_hash{$p} $dep $libs
+            $else
+                $print \t$cmd -o \$\@ $dep $libs
             $print
 
         subcode: set_objects
