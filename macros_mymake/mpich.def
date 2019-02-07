@@ -1,12 +1,10 @@
 subcode: compile_mpich
-    $call configure
-    $call parse_Makefile, Makefile
+    $call mpich_configure
     $call @check_mpichconf_h
-    $call @set_special
-    &call open_W, custom.make
-        $call dump_custom_make
+    $call custom_make
     $(if:do_make)
-        system "make -f custom.make -j$(do_make)"
+        system "make -j$(do_make)"
+
     # ---------------------------
     subcode: dump_variable_custom
         $(if:key=AM_CPPFLAGS)
@@ -22,28 +20,58 @@ subcode: compile_mpich
             $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
             $t.=" $(Lmpl) $(Lopa) $(Lhwloc)"
 
-    # -------------------
-    subcode: configure
-        $if !-f "subsys_include.m4"
-            system "perl maint/gen_subcfg_m4"
-        $if !-f "configure"
-            &call modify_configure_ac
-                system "autoreconf -ivf"
-        $if !-f "Makefile"
-            system "./configure --disable-cxx --disable-fortran --disable-romio --with-pm=none"
-    # --------------------
-    subcode: set_special
-        $if !$conf{have_weak}
-            $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+#---------------------------------------- 
+subcode: mpich_configure
+    $if !-f "subsys_include.m4"
+        system "perl maint/gen_subcfg_m4"
+    $if !-f "configure"
+        &call temporary_modify
+            $call modify_configure_ac
+            system "autoreconf -ivf"
+    $if !-f "mymake/Makefile.orig"
+        system "rm -f Makefile"
+        my $t = join ' ', @config_args
+        system "./configure --disable-cxx --disable-fortran --disable-romio --with-pm=none $t"
+        system "mv Makefile mymake/Makefile.orig"
 
-    subcode: check_mpichconf_h
-        $global %conf
-        &call open_r, "src/include/mpichconf.h"
-            $if /^#define\s+HAVE_.*WEAK.* 1/
-                $conf{have_weak}=1
-        &call open_r, "maint/version.m4"
-            $if /libmpi_so_version_m4.*\[([\d:]*)\]/
-                $conf{so_version}=$1
+    # -------------------
+    subcode: modify_configure_ac
+        &call modify, configure.ac
+            $if $l=~/AC_CONFIG_SUBDIRS/
+                next
+            $elif $l=~/^\s*HWLOC_/
+                next
+            $elif $l=~/^\s*src\/binding\//
+                next
+            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
+                $l = "$1: \x23 $2\n"
+        &call modify, src/Makefile.mk
+            $if $l=~/^include .*\/binding\//
+                next
+        &call modify, Makefile.am
+            $if $l=~/ACLOCAL_AMFLAGS/
+                $l ="ACLOCAL_AMFLAGS = -I confdb\n"
+        my $flag
+        &call modify, src/mpid/ch3/subconfigure.m4
+            $if $l=~/AC_MSG_CHECKING.*OpenPA/
+                $flag=1
+            $elif $flag and $l=~/AC_C_BIGENDIAN/
+                $flag=0
+            $elif $flag
+                next
+
+# --------------------
+subcode: check_mpichconf_h
+    &call open_r, "src/include/mpichconf.h"
+        $if /^#define\s+HAVE_.*WEAK.* 1/
+            $opts{have_weak}=1
+    &call open_r, "maint/version.m4"
+        $if /libmpi_so_version_m4.*\[([\d:]*)\]/
+            $opts{so_version}=$1
+
+    $if !$opts{have_weak}
+        $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+
 
 #-------------------------
 subcode: fortran_buildiface
@@ -54,52 +82,5 @@ subcode: fortran_buildiface
 subcode: romio_glue_code
     chdir "src/glue/romio"
     system "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
-    chdir $srcdir
-
-#---------------------------------------- 
-subcode: modify_configure_ac
-    my @mod_list
-    &call modify, configure.ac
-        $if $l=~/AC_CONFIG_SUBDIRS/
-            next
-        $elif $l=~/^\s*HWLOC_/
-            next
-        $elif $l=~/^\s*src\/binding\//
-            next
-        $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
-            $l = "$1: \x23 $2\n"
-    &call modify, src/Makefile.mk
-        $if $l=~/^include .*\/binding\//
-            next
-    &call modify, Makefile.am
-        $if $l=~/ACLOCAL_AMFLAGS/
-            $l ="ACLOCAL_AMFLAGS = -I confdb"
-    my $flag
-    &call modify, src/mpid/ch3/subconfigure.m4
-        $if $l=~/AC_MSG_CHECKING.*OpenPA/
-            $flag=1
-        $elif $flag and $l=~/AC_C_BIGENDIAN/
-            $flag=0
-        $elif $flag
-            next
-
-    $foreach $m in @mod_list
-        # $f, $f_.orig, $f_.mod
-        system "cp $m->[0] $m->[1]"
-        system "cp $m->[2] $m->[0]"
-    BLOCK
-    $foreach $m in @mod_list
-        system "cp $m->[1] $m->[0]"
-
-    subcode: modify(f)
-        my $f = "$(f)"
-        my $f_ = $f
-        $f_=~s/[\.\/]/_/g
-        push @mod_list, [$f, "$f_.orig", "$f_.mod"]
-
-        $call get_file_lines, $f
-        &call open_W, $f_.mod
-            $foreach $l in @lines
-                BLOCK
-                print Out $l
+    chdir "../../.."
 

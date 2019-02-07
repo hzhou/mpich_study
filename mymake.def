@@ -1,6 +1,7 @@
 include: macros_mymake/custom_make.def
 include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
+include: macros_mymake/hydra.def
 
 macros:
     # SRCDIR: $ENV{HOME}/work/mpich-compile
@@ -29,12 +30,13 @@ page: mymake
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
     $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
     $if !-f "src/include/mpir_cvars.h"
-        system "perl $mymake\_cvars.pl srcdir=$srcdir modules=$moddir"
+        system "perl $mymake\_cvars.pl"
     # $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
     # $call push_autogen_rule, logs, src/include/mpiallstates.h
 
     push @extra_make_rules, "src/glue/romio/all_romio_symbols.c:"
     push @extra_make_rules, "\t(cd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in)"
+    push @extra_make_rules, ""
 
     $call make_hwloc
     $call compile_mpl
@@ -52,7 +54,7 @@ page: mymake
         $mymake .="/mymake"
 
         $(for:errmsg,cvars,logs,hydra)
-            push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl srcdir=$srcdir modules=$moddir"
+            push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
 
     subcode: push_autogen_rule(name, file)
         push @extra_make_rules, "$(file):"
@@ -88,18 +90,29 @@ page: mymake_hydra
 
 #---------------------------------------- 
 subcode: parse_args
-    my %opts
+    my (%opts, @config_args)
+    $opts{V}=0
     $foreach $a in @ARGV
-        $if $a=~/^(\w+)=(.*)/
+        $if $a=~/^(--.*)/
+            push @config_args, $1
+        $elif $a=~/^(\w+)=(.*)/
             $opts{$1}=$2
     my $srcdir = "$(SRCDIR)"
     my $moddir = "$(MODULES)"
     $if $opts{srcdir}
         $srcdir = $opts{srcdir}
+    $elif -f "maint/version.m4"
+        $srcdir = "."
+
     $if $opts{modules}
         $moddir = $opts{modules}
+    $elif $ENV{MODDIR}
+        $moddir = $ENV{MODDIR}
 
-    chdir $srcdir or die;
+    $if $srcdir ne "."
+        chdir $srcdir or die "can't chdir $srcdir\n"
+    $if !-d "mymake"
+        mkdir "mymake" or die "can't mkdir mymake\n"
 
 #---------------------------------------- 
 macros:

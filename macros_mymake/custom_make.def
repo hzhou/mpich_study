@@ -1,3 +1,39 @@
+macros: 
+    LT: /bin/sh ./libtool --mode=$1
+
+#---------------------------------------- 
+subcode: custom_make
+    $call parse_Makefile, mymake/Makefile.orig
+    &call open_W, mymake/Makefile.custom
+        $print "export MODDIR=$moddir"
+        $print
+        $call dump_custom_make
+    system "rm -f Makefile"
+    system "ln -s mymake/Makefile.custom Makefile"
+
+#---------------------------------------- 
+subcode: temporary_modify
+    my @mod_list
+    BLOCK
+    $foreach $m in @mod_list
+        system "cp $m->[1] $m->[0]"
+
+    subcode: modify(f)
+        my $f = "$(f)"
+        my $f_ = $f
+        $f_=~s/[\.\/]/_/g
+        my @m =($f, "mymake/$f_.orig", "mymake/$f_.mod")
+        push @mod_list, \@m
+
+        system "mv $m[0] $m[1]"
+        $call get_file_lines, $m[1]
+        &call open_W, $m[2]
+            $foreach $l in @lines
+                BLOCK
+                print Out $l
+        system "cp $m[2] $m[0]"
+
+#---------------------------------------- 
 subcode: parse_Makefile(makefile)
     $global %objects 
     %objects=()
@@ -25,9 +61,6 @@ subcode: parse_Makefile(makefile)
             undef $tlist
 
 #---------------------------------------- 
-macros: 
-    LT: /bin/sh ./libtool --mode=$1
-#---------------------------------------- 
 subcode: dump_custom_make
     my $cc = get_object("CC")
     my $ccld = get_object("CCLD")
@@ -37,8 +70,12 @@ subcode: dump_custom_make
     $print
     $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
     $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-    $print "LTCC = $(LT:compile) \x24(COMPILE)"
-    $print "LTLD = $(LT:link) \x24(LINK)"
+    $if $opts{V}==0
+        $print "LTCC = $(LT:compile) --quiet \x24(COMPILE)"
+        $print "LTLD = $(LT:link) --quiet \x24(LINK)"
+    $else
+        $print "LTCC = $(LT:compile) \x24(COMPILE)"
+        $print "LTLD = $(LT:link) \x24(LINK)"
     $print
 
     $call collect_programs_libs
@@ -55,14 +92,14 @@ subcode: dump_custom_make
         $print $l
     $print "\x23 --------------------\n"
     $print "%.o: %.c"
-    $print "\t\x24(COMPILE) -c -o \$\@ \$<"
+    $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
     $print
     $print "%.lo: %.c"
-    $print "\t\x24(LTCC) -c -o \$\@ \$<"
+    $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
     $print
     $foreach %special_targets
         $print "%.$k.lo: %.c"
-        $print "\t$v -c -o \$\@ \$<"
+        $call quiet_rule, LTCC, $v -c -o \$\@ \$<
         $print
 
     $(if:PREFIX)
@@ -93,6 +130,14 @@ subcode: dump_custom_make
     $print
 
     # ----------------------------
+    subcode: quiet_rule(cmd, @rule)
+        $if $opts{V}==0
+            $print \t\@echo $(cmd) \$\@ && $(rule)
+        $else
+            $print \t$(rule)
+
+
+    # ----------------------------
     subcode: dump_variable(key)
         my $t = get_object("$(key)")
         $call @dump_variable_custom
@@ -105,7 +150,6 @@ subcode: dump_custom_make
             $print "    $t \\"
         $print "    $last_item"
 
-    
     subcode: collect_programs_libs
         $global %dst_hash
         $(if:PREFIX)
@@ -129,21 +173,23 @@ subcode: dump_custom_make
             push @ltlibs, $t
 
     subcode: dump_rules(which)
+        my $cmd = "\x24(LTLD)"
+        $if $opts{V}==0
+            $cmd = "\@echo LTLD \$\@ && $cmd"
         $foreach $p in @$(which)
             my $a = $p
             $a=~s/[\.\/]/_/g
 
-            my $cmd = "\x24(LTLD)"
             my $dep = ""
             $call set_objects
             my $libs="\x24(LIBS)"
             $call set_add
             $call set_ldflags
-            $print $p: custom.make $dep
+            $print $p: $dep
             $if $dst_hash{$p}=~/\/lib$/
                 my $opt="-rpath $dst_hash{$p}"
-                $if $conf{so_version}
-                    $opt.=" -version-info $conf{so_version}"
+                $if $opts{so_version}
+                    $opt.=" -version-info $opts{so_version}"
                 $print \t$cmd -o \$\@ $opt $dep $libs
             $else
                 $print \t$cmd -o \$\@ $dep $libs

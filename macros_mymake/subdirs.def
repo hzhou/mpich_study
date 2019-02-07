@@ -56,60 +56,11 @@ subcode: compile_opa
     push @extra_make_rules, ""
 
 #---------------------------------------- 
-subcode: prepare_hydra
-    &call compile_subdir, src/pm/hydra
-        $(if:1)
-            $call sync_confdb
-            $call subst_hwloc, tools/topo/hwloc
-            system "cp ../../../maint/version.m4 ."
-            system "autoreconf -ivf"
-            system "./configure"
-        $call parse_Makefile, Makefile
-        &call open_W, custom.make
-            $call dump_custom_make
-
-    subcode: dump_variable_custom
-        $(if:key=AM_CPPFLAGS)
-            $t=~s/\s*-I\S*mpl\/include//g
-            $t.=" -I$(Impl) -I$(Ihwloc)"
-
-    subcode: set_libs_custom
-        $t=~s/\s*\S*\/libmpl.la\s*//g
-        $t=~s/-lhydra/libhydra.la/g
-        $t=~s/-lpm/libpm.la/g
-        $t.=" $(Lmpl) $(Lhwloc)"
-
-subcode: compile_hydra
-    push @extra_make_rules, ".PHONY: hydra"
-    push @extra_make_rules, "hydra:"
-    push @extra_make_rules, "\t(cd src/pm/hydra && \x24(DO_hydra) && \x24(MAKE) -f custom.make)"
-    push @extra_make_rules, ""
-
-#---------------------------------------- 
 subcode: compile_subdir(dir)
+    my $pwd = `pwd`
+    chomp $pwd
     $print =========== $(dir) ============
     chdir "$(dir)" or die "can't chdir $(dir)\n"
     BLOCK
-    chdir $srcdir
-
-    subcode: sync_confdb
-        system "rsync -r $srcdir/confdb/ confdb/"
-    subcode: config_embed
-        system "autoreconf -ivf"
-        system "./configure --disable-versioning --enable-embedded"
-
-#---------------------------------------- 
-subcode: subst_hwloc(dir)
-    &call open_W, confdb/subst_hwloc.m4
-        $print "AC_DEFUN([HWLOC_SETUP_CORE], ["
-        $print "    have_hwloc=yes"
-        $print "    AC_SUBST([HWLOC_EMBEDDED_CPPFLAGS],[])"
-        $print "    AC_SUBST([HWLOC_EMBEDDED_CFLAGS],[])"
-        $print "    AC_SUBST([HWLOC_EMBEDDED_LDADD],[])"
-        $print "    AC_SUBST([HWLOC_EMBEDDED_LIBS],[])"
-        $print "] )"
-        $print "AC_DEFUN([HWLOC_DO_AM_COND], [])"
-    # autoreconf complains
-    $if !-d "$(dir)/hwloc/config"
-        system "mkdir -p $(dir)/hwloc/config"
+    chdir $pwd
 
