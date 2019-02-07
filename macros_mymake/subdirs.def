@@ -1,5 +1,6 @@
 subcode: make_hwloc
     my @t
+    push @t, "\x24(DO_stage) Make hwloc"
     push @t, "cd $moddir/hwloc"
     push @t, "sh autogen.sh"
     push @t, "./configure --enable-embedded-mode --enable-visibility"
@@ -10,56 +11,47 @@ subcode: make_hwloc
     push @extra_make_rules, ""
 
 #---------------------------------------- 
+# Myriad code depend on mplconfig.h and opa_config.h, therefore
+#     both packages need be configured first
+#---------------------------------------- 
 subcode: prepare_mpl
     $if !-f "src/mpl/include/mplconfig.h"
+        $call stage, Configure MPL
         &call compile_subdir, src/mpl
             system "rsync -r ../../confdb/ confdb/" 
             system "autoreconf -ivf"
             system "./configure --disable-versioning --enable-embedded"
 
 subcode: compile_mpl
-    my @t
-    push @t, "cd src/mpl"
-    $(if:0)
-        # need run first because of "mplconfig.h"
-        push @t, "rsync -r ../../confdb/ confdb/"
-        push @t, "autoreconf -ivf"
-        push @t, "./configure --disable-versioning --enable-embedded"
-    $(else)
-        $call prepare_mpl
-    push @t, "\x24(MAKE)"
+    $call prepare_mpl
 
     push @extra_make_rules, "$(Lmpl):"
-    push @extra_make_rules, "\t(". join(' && ', @t). ")"
+    push @extra_make_rules, "\t(cd src/mpl && \x24(MAKE))"
     push @extra_make_rules, ""
 
 #---------------------------------------- 
 subcode: prepare_opa
     $if !-f "src/openpa/src/opa_config.h"
+        $call stage, Configure OpenPA
         &call compile_subdir, src/openpa
             system "autoreconf -ivf"
             system "./configure --disable-versioning --enable-embedded"
 
 subcode: compile_opa
+    $call prepare_opa
+
     my @t
     push @t, "cd src/openpa"
-    $(if:0)
-        # need run first because of "opa_config.h"
-        push @t, "autoreconf -ivf"
-        push @t, "./configure --disable-versioning --enable-embedded"
-    $(else)
-        $call prepare_opa
     push @t, "\x24(MAKE)"
 
     push @extra_make_rules, "$(Lopa):"
-    push @extra_make_rules, "\t(". join(' && ', @t). ")"
+    push @extra_make_rules, "\t(cd src/openpa && \x24(MAKE))"
     push @extra_make_rules, ""
 
 #---------------------------------------- 
 subcode: compile_subdir(dir)
     my $pwd = `pwd`
     chomp $pwd
-    $print =========== $(dir) ============
     chdir "$(dir)" or die "can't chdir $(dir)\n"
     BLOCK
     chdir $pwd

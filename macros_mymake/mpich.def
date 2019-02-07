@@ -5,6 +5,18 @@ subcode: compile_mpich
     $(if:do_make)
         system "make -j$(do_make)"
 
+    # --------------------
+    subcode: check_mpichconf_h
+        &call open_r, "src/include/mpichconf.h"
+            $if /^#define\s+HAVE_.*WEAK.* 1/
+                $opts{have_weak}=1
+        &call open_r, "maint/version.m4"
+            $if /libmpi_so_version_m4.*\[([\d:]*)\]/
+                $opts{so_version}=$1
+
+        $if !$opts{have_weak}
+            $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+
     # ---------------------------
     subcode: dump_variable_custom
         $(if:key=AM_CPPFLAGS)
@@ -21,18 +33,25 @@ subcode: compile_mpich
             $t.=" $(Lmpl) $(Lopa) $(Lhwloc)"
 
 #---------------------------------------- 
+macros:
+    mpich_configure_deps:: subsys_include.m4
+    mpich_configure_deps:: configure
+    mpich_configure_deps:: mymake/Makefile.orig
+
 subcode: mpich_configure
-    push @realclean_list, "subsys_include.m4"
-    push @realclean_list, "configure"
-    push @realclean_list, "mymake/Makefile.orig"
+    $(for:a in $(mpich_configure_deps))
+        push @realclean_list, "$(a)"
     push @realclean_list, "src/pm/hydra/mymake/Makefile.orig"
     $if !-f "subsys_include.m4"
+        $call stage, maint/gen_subcfg_m4
         system "perl maint/gen_subcfg_m4"
     $if !-f "configure"
+        $call stage, Autoconf MPICH
         &call temporary_modify
             $call modify_configure_ac
             system "autoreconf -ivf"
     $if !-f "mymake/Makefile.orig"
+        $call stage, Configure MPICH
         system "rm -f Makefile"
         my $t = join ' ', @config_args
         system "./configure --disable-cxx --disable-fortran --disable-romio --with-pm=none $t"
@@ -63,19 +82,6 @@ subcode: mpich_configure
                 $flag=0
             $elif $flag
                 next
-
-# --------------------
-subcode: check_mpichconf_h
-    &call open_r, "src/include/mpichconf.h"
-        $if /^#define\s+HAVE_.*WEAK.* 1/
-            $opts{have_weak}=1
-    &call open_r, "maint/version.m4"
-        $if /libmpi_so_version_m4.*\[([\d:]*)\]/
-            $opts{so_version}=$1
-
-    $if !$opts{have_weak}
-        $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
-
 
 #-------------------------
 subcode: fortran_buildiface

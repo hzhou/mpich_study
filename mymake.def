@@ -54,7 +54,7 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
-        $(for:errmsg,cvars,logs,hydra)
+        $(for:errmsg,cvars,logs,hydra,stage)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
 
     subcode: push_autogen_rule(name, file)
@@ -89,6 +89,11 @@ page: mymake_hydra
     $call parse_args
     $call prepare_hydra
 
+page: mymake_stage
+    module: perl
+    my $t = join(' ', @ARGV)
+    $call stage, $t
+
 #---------------------------------------- 
 subcode: parse_args
     $global (%opts, @config_args)
@@ -120,7 +125,10 @@ subcode: parse_args
 
 #---- stages ---------------------------- 
 subcode: stage(@name)
-    $print ==== $(name) ==============
+    $print ---------------------------\n
+    $print -     $(name)
+    $print ---------------------------\n
+
 #---- proprocess utils ---------------- 
 macros:
     mpi_src_dirs: mpi mpi_t nameserv util binding include mpid pmi

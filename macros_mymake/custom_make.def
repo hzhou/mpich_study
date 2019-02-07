@@ -126,7 +126,7 @@ subcode: dump_custom_make
     # --------------------
     $print ".PHONY: clean"
     $print "clean:"
-    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -v)"
+    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
     $print
     $global @realclean_list
     $if @realclean_list
@@ -186,19 +186,21 @@ subcode: dump_custom_make
             my $a = $p
             $a=~s/[\.\/]/_/g
 
-            my $dep = ""
+            my ($deps, $objs)
             $call set_objects
-            my $libs="\x24(LIBS)"
             $call set_add
             $call set_ldflags
-            $print $p: $dep
+
+            $objs = "$deps $objs \x24(LIBS)"
+
             $if $dst_hash{$p}=~/\/lib$/
                 my $opt="-rpath $dst_hash{$p}"
                 $if $opts{so_version}
                     $opt.=" -version-info $opts{so_version}"
-                $print \t$cmd -o \$\@ $opt $dep $libs
-            $else
-                $print \t$cmd -o \$\@ $dep $libs
+                $objs = "$opt $objs"
+
+            $print $p: $deps
+            $print \t$cmd -o \$\@ $objs
             $print
 
         subcode: set_objects
@@ -213,14 +215,7 @@ subcode: dump_custom_make
                 $foreach $t in @tlist
                     $t=~s/[^\/]+-//
 
-            $call attach_to_dep, $o, tlist
-
-        subcode: attach_to_dep(o, tlist)
-            $if @$(tlist)<4 && length(join(' ', @$(tlist)))<40
-                $dep .= " ". join(' ', @$(tlist))
-            $else
-                $call dump_object, $(o), @$(tlist)
-                $dep .= " \x24($(o))"
+            $call attach_to_deps, $o, tlist
 
         subcode: set_add
             $(if:which=programs)
@@ -233,7 +228,7 @@ subcode: dump_custom_make
                 $call @set_libs_custom
                 $t=~s/^\s+//
                 my @tlist = split /\s+/, $t
-                $call attach_to_dep, $add, tlist
+                $call attach_to_deps, $add, tlist
 
         subcode: set_ldflags
             $(if:which=programs)
@@ -241,6 +236,21 @@ subcode: dump_custom_make
                     $if $objects{"${a}_$1"}
                         $cmd.= ' '. get_object("${a}_$1")
                         $cmd .= " \x24($1)"
+
+        # --------------------
+        subcode: attach_to_deps(o, tlist)
+            my @t
+            $foreach $t in @$(tlist)
+                $if $t=~/^-l\w+/
+                    $objs.=" $t"
+                $else
+                    push @t, $t
+
+            $if @t<4 && length(join(' ', @t))<40
+                $deps .= " ". join(' ', @t)
+            $else
+                $call dump_object, $(o), @t
+                $deps .= " \x24($(o))"
 
 #---- utils --------------------------- 
 fncode: get_list($key)
