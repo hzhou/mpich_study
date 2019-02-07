@@ -6,7 +6,7 @@ include: macros_mymake/hydra.def
 macros:
     # SRCDIR: $ENV{HOME}/work/mpich-compile
     SRCDIR: $ENV{HOME}/work/tests/mpich
-    MODULES: $ENV{HOME}/work/modules
+    MODDIR: $ENV{HOME}/work/modules
     PREFIX: $ENV{HOME}/MPI
     
     Impl: $srcdir/src/mpl/include
@@ -29,6 +29,7 @@ page: mymake
     $(set:errhan=src/mpi/errhan/$1)
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
     $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
+
     $if !-f "src/include/mpir_cvars.h"
         system "perl $mymake\_cvars.pl"
     # $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
@@ -90,31 +91,37 @@ page: mymake_hydra
 
 #---------------------------------------- 
 subcode: parse_args
-    my (%opts, @config_args)
+    $global (%opts, @config_args)
     $opts{V}=0
     $foreach $a in @ARGV
-        $if $a=~/^(--.*)/
-            push @config_args, $1
+        $if $a=~/^--(prefix)=(.*)/
+            $opts{$1}=$2
         $elif $a=~/^(\w+)=(.*)/
             $opts{$1}=$2
-    my $srcdir = "$(SRCDIR)"
-    my $moddir = "$(MODULES)"
-    $if $opts{srcdir}
-        $srcdir = $opts{srcdir}
-    $elif -f "maint/version.m4"
-        $srcdir = "."
+        $elif $a=~/^(--.*)/
+            push @config_args, $1
 
-    $if $opts{modules}
-        $moddir = $opts{modules}
-    $elif $ENV{MODDIR}
+    $if -f "maint/version.m4"
+        $srcdir = "."
+    $if $ENV{MODDIR}
         $moddir = $ENV{MODDIR}
+
+    $map opt_set, srcdir, moddir, prefix
 
     $if $srcdir ne "."
         chdir $srcdir or die "can't chdir $srcdir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
 
-#---------------------------------------- 
+    subcode: opt_set(name)
+        $global $$(name) = "$($(name:uc))"
+        $if $opts{$(name)}
+            $$(name) = $opts{$(name)}
+
+#---- stages ---------------------------- 
+subcode: stage(@name)
+    $print ==== $(name) ==============
+#---- proprocess utils ---------------- 
 macros:
     mpi_src_dirs: mpi mpi_t nameserv util binding include mpid pmi
 

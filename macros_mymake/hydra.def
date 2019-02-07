@@ -52,8 +52,10 @@ subcode: hydra_config
 #---------------------------------------- 
 subcode: compile_hydra
     my $mkfile="src/pm/hydra/Makefile"
+    my $add="src/mpl/libmpl.la"
+    $add.=" $moddir/hwloc/hwloc/libhwloc_embedded.la"
     push @extra_make_rules, ".PHONY: hydra hydra-install"
-    push @extra_make_rules, "hydra: $mkfile"
+    push @extra_make_rules, "hydra: $mkfile $add"
     push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) )"
     push @extra_make_rules, ""
     push @extra_make_rules, "hydra-install: $mkfile"

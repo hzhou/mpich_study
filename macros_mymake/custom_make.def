@@ -102,32 +102,39 @@ subcode: dump_custom_make
         $call quiet_rule, LTCC, $v -c -o \$\@ \$<
         $print
 
-    $(if:PREFIX)
-        my (%dirs, @install_list)
-        $foreach %dst_hash
-            $if $v
-                $if !$dirs{$v}
-                    $dirs{$v} = 1
-                $if $v=~/\/lib$/
-                    push @install_list, "$(LT:install) install $k $v"
-                $elif $v=~/\/bin$/
-                    push @install_list, "install $k $v"
-        my @install_list = sort @install_list
-        $foreach $d in keys %dirs
-            unshift @install_list, "mkdir -p $d"
+    # ----------------------
+    my (%dirs, @install_list)
+    $foreach %dst_hash
+        $if $v
+            $if !$dirs{$v}
+                $dirs{$v} = 1
+            $if $v=~/\/lib$/
+                push @install_list, "$(LT:install) install $k $v"
+            $elif $v=~/\/bin$/
+                push @install_list, "install $k $v"
+    my @install_list = sort @install_list
+    $foreach $d in keys %dirs
+        unshift @install_list, "mkdir -p $d"
 
-        $if @install_list
-            $print "\x23 --------------------\n"
-            $print ".PHONY: install"
-            $print "install:"
-            $foreach $l in @install_list
-                $print "\t$l"
-            $print
-
+    $if @install_list
+        $print "\x23 --------------------\n"
+        $print ".PHONY: install"
+        $print "install:"
+        $foreach $l in @install_list
+            $print "\t$l"
+        $print
+    # --------------------
     $print ".PHONY: clean"
     $print "clean:"
     $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -v)"
     $print
+    $global @realclean_list
+    $if @realclean_list
+        $print ".PHONY: realclean"
+        $print "realclean: clean"
+        my $t = join(' ', @realclean_list)
+        $print "\trm -f $t"
+        $print
 
     # ----------------------------
     subcode: quiet_rule(cmd, @rule)
@@ -152,14 +159,13 @@ subcode: dump_custom_make
 
     subcode: collect_programs_libs
         $global %dst_hash
-        $(if:PREFIX)
-            my $tlist = get_list("lib_LTLIBRARIES")
-            $foreach $t in @$tlist
-                $dst_hash{$t} = "$(PREFIX)/lib"
-            my $tlist = get_list("bin_PROGRAMS")
-            $foreach $t in @$tlist
-                $dst_hash{$t} = "$(PREFIX)/bin"
-
+        my $tlist = get_list("lib_LTLIBRARIES")
+        $foreach $t in @$tlist
+            $dst_hash{$t} = "$prefix/lib"
+        my $tlist = get_list("bin_PROGRAMS")
+        $foreach $t in @$tlist
+            $dst_hash{$t} = "$prefix/bin"
+        # -------------------
         $global @programs
         my $tlist = get_list("PROGRAMS")
         $foreach $t in @$tlist
