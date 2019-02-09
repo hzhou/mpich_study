@@ -1,3 +1,9 @@
+macros:
+    Dmpl_hydra: ../../../src/mpl
+    Impl_hydra: $(Dmpl_hydra)/include
+    Lmpl_hydra: $(Dmpl_hydra)/libmpl.la
+    Hmpl_hydra: $(Impl)/mplconfig.h
+
 #---- mymake_hydra.pl -------------------- 
 subcode: prepare_hydra
     my $dir="src/pm/hydra"
@@ -7,18 +13,25 @@ subcode: prepare_hydra
         mkdir "mymake" or die "can't mkdir mymake\n"
     $if !-f "mymake/Makefile.orig"
         $call hydra_config
+
+    my $bin="\x24(PREFIX)/bin"
+    $dst_hash{"LN_S-$bin/mpiexec"}="$bin/mpiexec.hydra"
+    $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
+
     $call custom_make
 
     subcode: dump_variable_custom
+        $call @filter_var_hwloc
         $(if:key=AM_CPPFLAGS)
             $t=~s/\s*-I\S*mpl\/include//g
-            $t.=" -I$(Impl) -I$(Ihwloc)"
+        $(if:key=CPPFLAGS)
+            $t.=" -I$(Impl_hydra) -I$(Ihwloc)"
 
     subcode: set_libs_custom
         $t=~s/\s*\S*\/libmpl.la\s*//g
         $t=~s/-lhydra/libhydra.la/g
         $t=~s/-lpm/libpm.la/g
-        $t.=" $(Lmpl) $(Lhwloc)"
+        $t.=" $(Lmpl_hydra) $(Lhwloc)"
 
 # -------------------
 subcode: hydra_config
@@ -49,11 +62,10 @@ subcode: hydra_config
     system "./configure"
     system "mv Makefile mymake/Makefile.orig"
 
-#---------------------------------------- 
+#---- rules in mpich Makefile ------------------ 
 subcode: compile_hydra
     my $mkfile="src/pm/hydra/Makefile"
-    my $add="src/mpl/libmpl.la"
-    $add.=" $moddir/hwloc/hwloc/libhwloc_embedded.la"
+    my $add="$(Lmpl) $(Lhwloc)"
     push @extra_make_rules, ".PHONY: hydra hydra-install"
     push @extra_make_rules, "hydra: $mkfile $add"
     push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) )"

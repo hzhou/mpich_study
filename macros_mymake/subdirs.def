@@ -1,58 +1,93 @@
-subcode: make_hwloc
-    my @t
-    push @t, "\x24(DO_stage) Make hwloc"
-    push @t, "cd $moddir/hwloc"
-    push @t, "sh autogen.sh"
-    push @t, "./configure --enable-embedded-mode --enable-visibility"
-    push @t, "\x24(MAKE)"
+macros:
+    Dmpl: src/mpl
+    Impl: src/mpl/include
+    Lmpl: src/mpl/libmpl.la
+    Hmpl: $(Impl)/mplconfig.h
 
-    push @extra_make_rules, "$(Lhwloc):"
-    push @extra_make_rules, "\t(". join(' && ', @t). ")"
-    push @extra_make_rules, ""
+    Dopa: src/openpa
+    Iopa: src/openpa/src
+    Lopa: src/openpa/src/libopa.la
+    Hopa: $(Iopa)/opa_config.h
 
-#---------------------------------------- 
-# Myriad code depend on mplconfig.h and opa_config.h, therefore
-#     both packages need be configured first
-#---------------------------------------- 
-subcode: prepare_mpl
-    $if !-f "src/mpl/include/mplconfig.h"
-        $call stage, Configure MPL
-        &call compile_subdir, src/mpl
-            system "rsync -r ../../confdb/ confdb/" 
-            system "autoreconf -ivf"
-            system "./configure --disable-versioning --enable-embedded"
+    Dhwloc: $moddir/hwloc
+    Ihwloc: $moddir/hwloc/include
+    Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
+    Hhwloc: $(Ihwloc)/hwloc/autogen/config.h
 
-subcode: compile_mpl
-    $call prepare_mpl
-
-    push @extra_make_rules, "$(Lmpl):"
-    push @extra_make_rules, "\t(cd src/mpl && \x24(MAKE))"
-    push @extra_make_rules, ""
+    Dizem: $moddir/izem
+    Iizem: $moddir/izem/src/include
+    Lizem: $moddir/izem/src/libzm.la
+    Hizem: $(Iizem)/izem/src/include/zm_config.h
 
 #---------------------------------------- 
-subcode: prepare_opa
-    $if !-f "src/openpa/src/opa_config.h"
-        $call stage, Configure OpenPA
-        &call compile_subdir, src/openpa
-            system "autoreconf -ivf"
-            system "./configure --disable-versioning --enable-embedded"
-
-subcode: compile_opa
-    $call prepare_opa
-
-    my @t
-    push @t, "cd src/openpa"
-    push @t, "\x24(MAKE)"
-
-    push @extra_make_rules, "$(Lopa):"
-    push @extra_make_rules, "\t(cd src/openpa && \x24(MAKE))"
-    push @extra_make_rules, ""
+subcode: need_mpl
+    push @CONFIGS, "$(Hmpl)"
+    &call add_subdir_rule_block, $(Dmpl), $(Hmpl)
+        push @t, "\x24(DO_stage) Configure MPL"
+        push @t, "rsync -r ../../confdb/ confdb/" 
+        push @t, "autoreconf -ivf"
+        push @t, "./configure --disable-versioning --enable-embedded"
+    $call add_subdir_make, $(Dmpl), $(Lmpl)
 
 #---------------------------------------- 
-subcode: compile_subdir(dir)
+subcode: need_opa
+    push @CONFIGS, "$(Hopa)"
+    &call add_subdir_rule_block, $(Dopa), $(Hopa)
+        push @t, "\x24(DO_stage) Configure OpenPA"
+        push @t, "rsync -r ../../confdb/ confdb/" 
+        push @t, "autoreconf -ivf"
+        # check --with-atomic-primitives [auto_allow_emulation]
+        push @t, "./configure --disable-versioning --enable-embedded"
+    $call add_subdir_make, $(Dopa), $(Lopa)
+
+#---------------------------------------- 
+subcode: need_hwloc
+    push @CONFIGS, "$(Hhwloc)"
+    &call add_subdir_rule_block, $(Dhwloc), $(Hhwloc)
+        push @t, "\x24(DO_stage) Configure HWLOC"
+        push @t, "sh autogen.sh"
+        push @t, "./configure --enable-embedded-mode --enable-visibility"
+    $call add_subdir_make, $(Dhwloc), $(Lhwloc)
+
+subcode: filter_var_hwloc
+    $(if:key=AM_CPPFLAGS)
+        $t=~s/\@HWLOC_\S+\@\s*//
+    $(elif:key=AM_CFLAGS)
+        $t=~s/\@HWLOC_\S+\@\s*//
+
+#---------------------------------------- 
+subcode: need_izem
+    push @CONFIGS, "$(Hizem)"
+    &call add_subdir_rule_block, $(Dizem), $(Hizem)
+        push @t, "\x24(DO_stage) Configure IZEM"
+        push @t, "sh autogen.sh"
+        push @t, "./configure --enable-embedded"
+    $call add_subdir_make, $(Dizem), $(Lizem)
+
+#---------------------------------------- 
+subcode: need_ucx
+    push @CONFIGS, "$(Hucx)"
+    &call add_subdir_rule_block, $(Ducx), $(Hucx)
+        push @t, "\x24(DO_stage) Configure UCX"
+        push @t, "sh autogen.sh"
+        push @t, "./configure --disable-static --enable-embedded"
+    $call add_subdir_make, $(Ducx), $(Lucx)
+
+#---- common --------------------------- 
+subcode: chdir_subdir(dir)
     my $pwd = `pwd`
     chomp $pwd
     chdir "$(dir)" or die "can't chdir $(dir)\n"
     BLOCK
     chdir $pwd
 
+subcode: add_subdir_rule_block(subdir, target)
+    my @t = ("cd $(subdir)")
+    BLOCK
+    push @extra_make_rules, "$(target):"
+    push @extra_make_rules, "\t(".join(' && ', @t).")"
+    push @extra_make_rules, ""
+
+subcode: add_subdir_make(subdir, target)
+    &call add_subdir_rule_block, $(subdir), $(target)
+        push @t, "\x24(MAKE)"

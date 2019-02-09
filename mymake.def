@@ -9,13 +9,6 @@ macros:
     MODDIR: $ENV{HOME}/work/modules
     PREFIX: $ENV{HOME}/MPI
     
-    Impl: $srcdir/src/mpl/include
-    Lmpl: $srcdir/src/mpl/libmpl.la
-    Iopa: $srcdir/src/openpa/src
-    Lopa: $srcdir/src/openpa/src/libopa.la
-    Ihwloc: $moddir/hwloc/include
-    Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
-
     # do_make: 16
 
 page: mymake
@@ -26,24 +19,7 @@ page: mymake
     $call parse_args
     $call set_mymake
 
-    $(set:errhan=src/mpi/errhan/$1)
-    push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
-    $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
-
-    $if !-f "src/include/mpir_cvars.h"
-        system "perl $mymake\_cvars.pl"
-    # $call push_autogen_rule, cvars, src/util/cvar/mpir_cvars.c
-    # $call push_autogen_rule, logs, src/include/mpiallstates.h
-
-    push @extra_make_rules, "src/glue/romio/all_romio_symbols.c:"
-    push @extra_make_rules, "\t(cd src/glue/romio && perl all_romio_symbols ../../mpi/romio/include/mpio.h.in)"
-    push @extra_make_rules, ""
-
-    $call make_hwloc
-    $call compile_mpl
-    $call compile_opa
     $call compile_hydra
-
     $call compile_mpich
 
     subcode: set_mymake

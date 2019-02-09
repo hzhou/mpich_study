@@ -6,6 +6,7 @@ subcode: custom_make
     $call parse_Makefile, mymake/Makefile.orig
     &call open_W, mymake/Makefile.custom
         $print "export MODDIR=$moddir"
+        $print "PREFIX=$prefix"
         $print
         $call dump_custom_make
     system "rm -f Makefile"
@@ -62,12 +63,17 @@ subcode: parse_Makefile(makefile)
 
 #---------------------------------------- 
 subcode: dump_custom_make
-    my $cc = get_object("CC")
-    my $ccld = get_object("CCLD")
-
-    my $LD="\x24(LINK)"
+    $if @CONFIGS
+        $global @CONFIGS
+        $print "CONFIGS = @CONFIGS"
+        $print
     $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
     $print
+
+    my $cc = get_object("CC")
+    my $ccld = get_object("CCLD")
+    my $LD="\x24(LINK)"
+
     $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
     $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
     $if $opts{V}==0
@@ -87,6 +93,7 @@ subcode: dump_custom_make
     $call dump_rules, programs
 
     $print "\x23 --------------------\n"
+    $call @custom_make_extra
     $global @extra_make_rules
     $foreach $l in @extra_make_rules
         $print $l
@@ -103,18 +110,22 @@ subcode: dump_custom_make
         $print
 
     # ----------------------
-    my (%dirs, @install_list)
+    my (%dirs, @install_list, @lns_list)
     $foreach %dst_hash
-        $if $v
+        $if $k=~/^LN_S-(.*)/
+            push @lns_list, "rm -f $1 && ln -s $v $1"
+        $elif $v
             $if !$dirs{$v}
                 $dirs{$v} = 1
             $if $v=~/\/lib$/
                 push @install_list, "$(LT:install) install $k $v"
             $elif $v=~/\/bin$/
                 push @install_list, "install $k $v"
+
     my @install_list = sort @install_list
     $foreach $d in keys %dirs
         unshift @install_list, "mkdir -p $d"
+    push @install_list, sort @lns_list
 
     $if @install_list
         $print "\x23 --------------------\n"
@@ -124,15 +135,21 @@ subcode: dump_custom_make
             $print "\t$l"
         $print
     # --------------------
-    $print ".PHONY: clean"
+    $print "\x23 --------------------\n"
+    $print ".PHONY: clean realclean realrealclean"
     $print "clean:"
     $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
     $print
     $global @realclean_list
     $if @realclean_list
-        $print ".PHONY: realclean"
         $print "realclean: clean"
         my $t = join(' ', @realclean_list)
+        $print "\trm -f $t"
+        $print
+
+    $if @CONFIGS
+        $print "realrealclean: realclean"
+        my $t = join(' ', @CONFIGS)
         $print "\trm -f $t"
         $print
 
@@ -157,14 +174,17 @@ subcode: dump_custom_make
             $print "    $t \\"
         $print "    $last_item"
 
+        $if @CONFIGS and "$(key)"=~/_OBJECTS$/
+            $print "\x24($(key)): \x24(CONFIGS)"
+
     subcode: collect_programs_libs
         $global %dst_hash
         my $tlist = get_list("lib_LTLIBRARIES")
         $foreach $t in @$tlist
-            $dst_hash{$t} = "$prefix/lib"
+            $dst_hash{$t} = "\x24(PREFIX)/lib"
         my $tlist = get_list("bin_PROGRAMS")
         $foreach $t in @$tlist
-            $dst_hash{$t} = "$prefix/bin"
+            $dst_hash{$t} = "\x24(PREFIX)/bin"
         # -------------------
         $global @programs
         my $tlist = get_list("PROGRAMS")
@@ -193,6 +213,7 @@ subcode: dump_custom_make
 
             $objs = "$deps $objs \x24(LIBS)"
 
+            # ref: subcode: collect_programs_libs
             $if $dst_hash{$p}=~/\/lib$/
                 my $opt="-rpath $dst_hash{$p}"
                 $if $opts{so_version}
@@ -246,11 +267,8 @@ subcode: dump_custom_make
                 $else
                     push @t, $t
 
-            $if @t<4 && length(join(' ', @t))<40
-                $deps .= " ". join(' ', @t)
-            $else
-                $call dump_object, $(o), @t
-                $deps .= " \x24($(o))"
+            $call dump_object, $(o), @t
+            $deps .= " \x24($(o))"
 
 #---- utils --------------------------- 
 fncode: get_list($key)
