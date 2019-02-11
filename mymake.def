@@ -18,6 +18,8 @@ page: mymake
     chomp $pwd
     $call parse_args
     $call set_mymake
+    $(for:srcdir,moddir,prefix,device)
+        $print $1: $$1
 
     $call compile_hydra
     $call compile_mpich
