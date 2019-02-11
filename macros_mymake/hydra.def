@@ -77,6 +77,6 @@ subcode: compile_hydra
     push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) install )"
     push @extra_make_rules, ""
     push @extra_make_rules, "$mkfile:"
-    push @extra_make_rules, "\t\x24(DO_hydra)"
+    push @extra_make_rules, "\t\x24(DO_hydra) --prefix=\x24(PREFIX)"
     push @extra_make_rules, ""
 
