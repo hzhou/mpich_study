@@ -18,8 +18,7 @@ page: mymake
     chomp $pwd
     $call parse_args
     $call set_mymake
-    $(for:srcdir,moddir,prefix,device)
-        $print $1: $$1
+    $call @dump_args
 
     $call compile_hydra
     $call compile_mpich
@@ -39,6 +38,12 @@ page: mymake
         push @extra_make_rules, "$(file):"
         push @extra_make_rules, "\t\x24(DO_$(name))"
         push @extra_make_rules, ""
+
+    subcode: dump_args
+        $(for:srcdir,moddir,prefix)
+            $print $1: $$1
+        $if $opts{device}
+            $print device: $opts{device}
 
 include: macros_mymake/errmsgs.def
 page: mymake_errmsg
