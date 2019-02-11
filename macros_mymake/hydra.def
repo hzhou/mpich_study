@@ -18,20 +18,23 @@ subcode: prepare_hydra
     $dst_hash{"LN_S-$bin/mpiexec"}="$bin/mpiexec.hydra"
     $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
 
+
+    $I_list .= " -I$(Impl_hydra)"
+    $L_list .= " $(Lmpl_hydra)"
+    $call need_hwloc
     $call custom_make
 
     subcode: dump_variable_custom
         $call @filter_var_hwloc
         $(if:key=AM_CPPFLAGS)
             $t=~s/\s*-I\S*mpl\/include//g
-        $(if:key=CPPFLAGS)
-            $t.=" -I$(Impl_hydra) -I$(Ihwloc)"
+            $t .= $I_list
 
     subcode: set_libs_custom
         $t=~s/\s*\S*\/libmpl.la\s*//g
         $t=~s/-lhydra/libhydra.la/g
         $t=~s/-lpm/libpm.la/g
-        $t.=" $(Lmpl_hydra) $(Lhwloc)"
+        $t .= $L_list
 
 # -------------------
 subcode: hydra_config

@@ -19,8 +19,15 @@ macros:
     Lizem: $moddir/izem/src/libzm.la
     Hizem: $(Iizem)/izem/src/include/zm_config.h
 
+    Ducx: $moddir/ucx
+    Iucx: $(Ducx)/src
+    Lucx: $(Ducx)/src/ucp/libucp.la
+    Hucx: $(Ducx)/config.h
+
 #---------------------------------------- 
 subcode: need_mpl
+    $I_list .= " -I$(Impl)"
+    $L_list .= " $(Lmpl)"
     push @CONFIGS, "$(Hmpl)"
     &call add_subdir_rule_block, $(Dmpl), $(Hmpl)
         push @t, "\x24(DO_stage) Configure MPL"
@@ -31,6 +38,8 @@ subcode: need_mpl
 
 #---------------------------------------- 
 subcode: need_opa
+    $I_list .= " -I$(Iopa)"
+    $L_list .= " $(Lopa)"
     push @CONFIGS, "$(Hopa)"
     &call add_subdir_rule_block, $(Dopa), $(Hopa)
         push @t, "\x24(DO_stage) Configure OpenPA"
@@ -40,8 +49,16 @@ subcode: need_opa
         push @t, "./configure --disable-versioning --enable-embedded"
     $call add_subdir_make, $(Dopa), $(Lopa)
 
+subcode: filter_var_mpl_etc
+    $t=~s/-I.*\/(mpl|openpa)\/\S+\s*//g
+
+subcode: filter_lib_mpl_etc
+    $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
+
 #---------------------------------------- 
 subcode: need_hwloc
+    $I_list .= " -I$(Ihwloc)"
+    $L_list .= " $(Lhwloc)"
     push @CONFIGS, "$(Hhwloc)"
     &call add_subdir_rule_block, $(Dhwloc), $(Hhwloc)
         push @t, "\x24(DO_stage) Configure HWLOC"
@@ -57,6 +74,8 @@ subcode: filter_var_hwloc
 
 #---------------------------------------- 
 subcode: need_izem
+    $I_list .= " -I$(Iizem)"
+    $L_list .= " $(Lizem)"
     push @CONFIGS, "$(Hizem)"
     &call add_subdir_rule_block, $(Dizem), $(Hizem)
         push @t, "\x24(DO_stage) Configure IZEM"
@@ -66,12 +85,33 @@ subcode: need_izem
 
 #---------------------------------------- 
 subcode: need_ucx
+    $I_list .= " -I$(Iucx)"
+    $L_list .= " $(Lucx)"
     push @CONFIGS, "$(Hucx)"
     &call add_subdir_rule_block, $(Ducx), $(Hucx)
         push @t, "\x24(DO_stage) Configure UCX"
         push @t, "sh autogen.sh"
-        push @t, "./configure --disable-static --enable-embedded"
+        push @t, "./configure --disable-static --enable-embedded --with-prefix=$prefix"
     $call add_subdir_make, $(Ducx), $(Lucx)
+
+subcode: patch_configure_ucx
+    my $flag
+    &call modify, src/mpid/ch4/netmod/ucx/subconfigure.m4
+        $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_UCX\]/
+            $flag = 1
+            next
+        $elif $flag
+            $if $l=~/^\]\)/
+                $flag = 0
+                next
+            $elif $l=~/AC_DEFINE\(HAVE_UCP_\w+_NB,1/
+                NOOP
+            $else
+                next
+
+subcode: filter_var_ucx
+subcode: filter_lib_ucx
+    $t=~s/\@ucxlib\@\s*//g
 
 #---- common --------------------------- 
 subcode: chdir_subdir(dir)

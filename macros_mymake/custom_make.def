@@ -3,6 +3,7 @@ macros:
 
 #---------------------------------------- 
 subcode: custom_make
+    $global $I_list, $L_list # ref: dump_variable_custom, set_libs_custom
     $call parse_Makefile, mymake/Makefile.orig
     &call open_W, mymake/Makefile.custom
         $print "export MODDIR=$moddir"

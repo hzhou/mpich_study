@@ -7,19 +7,22 @@ subcode: compile_mpich
     $call need_mpich_preproc
     $(for:mpl,opa,hwloc)
         $call need_$1
+    $if $opts{device}=~/ucx/
+        $call need_ucx
     $call custom_make
 
     # ---------------------------
     subcode: dump_variable_custom
         $call filter_var_hwloc
         $(if:key=CPPFLAGS)
-            $t=~s/^-I.*\/(mpl|openpa)\/\S+\s*//g
-            $t.=" -I$(Impl) -I$(Iopa) -I$(Ihwloc)"
+            $call filter_var_mpl_etc
+            $t .= $I_list
 
     subcode: set_libs_custom
         $(if:which=ltlibs)
-            $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
-            $t.=" $(Lmpl) $(Lopa) $(Lhwloc)"
+            $call filter_lib_mpl_etc
+            $call filter_lib_ucx
+            $t.= $L_list
     # ---------------------------
     subcode: post_mpich_configure
         &call open_r, src/include/mpichconf.h
@@ -68,6 +71,7 @@ subcode: mpich_configure
         $call stage, maint/gen_subcfg_m4
         system "perl maint/gen_subcfg_m4"
     $if !-f "configure"
+        system "rm -f mymake/Makefile.orig"
         $call stage, Autoconf MPICH
         &call temporary_modify
             $call modify_configure_ac
@@ -104,6 +108,8 @@ subcode: mpich_configure
                 $flag=0
             $elif $flag
                 next
+        $if $opts{device}=~/ucx/
+            $call patch_configure_ucx
 
 subcode: need_mpich_preproc
     $(set:errhan=src/mpi/errhan/$1)

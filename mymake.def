@@ -81,6 +81,8 @@ subcode: parse_args
             $opts{$1}=$2
         $elif $a=~/^(--.*)/
             push @config_args, $1
+            $if $a=~/^--with-device=(.*)/
+                $opts{device}=$1
 
     $if -f "maint/version.m4"
         $srcdir = "."
