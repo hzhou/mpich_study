@@ -24,6 +24,11 @@ macros:
     Lucx: $(Ducx)/src/ucp/libucp.la
     Hucx: $(Ducx)/config.h
 
+    Dofi: $moddir/libfabric
+    Iofi: $(Dofi)/include
+    Lofi: $(Dofi)/src/libfabric.la
+    Hofi: $(Dofi)/config.h
+
 #---------------------------------------- 
 subcode: need_mpl
     $I_list .= " -I$(Impl)"
@@ -112,6 +117,17 @@ subcode: patch_configure_ucx
 subcode: filter_var_ucx
 subcode: filter_lib_ucx
     $t=~s/\@ucxlib\@\s*//g
+
+#---------------------------------------- 
+subcode: need_ofi
+    $I_list .= " -I$(Iofi)"
+    $L_list .= " $(Lofi)"
+    push @CONFIGS, "$(Hofi)"
+    &call add_subdir_rule_block, $(Dofi), $(Hofi)
+        push @t, "\x24(DO_stage) Configure UCX"
+        push @t, "sh autogen.sh"
+        push @t, "./configure --enable-embedded --with-prefix=$prefix"
+    $call add_subdir_make, $(Dofi), $(Lofi)
 
 #---- common --------------------------- 
 subcode: chdir_subdir(dir)
