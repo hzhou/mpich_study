@@ -66,7 +66,7 @@ subcode: hydra_config
     system "mv Makefile mymake/Makefile.orig"
 
 #---- rules in mpich Makefile ------------------ 
-subcode: compile_hydra
+subcode: add_rule_hydra
     my $mkfile="src/pm/hydra/Makefile"
     my $add="$(Lmpl) $(Lhwloc)"
     push @extra_make_rules, ".PHONY: hydra hydra-install"

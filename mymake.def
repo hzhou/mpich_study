@@ -2,10 +2,11 @@ include: macros_mymake/custom_make.def
 include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
 include: macros_mymake/hydra.def
+include: macros_mymake/testing.def
 
 macros:
     # SRCDIR: $ENV{HOME}/work/mpich-compile
-    SRCDIR: $ENV{HOME}/work/tests/mpich
+    SRCDIR: $ENV{HOME}/work/mpich
     MODDIR: $ENV{HOME}/work/modules
     PREFIX: $ENV{HOME}/MPI
     
@@ -20,7 +21,8 @@ page: mymake
     $call set_mymake
     $call @dump_args
 
-    $call compile_hydra
+    $call add_rule_hydra
+    $call add_rule_testing
     $call compile_mpich
 
     subcode: set_mymake
@@ -31,7 +33,7 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
-        $(for:errmsg,cvars,logs,hydra,stage)
+        $(for:errmsg,cvars,logs,hydra,testing,stage)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
 
     subcode: push_autogen_rule(name, file)
@@ -66,12 +68,21 @@ page: mymake_logs
     $call parse_args
     $call logging_states
 
+# ----------------
 page: mymake_hydra
     module: perl
 
     $call parse_args
     $call prepare_hydra
 
+page: mymake_testing
+    module: perl
+
+    $call parse_args
+    $call prepare_testing
+
+# ----------------
+# print out a stage header
 page: mymake_stage
     module: perl
     my $t = join(' ', @ARGV)

@@ -1,9 +1,9 @@
-macros: 
-    LT: /bin/sh ./libtool --mode=$1
-
-#---------------------------------------- 
 subcode: custom_make
     $global $I_list, $L_list # ref: dump_variable_custom, set_libs_custom
+    my $lt_opt
+    $if $opts{V}==0
+        $lt_opt = "--quiet"
+
     $call parse_Makefile, mymake/Makefile.orig
     &call open_W, mymake/Makefile.custom
         $print "export MODDIR=$moddir"
@@ -12,6 +12,10 @@ subcode: custom_make
         $call dump_custom_make
     system "rm -f Makefile"
     system "ln -s mymake/Makefile.custom Makefile"
+
+#---------------------------------------- 
+macros: 
+    LT: /bin/sh ./libtool --mode=$1 $lt_opt
 
 #---------------------------------------- 
 subcode: temporary_modify
@@ -77,12 +81,8 @@ subcode: dump_custom_make
 
     $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
     $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-    $if $opts{V}==0
-        $print "LTCC = $(LT:compile) --quiet \x24(COMPILE)"
-        $print "LTLD = $(LT:link) --quiet \x24(LINK)"
-    $else
-        $print "LTCC = $(LT:compile) \x24(COMPILE)"
-        $print "LTLD = $(LT:link) \x24(LINK)"
+    $print "LTCC = $(LT:compile) \x24(COMPILE)"
+    $print "LTLD = $(LT:link) \x24(LINK)"
     $print
 
     $call collect_programs_libs
