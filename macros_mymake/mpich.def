@@ -82,7 +82,7 @@ subcode: mpich_configure
         $call stage, Configure MPICH
         system "rm -f Makefile"
         my $t = join ' ', @config_args
-        system "./configure --disable-cxx --disable-fortran --disable-romio --with-pm=none $t"
+        system "./configure --disable-fortran --disable-romio --with-pm=none $t"
         system "mv Makefile mymake/Makefile.orig"
 
     # -------------------
