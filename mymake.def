@@ -81,6 +81,7 @@ page: mymake_stage
 subcode: parse_args
     $global (%opts, @config_args)
     $opts{V}=0
+    $call @load_last_ARGV
     $foreach $a in @ARGV
         $if $a=~/^--(prefix)=(.*)/
             $opts{$1}=$2
@@ -102,11 +103,25 @@ subcode: parse_args
         chdir $srcdir or die "can't chdir $srcdir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
+    $call @save_last_ARGV
 
     subcode: opt_set(name)
         $global $$(name) = "$($(name:uc))"
         $if $opts{$(name)}
             $$(name) = $opts{$(name)}
+
+    subcode: load_last_ARGV
+        my $last_argv
+        $if !@ARGV && -f "mymake/args"
+            $call get_file_in_t, mymake/args
+            @ARGV = split /\s+/, $t
+        $elif @ARGV
+            $last_argv = join(' ', @ARGV)
+
+    subcode: save_last_ARGV
+        $if $last_argv
+            &call open_w, mymake/args
+                print Out $last_argv
 
 #---- stages ---------------------------- 
 subcode: stage(@name)

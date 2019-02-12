@@ -9,6 +9,8 @@ subcode: compile_mpich
         $call need_$1
     $if $opts{device}=~/ucx/
         $call need_ucx
+    $if $opts{device}=~/ofi/
+        $call need_ofi
     $call custom_make
 
     # ---------------------------
