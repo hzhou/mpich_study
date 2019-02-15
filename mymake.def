@@ -33,8 +33,9 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
-        $(for:errmsg,cvars,logs,hydra,testing,stage)
+        $(for:stage,errmsg,cvars,logs,hydra,testing,mpi_h)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
+        push @extra_make_rules, ""
 
     subcode: push_autogen_rule(name, file)
         push @extra_make_rules, "$(file):"
@@ -67,6 +68,14 @@ page: mymake_logs
 
     $call parse_args
     $call logging_states
+
+# ----------------
+include: macros_mymake/mpi_h.def
+page: mymake_mpi_h
+    module: perl
+
+    $call parse_args
+    $call get_mpi_h
 
 # ----------------
 page: mymake_hydra
@@ -122,17 +131,21 @@ subcode: parse_args
             $$(name) = $opts{$(name)}
 
     subcode: load_last_ARGV
-        my $last_argv
+        my $need_save_args
         $if !@ARGV && -f "mymake/args"
             $call get_file_in_t, mymake/args
             @ARGV = split /\s+/, $t
         $elif @ARGV
-            $last_argv = join(' ', @ARGV)
+            # has to wait until mymake folder is made
+            $need_save_args = 1
 
     subcode: save_last_ARGV
-        $if $last_argv
+        $if $need_save_args
+            my $t = join(' ', @ARGV)
             &call open_w, mymake/args
-                print Out $last_argv
+                print Out $t
+            system "rm -f mymake/Makefile.orig"
+            system "rm -f $(Hmpl) $(Hopa)"
 
 #---- stages ---------------------------- 
 subcode: stage(@name)

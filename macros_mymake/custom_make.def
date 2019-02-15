@@ -151,7 +151,7 @@ subcode: dump_custom_make
     $if @CONFIGS
         $print "realrealclean: realclean"
         my $t = join(' ', @CONFIGS)
-        $print "\trm -f $t"
+        $print "\trm -f $t mymake/*"
         $print
 
     # ----------------------------

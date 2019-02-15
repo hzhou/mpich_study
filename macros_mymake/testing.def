@@ -1,11 +1,9 @@
 subcode: prepare_testing
     my $dir = "test/mpi"
+    my $srcdir="../.."
     chdir $dir or die "Can't chdir $dir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "Can't mkdir mymake\n"
-
-    $if !-f "version.m4"
-        system "ln -s ../../maint/version.m4 ."
 
     $if !-f "mymake/Makefile.orig"
         $call @testing_config
@@ -15,3 +13,11 @@ subcode: add_rule_testing
     push @extra_make_rules, "testing:"
     push @extra_make_rules, "\t\x24(DO_testing)"
     push @extra_make_rules, ""
+
+# --------------------------------
+subcode: testing_config
+    system "rsync -r $srcdir/confdb/ confdb/"
+    system "cp $srcdir/maint/version.m4 ."
+    system "sh autogen.sh"
+    system "autoreconf -ivf"
+    system "./configure"

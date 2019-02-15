@@ -64,6 +64,8 @@ macros:
     mpich_configure_deps:: subsys_include.m4
     mpich_configure_deps:: configure
     mpich_configure_deps:: mymake/Makefile.orig
+    mpich_configure_deps:: src/mpl/include/mplconfig.h
+    mpich_configure_deps:: src/openpa/src/mplconfig.h
 
 subcode: mpich_configure
     $(for:a in $(mpich_configure_deps))

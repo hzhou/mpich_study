@@ -19,6 +19,8 @@ subcode: MPI_Comm # KIND = 1
     $call def, COMM_SELF,  0x44000001
 
 subcode: MPI_Datatype # KIND = 3
+    # BUILTIN TYPE: 010011[00...]
+    # DIRECT  TYPE: 100011[00...]
     $typedef(MPI_Datatype) int
     $(set:T=MPI_Datatype)
     $call def, DATATYPE_NULL,   0x0c000000
