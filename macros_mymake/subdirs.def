@@ -147,7 +147,7 @@ subcode: chdir_subdir(dir)
 subcode: add_subdir_rule_block(subdir, target, @dep)
     my @t = ("cd $(subdir)")
     BLOCK
-    push @extra_make_rules, "$(target):"
+    push @extra_make_rules, "$(target): $(dep)"
     push @extra_make_rules, "\t(".join(' && ', @t).")"
     push @extra_make_rules, ""
 
