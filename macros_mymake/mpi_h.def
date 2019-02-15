@@ -1,0 +1,3 @@
+# if we generate mpi.h on our own, I suspect we can shed a big chunk off configure
+
+subcode: get_mpi_h
