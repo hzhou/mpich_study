@@ -1,5 +1,5 @@
 macros:
-    subdir_list: mpl, openpa, hwloc, izem, ucx, ofi
+    subdir_list: mpl, opa, hwloc, izem, ucx, ofi
 
     Dmpl: src/mpl
     Impl: src/mpl/include
