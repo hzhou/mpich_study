@@ -148,18 +148,9 @@ subcode: dump_custom_make
     $print "clean:"
     $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
     $print
-    $global @realclean_list
-    $if @realclean_list
-        $print "realclean: clean"
-        my $t = join(' ', @realclean_list)
-        $print "\trm -f $t"
-        $print
-
-    $if @CONFIGS
-        $print "realrealclean: realclean"
-        my $t = join(' ', @CONFIGS)
-        $print "\trm -f $t mymake/*"
-        $print
+    $print "realclean: clean"
+    $print "\t\x24(DO_clean)"
+    $print
 
     # ----------------------------
     subcode: quiet_rule(cmd, @rule)

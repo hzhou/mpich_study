@@ -33,7 +33,7 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
-        $(for:stage,errmsg,cvars,logs,hydra,testing,mpi_h)
+        $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
         push @extra_make_rules, ""
 
@@ -96,6 +96,21 @@ page: mymake_stage
     module: perl
     my $t = join(' ', @ARGV)
     $call stage, $t
+
+page: mymake_clean
+    module: perl
+
+    $call parse_args
+
+    my @realclean_list
+    $(for:a in $(mpich_configure_deps))
+        push @realclean_list, "$(a)"
+    $(for:a in $(subdir_list))
+        $if -d "$(D$(a))"
+            push @realclean_list, "$(H$(a))"
+    push @realclean_list, "src/pm/hydra/mymake/Makefile.orig"
+    $foreach $t in @realclean_list
+        system "rm -fv $t"
 
 #---------------------------------------- 
 subcode: parse_args
