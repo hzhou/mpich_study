@@ -9,8 +9,8 @@ macros:
     SRCDIR: $ENV{HOME}/work/mpich
     MODDIR: $ENV{HOME}/work/modules
     PREFIX: $ENV{HOME}/MPI
-    
-    # do_make: 16
+
+output_dir: ./mymake
 
 page: mymake
     module: perl
@@ -22,7 +22,7 @@ page: mymake
     $call @dump_args
 
     $call add_rule_hydra
-    $call add_rule_testing
+    # $call add_rule_testing
     $call compile_mpich
 
     subcode: set_mymake
@@ -84,11 +84,12 @@ page: mymake_hydra
     $call parse_args
     $call prepare_hydra
 
-page: mymake_testing
+page: mymake_test
     module: perl
 
     $call parse_args
     $call prepare_testing
+    $call run_tests
 
 # ----------------
 # print out a stage header
