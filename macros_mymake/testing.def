@@ -8,11 +8,8 @@ subcode: prepare_testing
     $call @testing_config
     system "cp Makefile mymake/Makefile.orig"
 
-subcode: add_rule_testing
-    push @extra_make_rules, ".PHONY: testing"
-    push @extra_make_rules, "testing:"
-    push @extra_make_rules, "\t\x24(DO_testing)"
-    push @extra_make_rules, ""
+subcode: run_tests
+    system "make testing"
 
 # --------------------------------
 subcode: testing_config
@@ -21,3 +18,5 @@ subcode: testing_config
     system "sh autogen.sh"
     system "autoreconf -ivf"
     system "./configure"
+
+    system "cp Makefile mymake/Makefile.orig"
