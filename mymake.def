@@ -19,6 +19,10 @@ page: mymake
     chomp $pwd
     $call parse_args
     $call set_mymake
+    $if $opts{do}
+        system "perl $mymake\_$opts{do}.pl"
+        exit(0)
+    $call save_last_ARGV
     $call @dump_args
 
     $call add_rule_hydra
@@ -109,6 +113,8 @@ page: mymake_clean
         $if -d "$(D$(a))"
             push @realclean_list, "$(H$(a))"
     push @realclean_list, "src/pm/hydra/mymake/Makefile.orig"
+    push @realclean_list, "src/mpi/errhan/defmsg.h"
+    push @realclean_list, "src/include/mpir_cvars.h"
     $foreach $t in @realclean_list
         system "rm -fv $t"
 
@@ -126,6 +132,8 @@ subcode: parse_args
             push @config_args, $1
             $if $a=~/^--with-device=(.*)/
                 $opts{device}=$1
+        $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
+            $opts{do}=$1
 
     $if -f "maint/version.m4"
         $srcdir = "."
@@ -138,29 +146,28 @@ subcode: parse_args
         chdir $srcdir or die "can't chdir $srcdir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
-    $call @save_last_ARGV
 
     subcode: opt_set(name)
         $global $$(name) = "$($(name:uc))"
         $if $opts{$(name)}
             $$(name) = $opts{$(name)}
 
-    subcode: load_last_ARGV
-        my $need_save_args
-        $if !@ARGV && -f "mymake/args"
-            $call get_file_in_t, mymake/args
-            @ARGV = split /\s+/, $t
-        $elif @ARGV
-            # has to wait until mymake folder is made
-            $need_save_args = 1
+subcode: load_last_ARGV
+    my $need_save_args
+    $if !@ARGV && -f "mymake/args"
+        $call get_file_in_t, mymake/args
+        @ARGV = split /\s+/, $t
+    $elif @ARGV
+        # has to wait until mymake folder is made
+        $need_save_args = 1
 
-    subcode: save_last_ARGV
-        $if $need_save_args
-            my $t = join(' ', @ARGV)
-            &call open_w, mymake/args
-                print Out $t
-            system "rm -f mymake/Makefile.orig"
-            system "rm -f $(Hmpl) $(Hopa)"
+subcode: save_last_ARGV
+    $if $need_save_args
+        my $t = join(' ', @ARGV)
+        &call open_w, mymake/args
+            print Out $t
+        system "rm -f mymake/Makefile.orig"
+        system "rm -f $(Hmpl) $(Hopa)"
 
 #---- stages ---------------------------- 
 subcode: stage(@name)
