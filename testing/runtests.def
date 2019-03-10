@@ -1,0 +1,618 @@
+page: runtests
+    module: perl
+    arg: -help
+    arg: -dir=$HOME/work/mpich_test/runtests/test/mpi -include-dir=attr -exclude-pattern=types?=
+    
+    $call set_cwd
+    # Global variables
+    $global %config
+    set_config_default();
+    load_config();
+    load_environment();
+    load_commandline();
+    post_config();
+    $print config/include: $config{include}
+    
+    $call check_mpiexec
+
+    $global @alltests
+    LoadTests(".")
+    $call @debug_load
+
+    $foreach $t in @alltests
+        BuildMPIProgram($t)
+
+    $foreach $t in @alltests
+        RunMPIProgram($t)
+
+    $call summary
+
+    # --------------------
+    subcode: set_cwd
+        $global $cwd
+        $cwd = `pwd`
+        chomp $cwd;
+
+    subcode: check_mpiexec
+        my $test = {prog=>"date", np=>1, ResultTest=>"TestStatus"}
+        $if RunMPIProgram($test)
+            $print $test->{found_error}
+            die "Can't run mpiexec [$config{mpiexec}]!\n"
+        $else
+            $print Looking good.
+
+    subcode: summary
+        $(for:xml,tap,junit)
+            $if $config{$1file}
+                dump_$1(\@alltests, $config{$1file})
+        my $n = @alltests;
+        my $err_count;
+        $foreach $test in @alltests
+            $if $test->{found_error}
+                $print "Failed: $test->{prog}: [$test->{found_error}] $test->{output}"
+                $err_count++;
+        $if $err_count
+            print "$err_count tests failed out of $n\n";
+        $else
+            print " All $n tests passed!\n";
+
+#---------------------------------------- 
+# ---- config -----
+# loads runtests.config into %config
+fncode: load_config
+    my $config_dir = ".";
+    if ($0=~/(.*)\//){
+        $config_dir = $1;
+    }
+    my $f = "$config_dir/runtests.config"
+    $if -f $f
+        &call open_r, $f
+            $if /^\s*(\w+)\s*=\s*(.+)/
+                $config{$1} = $2;
+
+# ---- default ----
+fncode: set_config_default 
+    $config{tests} = "testlist";
+    $config{srcdir} = ".";
+
+    $config{mpiexec} = "mpiexec";
+
+    $config{np_arg} = "-n";     # Name of argument to specify the number of processes
+    $config{np_default} = 2;    # Default number of processes to use
+    $config{np_max}     = -1;   # Maximum number of processes to use (overrides any
+
+    # PPN support
+    # ppn_max is the maximum number of processes per node.  -1 means ignore.
+    # ppn_arg is the argument to use to mpiexec - format is "string%d"; e.g.,
+    # "-ppn %d"
+    $config{ppn_arg}  = '';
+    $config{ppn_max}  = -1;
+
+    $config{timeout_default} = 180;
+    $config{timeout_multiplier} = 1.0;
+
+    # (batch run: i.e., run them together, then test output, 
+    # rather than build/run/check for each test)
+    $config{run_batch} = 0;     # Set to true to batch the execution of the tests
+    $config{batch_dir} = ".";   # Set to the directory into which to run the examples
+
+    $config{verbose} = 0;
+    $config{show_progress} = 0;
+
+    $config{"stopfile"} = "$cwd/.stoptest";
+
+    $config{clean_programs} = 1;
+
+macros:
+    global_configs: verbose
+
+fncode: post_config
+    if ($config{mpiversion}=~/(\d+)\.(\d+)/) {
+        $config{MPIMajorVersion} = $1;
+        $config{MPIMinorVersion} = $2;
+    }
+    foreach my $k ("run_strict", "run_mpix", "run_xfail", "run_batch") {
+        if ($config{$k} && $config{$k} =~/^(no|false)$/i) {
+            $config{$k} = undef;
+        }
+    }
+    $(for:a in $(global_configs))
+        $global $$(a)
+        $$(a) = $config{$(a)}
+
+# ---- environment ----
+subcode: _autoload
+    $global %env_vars
+    %env_vars = (
+        MPI_SOURCE => "MPI_SOURCE",
+        MPITEST_MPIVERSION => "mpiversion",
+        MPITEST_PPNARG => "ppn_arg",
+        MPITEST_PPNMAX => "ppn_max",
+        MPITEST_TIMEOUT => "timeout_default",
+        MPITEST_TIMEOUT_MULTIPLIER => "timeout_multiplier",
+        MPITEST_TIMELIMITARG => "timeout_arg", # e.g. "-t %d" for Cray aprun
+        MPITEST_BATCH => "run_batch",
+        MPITEST_BATCHDIR => "batchdir",
+        MPITEST_STOPTEST => "stopfile",
+        #   MPITEST_PROGRAM_WRAPPER (Value is added after -np but before test
+        #                            executable.  Tools like valgrind may be inserted
+        #                            this way.)
+        MPITEST_PROGRAM_WRAPPER => "program_wrapper",
+        VERBOSE => "verbose",
+        V => "verbose",
+        RUNTESTS_VERBOSE => "verbose",
+        RUNTESTS_SHOWPROGRESS => "show_progress",
+        # Define this to leave the XML output file open to receive additional data
+        NOXMLCLOSE => "noxmlclose",
+    );
+
+fncode: load_environment
+    $foreach %env_vars
+        $if defined $ENV{$k}
+            $config{$v} = $ENV{$k};
+
+# ---- command line ----
+subcode: _autoload
+    $global %cmdline_vars
+    %cmdline_vars = (
+        srcdir => "srcdir",
+        tests => "tests",
+        mpiexec => "mpiexec",
+        nparg => "np_arg",
+        np => "np_default",
+        maxnp => "np_max",
+        ppnarg => "ppn_arg",
+        ppn => "ppn_max",
+        batch => "run_batch",
+        batchdir => "batch_dir",
+        timelimitarg => "timeout_arg",
+        verbose => "verbose",
+        showprogress => "show_progress",
+        xmlfile => "xmlfile",
+        tapfile => "tapfile",
+        junitfile => "junitfile",
+        noxmlclose => "noxmlclose",
+        "include-pattern" => "include_pattern",
+        "exclude-pattern" => "exclude_pattern",
+        "include-dir" => "include_dir",
+        "exclude-dir" => "exclude_dir",
+    )
+
+fncode: load_commandline
+    $foreach $a in @ARGV
+        $if $a=~/^--?help/
+            $call usage
+        $elif $a=~/^--?dir=(.*)/
+            chdir $1 or die "Can't chdir $1\n";
+        $elif $a =~/^--?([\w\-]+)=(.*)/
+            my ($k, $v) = ($1, $2)
+            $if $cmdline_vars{$k}
+                $config{$cmdline_vars{$k}} = $v
+            $else
+                warn "Unrecognized command line option [$a]\n";
+        $elif $a =~/^--?([\w\-]+)$/
+            my $k = $1
+            $if $cmdline_vars{$k}
+                $config{$cmdline_vars{$k}} = 1
+            $else
+                warn "Unrecognized command line option [$a]\n";
+        $else
+            die "Unrecognized command line argument [$a]\n";
+
+    subcode: usage
+        $(set:print_to=STDERR)
+        $print runtests [-tests=testfile] [-np=nprocesses] [-maxnp=max-nprocesses] [-srcdir=location-of-tests] [-ppn=max-proc-per-node] [-ppnarg=string] [-timelimitarg=string] [-mpiversion=major.minor] [-xmlfile=filename ] [-tapfile=filename ] [-junitfile=filename ] [-noxmlclose] [-verbose] [-showprogress] [-batch] [-dir=execute_in_dir] [-help]
+        exit(1);
+
+
+#---------------------------------------- 
+fncode: LoadTests($dir)
+    my $srcdir = $config{srcdir}
+    my @include_list=split /\s+/, $config{tests}
+    my %loaded_listfile
+    $while my $f=shift @include_list
+        $if -d $f
+            LoadTests($f)
+            next
+
+        my $listfile
+        $if -e "$dir/$f"
+            $listfile = "$dir/$f"
+        $elif -e "$srcdir/$dir/$f"
+            $listfile = "$srcdir/$dir/$f";
+        $if !$listfile
+            $print [$listfile] not found
+            next
+        $elif $loaded_listfile{$f}
+            next
+        $loaded_listfile{$f} = 1
+
+        $call @debug_loading_list
+
+        &call open_r, $listfile
+            s/#.*//g;
+            s/\r?\n//;
+            s/^\s*//;
+            $if /^\s*$/
+                next
+
+            # $print [$_]
+            my $test # to be filled-in
+            $if /^!(\S+):(\S+)/
+                system "cd $1 && make $2"
+                next
+            $elif /^include\s+(\S+)/
+                # include testlist.xxx
+                push @include_list, $1;
+                next
+            $elif /^(\S+)/ and -d "$dir/$1"
+                # directory
+                my $d = $1
+                $if $config{include_dir} && !($d=~/$config{include_dir}/)
+                    next
+                $if $config{exclude_dir} && ($d=~/$config{exclude_dir}/)
+                    next
+                push @include_list, "$dir/$d"
+                next
+            $elif $config{run_xfail_only} or $config{include_pattern} or $config{exclude_pattern}
+                # list filters
+                $if $config{run_xfail_only}
+                    $if !/xfail=/
+                        next
+                    $else
+                        s/xfail=\S*//
+                $if $config{include_pattern}
+                    $if !(/$config{include_pattern}/)
+                        next
+                $if $config{exclude_pattern}
+                    $if /$config{exclude_pattern}/
+                        next
+                $test = parse_testline($_)
+            $else
+                $test = parse_testline($_)
+            # $print line: [$_]
+            $test->{dir} = $dir
+            $test->{line} = $_
+            push @alltests, $test
+
+fncode: parse_testline($line)
+    my %test = (line=> $line)
+
+    # List file entries have the form:
+    # program [ np [ name=value ... ] ]
+    my @args = split(/\s+/,$line);
+    my $programname = shift @args;
+    my $np = shift @args;
+
+    $if !$np 
+        $np = $config{np_default}
+    $if $config{np_max}>0 && $np > $config{np_max}
+        $np = $config{np_max}
+    $test{prog} = $programname;
+    $test{np} = $np;
+
+    # Process the key=value arguments
+    $foreach $a in @args
+        $if $a =~ /([^=]+)=(.*)/
+            my ($key,$value) = ($1, $2);
+            $if $key=~/^(resultTest|init|timeLimit|arg|env|mpiexecarg|xfail|mpiversion|strict|mpix)$/
+                $if exists $test{$key}
+                    $test{$key}.=" $value";
+                $else
+                    $test{$key}=$value;
+            $else
+                print STDERR "Unrecognized key $key in test line: $line\n";
+    $if exists $test{xfail} && $test{xfail} eq ""
+        print STDERR "\"xfail=\" requires an argument\n"
+
+    $if filter_mpiversion($test{mpiversion})
+        $test{skip} = "requires MPI version $test{mpiversion}";
+    $elif filter_strict($test{strict})
+        $test{skip} = "non-strict test, strict MPI mode requested";
+    $elif filter_xfail($test{xfail})
+        $test{skip} = "xfail tests disabled: xfail=$test{xfail}";
+    $elif filter_mpix($test{mpix})
+        $test{skip} = "tests MPIX extensions, MPIX testing disabled";
+    return \%test;
+
+# -- filters: skip tests if return 1 ------------------
+fncode: filter_mpiversion($version_required)
+    if (!$version_required) {
+        return 0;
+    }
+    if ($config{MPIMajorVersion} eq "unknown" or $config{MPIMinorVersion} eq "unknown"){
+        return 0;
+    }
+    my ($major, $minor) = split /\./, $version_required;
+    if ($major > $config{MPIMajorVersion}) {
+        return 1;
+    }
+    if ($major == $config{MPIMajorVersion} && $minor > $config{MPIMinorVersion} ){
+        return 1;
+    }
+    return 0;
+
+fncode: filter_strict($strict_ok)
+    # skip `strict=false` in strict mode
+    if (lc($strict_ok) eq "false" && $config{run_strict}){
+        return 1;
+    }
+    return 0;
+
+fncode: filter_xfail($xfail)
+    if ($config{run_strict}) {
+        return 0;
+    }
+    if ($xfail && !$config{run_xfail}) {
+        return 1;
+    }
+    return 0;
+
+fncode: filter_mpix($mpix_required)
+    if (lc($mpix_required) eq "true" && !$config{run_mpix}) {
+        return 1;
+    }
+    return 0;
+
+#---------------------------------------- 
+fncode: BuildMPIProgram($test)
+    my $prog = $test->{prog}
+    my $dir = $test->{dir}
+    my $cmd = "make -C $dir $prog";
+    $if $verbose
+        $print "  $cmd ...\n"
+    my $output = `$cmd 2>&1`
+    $if ! -x "$dir/$prog"
+	warn "Failed to build $prog; $output\n"
+        $test->{output} = $output
+        $test->{found_error} = 1
+
+#---------------------------------------- 
+fncode: RunMPIProgram($test)
+    $if $test->{found_error}
+        # presummably, build error
+        return
+    my $cmd = get_test_cmd($test)
+    $if $verbose
+        $print "  [$test->{dir}] $cmd" 
+    &call setup_env
+        $call run_mpi_cmd
+    $if !$test->{ResultTest}
+        $call check_error_default
+    $elif $test->{ResultTest} eq "TestStatus"
+        $call check_error_status
+    $elif $test->{ResultTest} eq "TestStatusNoErrors"
+        # fault tolerance test
+        $call @check_error_noerrors
+        # check $rc != 0
+    $elif $test->{ResultTest} eq "TestErrFatal"
+        $call check_error_return_code
+    return $test->{found_error}
+
+    # ------------------
+    subcode: check_error_default
+        # $print found_noerror: $found_noerror
+        # $print err_count: $err_count
+        $call @check_error_noerrors
+        $elif $err_count>0
+            $test->{found_error} = "Encounter unexpected output ($err_count counts)"
+        # $call @check_error_return_code
+        $call @check_error_status
+
+    subcode: check_error_noerrors
+        $case !$found_noerror
+            $test->{found_error} = "Expect \"No Error\""
+
+    subcode: check_error_return_code
+        $case !$rc
+            $test->{found_error}= "Non-zero return code: $rc"
+
+    subcode: check_error_status
+        $case !$rc or $? 
+            my $sig=$? &0x7f
+            my $status = $?>>8
+            $if $sig
+                $test->{found_error}="Program exited with signal $sig"
+            $elif $status
+                $test->{found_error}="Program exited with status $status"
+            $else
+                $test->{found_error}="Program exited with non-zero return code"
+
+    # ------------------
+    subcode: run_mpi_cmd
+        $if $test->{dir} ne "."
+            $cmd = "cd $test->{dir} && $cmd"
+        open( my $MPIOUT, "$cmd 2>&1 |" ) || die "Could not run $test->{prog}\n";
+        my ($found_noerror, $err_count, @output)
+        $while <$MPIOUT>
+            push @output, $_
+            $if $verbose
+                print $_
+            $if /FORTRAN STOP/
+                next
+            $elif /^\s*No Errors\s*$/i
+                $found_noerror += 1
+                next
+            $elif /^\s*Test Passed\s*$/
+                next
+            $elif /requesting checkpoint\s*$/
+                next
+            $elif /checkpoint completed\s*$/
+                next
+            $else
+                $err_count++
+        my $rc = close( $MPIOUT );
+        $test->{output} = join('', @output)
+
+    # -----------------
+    subcode: setup_env
+        my %saveEnv
+        $if $test->{env}
+            %saveEnv = %ENV;
+            $foreach $val in split /\s+/, $test->{env}
+                $if $val =~ /([^=]+)=(.*)/
+                    $ENV{$1} = $2;
+                $else
+                    # move to parsing time
+		warn "Environment variable/value $val not in a=b form\n";
+        BLOCK
+        $if $test->{env}
+            %ENV = %saveEnv
+
+fncode: get_test_cmd($test)
+    my $cmd = "$config{mpiexec} $config{np_arg} $test->{np}"
+    $call @arg_ppn
+    $call @arg_timeout
+    $if $test->{mpiexecargs}
+        $cmd.=" $test->{mpiexecargs}"
+    $if $config{program_wrapper}
+        $cmd.=" $config{program_wrapper}"
+    $if -x "$test->{dir}/$test->{prog}"
+        $cmd.=" ./$test->{prog}"
+    $else
+        $cmd.=" $test->{prog}"
+    $if $test->{arg}
+        $cmd.=" $test->{arg}"
+    return $cmd;
+
+    subcode: arg_ppn
+    subcode: arg_timout
+        my $timeout = $config{timeout_default};
+        if (defined($test->{timeLimit}) && $test->{timeLimit} =~ /^\d+$/) {
+            $timeout = $timeLimit;
+        }
+        $if $timeout
+            $timeout *= $config{timeout_multiplier};
+            $test->{timeout} = $timeout;
+            $ENV{"MPIEXEC_TIMEOUT"} = $timeout;
+
+#---------------------------------------- 
+subcode: debug_loading_list
+    $if $verbose
+        print "Looking in $dir/$f\n"
+
+subcode: debug_load
+    my $n_tests = @alltests
+    $print $n_tests tests loaded
+    my $n_skipped
+    $foreach $t in @alltests
+        $if $t->{skipped}
+            $n_skipped++
+    $if $n_skipped
+        $print $n_skipped tests skipped
+
+#---------------------------------------- 
+fncode: dump_xml($alltests, $xmlfile)
+    my $date = `date "+%Y-%m-%d-%H-%M"`;
+    $date =~ s/\r?\n//;
+
+    &call open_W, $xmlfile
+        # MPISOURCE can be used to describe the source of MPI for this
+        # test.
+        $print "<?xml version='1.0' ?>"
+        $print "<?xml-stylesheet href=\"TestResults.xsl\" type=\"text/xsl\" ?>"
+        $print "<MPITESTRESULTS>"
+        $print $(tag:DATE,$date)
+        $print $(tag:MPISOURCE,$config{MPI_SOURCE})
+        $foreach $test in @$alltests
+            $print <MPITEST>
+            $print $(tag:NAME,$test->{prog})
+            $print $(tag:NP,$test->{np})
+            $print $(tag:WORKDIR,$test->{dir})
+            $if $test->{skipped}
+                NOOP
+            $elif !$test->{found_error}
+                $print $(tag:STATUS,pass)
+            $else
+                my $xout = $test->{output};
+                # basic escapes that wreck the XML output
+                $xout =~ s/</\*AMP\*lt;/g;
+                $xout =~ s/>/\*AMP\*gt;/g;
+                $xout =~ s/&/\*AMP\*amp;/g;
+                $xout =~ s/\*AMP\*/&/g;
+                # TODO: Also capture any non-printing characters (XML doesn't like them # either).
+                $print $(tag:STATUS,fail)
+                $print $(tag:TESTDIFF,$xout)
+            $print $(tag:TIME,runtime)
+            $print "</MPITEST>"
+        $if !$config{noxmlclose}
+            $print "</MPITESTRESULTS>"
+
+fncode: dump_tap($alltests, $tapfile)
+    my $n = @$alltests;
+    &call open_W, $tapfile
+        $print "1..$n\n"
+        $foreach $i,$test in @$alltests
+            $if $test->{skipped}
+                $print "ok $i - $test->{dir}/$test->{prog} $test->{np}  \x23 SKIP $test->{skipped}"
+            $elif !$test->{found_error}
+                $print "ok $i - $test->{dir}/$test->{prog} $test->{np} \x23 time=$test->{runtime}"
+            $else
+                $print "not ok $i - $test->{dir}/$test->{prog} $test->{np}$test->{xfail} \x23 time=$test->{runtime}"
+                $call dump_summary_output
+
+fncode: dump_junit($alltests, $junitfile)
+    my $date = `date "+%Y-%m-%d-%H-%M"`;
+    $date =~ s/\r?\n//;
+
+    my $n = @$alltests;
+    my ($err_count, $skip_count);
+    $foreach $test in @$alltests
+        $if $test->{skipped}
+            $skip_count ++;
+        $elif $test->{found_error}
+            $err_count ++;
+
+    &call open_W, $junitfile
+        $print "<testsuites>"
+        $print "  <testsuite failures=\"$err_count\""
+        $print "             errors=\"0\""
+        $print "             skipped=\"$skip_count\""
+        $print "             tests=\"$n\""
+        $print "             date=\"$date\""
+        $print "             name=\"summary_junit_xml\">"
+        $foreach $i,$test in @$alltests
+            $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\" time=\"$test->{runtime}\">"
+
+            $print "    </testcase>"
+            $if $test->{skipped}
+                $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\">"
+                $print "      <skipped type=\"TodoTestSkipped\">"
+                $print "             message=\"$test->{skip}\"><![CDATA[ok $i - $test->{dir}/$test->{prog} $test->{np}  \x23 SKIP $test->{skipped}]]></skipped>"
+                $print "    </testcase>"
+            $elif !$test->{found_error}
+                $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\" time=\"$test->{runtime}\"></testcase>"
+            $else
+                my $testtag = "failure";
+                $if $test->{xfail}
+                    $testtag = "skipped";
+                $print "      <$testtag type=\"TestFailed\""
+                $print "               message=\"not ok $i - $test->{dir}/$test->{prog} $test->{np}$test->{xfail}\"><![CDATA["
+                $print "not ok $i - $test->{dir}/$test->{prog} $test->{np}$test->{xfail}"
+                $call dump_summary_output
+                $print "    ]]></$testtag>"
+        $print "    <system-out></system-out>"
+        $print "    <system-err></system-err>"
+        $print "  </testsuite>"
+        $print "</testsuites>"
+
+macros:
+    tag: <$1>$2<\/$1>
+
+subcode: dump_summary_output
+    $print "  ---\n"
+    $print "  Directory: $test->{dir}"
+    $print "  File: $test->{prog}"
+    $print "  Num-procs: $test->{np}"
+    $print "  Timeout: $test->{timeout}"
+    my $t = localtime
+    $print "  Date: \"$t\""
+    $print "  ..."
+    # Alternative to the "Output:" YAML block literal above.  Do not put any
+    # spaces before the '#', this causes some TAP parsers (including Perl's
+    # TAP::Parser) to treat the line as "unknown" instead of a proper
+    # comment.
+    $print "\x23\x23 Test output (expected 'No Errors'):\n"
+    $foreach $line in split m/\r?\n/, $test->{output}
+        chomp $line;
+        $print "\x23\x23 $line\n"
