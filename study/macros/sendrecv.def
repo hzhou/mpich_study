@@ -1,18 +1,3 @@
-subcode: _autoload
-    $register_name(send_buf) const void *
-    $register_name(recv_buf) void *
-
-    $register_name(cnt) int
-    $register_name(count) MPI_Aint
-
-    $register_name(datatype) MPI_Datatype
-
-    $register_name(comm) MPI_Comm
-    $register_name(comm_ptr) MPIR_Comm *
-
-    $register_name(source,dest,tag) int
-    $register_name(status) MPI_Status *
-
 macros:
     Send_param: send_buf, cnt, datatype, dest,   tag, comm, status
     Recv_param: recv_buf, cnt, datatype, source, tag, comm, status
