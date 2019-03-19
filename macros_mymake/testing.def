@@ -5,8 +5,8 @@ subcode: prepare_testing
     $if !-d "mymake"
         mkdir "mymake" or die "Can't mkdir mymake\n"
 
-    $if !-f "mymake/Makefile.orig"
-        $call @testing_config
+    $call @testing_config
+    system "cp Makefile mymake/Makefile.orig"
 
 subcode: run_tests
     system "make testing"

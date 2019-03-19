@@ -111,7 +111,7 @@ subcode: dump_custom_make
         $print
 
     # ----------------------
-    my (%dirs, @install_list, @lns_list)
+    my (%dirs, @install_list, @install_deps, @lns_list)
     $foreach %dst_hash
         $if $k=~/^LN_S-(.*)/
             push @lns_list, "rm -f $1 && ln -s $v $1"
@@ -120,8 +120,10 @@ subcode: dump_custom_make
                 $dirs{$v} = 1
             $if $v=~/\/lib$/
                 push @install_list, "$(LT:install) install $k $v"
+                push @install_deps, $k
             $elif $v=~/\/bin$/
                 push @install_list, "install $k $v"
+                push @install_deps, $k
 
     my $t1 = get_list("include_HEADERS")
     my $t2 = get_list("nodist_include_HEADERS")
@@ -138,7 +140,7 @@ subcode: dump_custom_make
     $if @install_list
         $print "\x23 --------------------\n"
         $print ".PHONY: install"
-        $print "install:"
+        $print "install: @install_deps"
         $foreach $l in @install_list
             $print "\t$l"
         $print
