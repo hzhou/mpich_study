@@ -17,6 +17,14 @@ subcode: _autoload
     $fntype int (*MPI_Send)($(sendbuf),$(count),datatype,dest,tag,comm)
     $fntype int (*MPI_Recv)($(recvbuf),$(count),datetype,source,tag,comm, $(status))
 
+#---- on_fail --------------------------------
+subcode: on_fail_MPI_Send
+    $call set_error, "**mpi_send", "**mpi_send %p %d %D %i %t %C", buf, count, datatype, dest, tag, comm
+
+macros:
+    LOG_MPI_Send: TERSE,PT2PT,FRONT
+
+subcode: error_check_MPI_Send
 #---- MPIR ------------------------------------ 
 subcode: _autoload
     $register_name(count) MPI_Aint

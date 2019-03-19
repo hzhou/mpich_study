@@ -21,24 +21,19 @@ fncode: MPI_Recv
         $call check_request_ptr
 
 fncode: MPI_Send
-    $param $(Send_param)
-    subcode: on_fail
-        $call set_error, "**mpi_send", "**mpi_send %p %d %D %i %t %C", buf, count, datatype, dest, tag, comm
+    frame: mpich
+    $call get_comm_ptr
 
-    &call PT2PT_enter, FRONT
-        $call get_comm_ptr
-        $call @error_check_send
-
-        $local MPIR_Request *request_ptr = NULL;
-        $call fcall_fail, MPID_Send(buf, count, datatype, dest, tag, comm_ptr, MPIR_CONTEXT_INTRA_PT2PT, &request_ptr);
-        $call check_request_ptr
+    $local MPIR_Request *request_ptr = NULL;
+    $call fcall_fail, MPID_Send(buf, count, datatype, dest, tag, comm_ptr, MPIR_CONTEXT_INTRA_PT2PT, &request_ptr);
+    $call check_request_ptr
 
 #----------------------------------------------- 
 subcode: check_request_ptr
     $if request_ptr == NULL
         goto fn_exit;
     $if !MPIR_Request_is_complete(request_ptr)
-        $call block_until_complete
+        $call @block_until_complete
 
     mpi_errno = request_ptr->status.MPI_ERROR;
     $(if:FunctionName=MPI_Recv)
