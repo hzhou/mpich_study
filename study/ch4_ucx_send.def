@@ -100,7 +100,6 @@ fncode: MPIDI_UCX_send
             p_req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
             MPIR_cc_set(&p_req->cc, 0);
         #endif
-        }
         *pp_req = p_req;
 
 macros: 

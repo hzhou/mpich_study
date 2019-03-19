@@ -37,6 +37,27 @@ subcode: mpid_send(send)
         $if mpi_errno == MPI_SUCCESS && *pp_req
             MPIDI_CH4I_REQUEST(*pp_req, is_local) = $(r)
 
+subcode: MPIDI_send_unsafe
+    $parameter $(send_param_2)
+    $(if:MPIDI_CH4_DIRECT_NETMOD)
+        $fcall MPIDI_NM_mpi_send($(send_arg2))
+    $(else)
+        $if MPIDI_av_is_local(av)
+            $fcall MPIDI_SHM_mpi_send($(send_arg2))
+        $else
+            $fcall MPIDI_NM_mpi_send($(send_arg2))
+        $call @set_request
+
+subcode: MPIDI_send_safe
+    &call MPID_THREAD_SAFE_BEGIN, VNI, MPIDI_CH4_Global.vni_lock, cs_acq
+        $if !cs_acq
+            *req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND)
+            MPIDI_workq_pt2pt_enqueue(SEND, buf, NULL, ...)
+        $else
+            *req = NULL
+            MPIDI_workq_vni_progress_unsafe()
+            $fcall MPIDI_send_unsafe($(send_arg2))
+
 #------------------------------------------
 fncode: MPID_Send_init
     $call mpid_send_init, send
