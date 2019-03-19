@@ -6,24 +6,6 @@ page: ucx_send.h, from templates/mpid/ch4/netmod/ucx/ucx_send.h
     $(for:send,ssend,bsend,rsend)
         $list(skip_declare) MPIDI_NM_mpi_$1_init
 
-fncode: MPIDI_NM_mpi_send
-    $call NM_send, 0, 0
-fncode: MPIDI_NM_mpi_ssend
-    $call NM_send, 0, 1
-fncode: MPIDI_NM_mpi_isend
-    $call NM_send, 1, 0
-fncode: MPIDI_NM_mpi_issend
-    $call NM_send, 1, 1
-
-fncode: MPIDI_NM_mpi_send_init
-    $call NM_send_init, send
-fncode: MPIDI_NM_mpi_ssend_init
-    $call NM_send_init, ssend
-fncode: MPIDI_NM_mpi_bsend_init
-    $call NM_send_init, bsend
-fncode: MPIDI_NM_mpi_rsend_init
-    $call NM_send_init, rsend
-
 subcode: NM_send(have_request, is_sync)
     $parameter $(send_param_2)
     $return_type static inline int

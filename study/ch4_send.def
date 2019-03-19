@@ -127,3 +127,23 @@ subcode: check_rank_null
 
 macros: 
     ret_type: MPL_STATIC_INLINE_PREFIX int
+
+#---------------------------------------- 
+fncode: MPIDI_NM_mpi_send
+    $call NM_send, 0, 0
+fncode: MPIDI_NM_mpi_ssend
+    $call NM_send, 0, 1
+fncode: MPIDI_NM_mpi_isend
+    $call NM_send, 1, 0
+fncode: MPIDI_NM_mpi_issend
+    $call NM_send, 1, 1
+
+fncode: MPIDI_NM_mpi_send_init
+    $call NM_send_init, send
+fncode: MPIDI_NM_mpi_ssend_init
+    $call NM_send_init, ssend
+fncode: MPIDI_NM_mpi_bsend_init
+    $call NM_send_init, bsend
+fncode: MPIDI_NM_mpi_rsend_init
+    $call NM_send_init, rsend
+

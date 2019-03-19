@@ -11,6 +11,7 @@ page: mpid_send # from templates/mpid/ch3/src/mpid_send.c
     $include "mpidimpl.h"
     $list MPID_Send
 
+# CH3
 fncode: MPID_Send(const void* buf, count, datatype, rank, tag, comm, n_context_offset, p_request)
     &call MPIR_enter, VERBOSE
         $call @debug
@@ -20,58 +21,27 @@ fncode: MPID_Send(const void* buf, count, datatype, rank, tag, comm, n_context_o
         $call @check_vc_state_moribund
         $call @check_comm_overrides
 
-    subcode: check_vc_state_moribund
-        MPIDI_Comm_get_vc_set_active(comm, rank, &vc);
-        MPIR_ERR_CHKANDJUMP1(vc->state == MPIDI_VC_STATE_MORIBUND, mpi_errno, MPIX_ERR_PROC_FAILED, "**comm_fail", "**comm_fail %d", rank);
-
-    subcode: check_comm_overrides
-        #ifdef ENABLE_COMM_OVERRIDES
-        if (vc->comm_ops && vc->comm_ops->send)
-        {
-            mpi_errno = vc->comm_ops->send( vc, buf, count, datatype, rank, tag, comm, context_offset, &sreq);
-            goto fn_exit;
-        }
-        #endif
-
         MPIDI_Datatype_get_info(count, datatype, dt_contig, data_sz, dt_ptr, dt_true_lb);
         $call @check_data_sz_zero
         MPIDI_CH3_GET_EAGER_THRESHOLD(&eager_threshold, comm, vc);
 
+        $(set:send_args=&sreq, $1, $(char *)buf + dt_true_lb,data_sz, rank, tag, comm, context_offset)
         /* FIXME: flow control: limit number of outstanding eager messages
         containing data and need to be buffered by the receiver */
         #ifdef USE_EAGER_SHORT
         if (dt_contig && data_sz <= MPIDI_EAGER_SHORT_SIZE) {
-            mpi_errno = MPIDI_CH3_EagerContigShortSend( &sreq, 
-                                                MPIDI_CH3_PKT_EAGERSHORT_SEND,
-                                                (char *)buf + dt_true_lb,
-                                                data_sz, rank, tag, comm, 
-                                                context_offset );
+            mpi_errno = MPIDI_CH3_EagerContigShortSend( $(send_args:MPIDI_CH3_PKT_EAGERSHORT_SEND) );
         }
         else
         #endif
-        if (data_sz + sizeof(MPIDI_CH3_Pkt_eager_send_t) <= eager_threshold)
-        {
-            if (dt_contig)
-            {
-                mpi_errno = MPIDI_CH3_EagerContigSend( &sreq, 
-                                                    MPIDI_CH3_PKT_EAGER_SEND,
-                                                    (char *)buf + dt_true_lb,
-                                                    data_sz, rank, tag, comm, 
-                                                    context_offset );
-            }
-            else
-            {
+        $if data_sz + sizeof(MPIDI_CH3_Pkt_eager_send_t) <= eager_threshold
+            $if dt_contig
+                mpi_errno = MPIDI_CH3_EagerContigSend( $(send_args:MPIDI_CH3_PKT_EAGER_SEND) );
+            $else
                 MPIDI_Request_create_sreq(sreq, mpi_errno, goto fn_exit);
                 MPIDI_Request_set_type(sreq, MPIDI_REQUEST_TYPE_SEND);
-                mpi_errno = MPIDI_CH3_EagerNoncontigSend( &sreq, 
-                                                        MPIDI_CH3_PKT_EAGER_SEND,
-                                                        buf, count, datatype,
-                                                        data_sz, rank, tag, 
-                                                        comm, context_offset );
-            }
-        }
-        else
-        {
+                mpi_errno = MPIDI_CH3_EagerNoncontigSend( $(send_args:MPIDI_CH3_PKT_EAGER_SEND) );
+        $else
             MPIDI_Request_create_sreq(sreq, mpi_errno, goto fn_exit);
             MPIDI_Request_set_type(sreq, MPIDI_REQUEST_TYPE_SEND);
             mpi_errno = vc->rndvSend_fn( &sreq, buf, count, datatype, dt_contig,
@@ -80,8 +50,7 @@ fncode: MPID_Send(const void* buf, count, datatype, rank, tag, comm, n_context_o
             /* Note that we don't increase the ref count on the datatype
             because this is a blocking call, and the calling routine 
             must wait until sreq completes */
-        }
-    # ----------------
+    # --------------------------------------------------
     subcode: _init
         intptr_t data_sz;
         int dt_contig;
@@ -179,4 +148,17 @@ fncode: MPID_Send(const void* buf, count, datatype, rank, tag, comm, n_context_o
             
             goto fn_exit;
         }
+
+    subcode: check_vc_state_moribund
+        MPIDI_Comm_get_vc_set_active(comm, rank, &vc);
+        MPIR_ERR_CHKANDJUMP1(vc->state == MPIDI_VC_STATE_MORIBUND, mpi_errno, MPIX_ERR_PROC_FAILED, "**comm_fail", "**comm_fail %d", rank);
+
+    subcode: check_comm_overrides
+        #ifdef ENABLE_COMM_OVERRIDES
+        if (vc->comm_ops && vc->comm_ops->send)
+        {
+            mpi_errno = vc->comm_ops->send( vc, buf, count, datatype, rank, tag, comm, context_offset, &sreq);
+            goto fn_exit;
+        }
+        #endif
 

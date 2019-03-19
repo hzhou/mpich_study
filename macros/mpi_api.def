@@ -25,8 +25,20 @@ macros:
     LOG_MPI_Send: TERSE,PT2PT,FRONT
 
 subcode: error_check_MPI_Send
+
 #---- MPIR ------------------------------------ 
 subcode: _autoload
     $register_name(count) MPI_Aint
     $register_name(comm_ptr) MPIR_Comm *
     $register_name(status) MPI_Status *
+    $register_name(context_offset) int
+
+#---- MPID ------------------------------------ 
+macros:
+    si_int: MPL_STATIC_INLINE_PREFIX int
+    Cnt: MPI_Aint count
+    av_addr: MPIDI_av_entry_t *addr
+    pp_req: MPIR_Request **request
+
+subcode: _autoload
+    $fntype $(si_int) (*MPIDI_UCX_send)($(sendbuf),$(Cnt),datatype,rank,tag,comm_ptr,context_offset, $(av_addr), $(pp_req), int have_request, int is_sync
