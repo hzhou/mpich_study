@@ -1,0 +1,21 @@
+page: ofi_send.h, from templates/mpid/ch4/netmod/ofi/ofi_send.h
+
+macros:
+    ctx: comm->context_id+context_offset
+
+fncode: MPIDI_OFI_send_lightweight
+    match_bits = MPIDI_OFI_init_sendtag($(ctx), comm->rank, tag, 0)
+    $fcall MPIDI_OFI_send_handler(MPIDI_OFI_global.ctx[0].tx, buf, data_sz, NULL, comm->rank, NULL, MPIDI_OFI_DO_INJECT, MPIDI_OFI_CALL_LOCK, MPIDI_OFI_COMM(comm).eagain)
+
+fncode: MPIDI_OFI_send_lightweight_request
+    $call MPIDI_OFI_send_lightweight_request
+    MPIDI_OFI_SEND_REQUEST_COMPLETE_LW_CONDITIONAL(*request)
+
+fncode: MPIDI_OFI_send_iov
+
+fncode: MPIDI_OFI_send_normal
+
+fncode: MPIDI_OFI_send
+
+    
+subcode: NM_send
