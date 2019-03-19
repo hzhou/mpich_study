@@ -1,0 +1,24 @@
+#---- MPI -----------------------------------
+subcode: _autoload
+    $register_name(buf) void *
+    $register_name(count) MPI_Aint
+    $register_name(datatype) MPI_Datatype
+    $register_name(comm) MPI_Comm
+    $register_name(source,dest,tag) int
+
+macros:
+    # MPI interface uses specific names with specific types
+    sendbuf: const void *buf
+    recvbuf: void *buf
+    count: int count
+    status: MPI_Status *status
+
+subcode: _autoload
+    $fntype int (*MPI_Send)($(sendbuf),$(count),datatype,dest,tag,comm)
+    $fntype int (*MPI_Recv)($(recvbuf),$(count),datetype,source,tag,comm, $(status))
+
+#---- MPIR ------------------------------------ 
+subcode: _autoload
+    $register_name(count) MPI_Aint
+    $register_name(comm_ptr) MPIR_Comm *
+    $register_name(status) MPI_Status *
