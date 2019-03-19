@@ -23,15 +23,47 @@ subcode: _autoload
 
 subcode: mpich_pre
     $local int mpi_errno = MPI_SUCCESS
-    test $(FunctionName)
-    # MPIR_FUNC_..._ENTER
+
+    # Thread_Lock
+
+    $(if:LOG_$(FunctionName))
+        $(set:state=MPID_STATE_$(FunctionName:uc))
+        $(set:L=$(LOG_$(FunctionName)))
+        $(if:L~TERSE)
+            $(set:F=MPIR_FUNC_TERSE)
+        $(else)
+            $(set:F=MPIR_FUNC_VERBOSE)
+        $(if:FunctionName~MPI_Init)
+            $(F)_INIT_STATE_DECL($(state))
+        $(elif:FunctionName~MPI_Finalize)
+            $(F)_FINALIZE_STATE_DECL($(state))
+        $(else)
+            $(F)_STATE_DECL($(state))
+        $(if:L~PT2PT)
+            $(if:L~FRONT)
+                $(set:F.=_PT2PT_$1_FRONT)
+            $(elif:L~BACK)
+                $(set:F.=_PT2PT_$1_BACK)
+            $(else)
+                $(set:F.=_PT2PT_$1)
+        $(else)
+            $(set:F.=_$1)
+        $(mexport:F, state)
+        $(F:ENTER)($(state))
+
+    $(if:FunctionName~MPI_)
+        $call @error_check_$(FunctionName)
 
 subcode: mpich_post
     fn_exit:
-        # MPIR_FUNC_..._EXIT
+        $(if:LOG_$(FunctionName))
+            $(F:EXIT)($(state))
         return mpi_errno
     fn_fail:
-        $call @on_fail
+        $(if:hascode:on_fail_$(FunctionName))
+            $call on_fail_$(FunctionName)
+        $(else)
+            $call @on_fail
         goto fn_exit
 
 perlcode: _FUNC_HOOK
@@ -74,53 +106,6 @@ perlcode: _FUNC_HOOK
         push @t, "#define $name P$name\n"
         
 #----------------------------------------------- 
-#-- Let's do these automatically ...
-subcode: MPIR_enter(TERSE)
-    $local int mpi_errno = MPI_SUCCESS
-    &call MPIR_
-        $(mpir)_STATE_DECL($(state))
-        MPIR_ERRTEST_INITIALIZED_ORDIE();
-        $call @_init
-        $(mpir)_ENTER($(state))
-        BLOCK
-        fn_exit:
-        $call @on_exit
-        $(mpir)_EXIT($(state))
-        return mpi_errno
-        fn_fail:
-        $call @on_fail
-        goto fn_exit
-
-subcode: PT2PT_enter(FRONT)
-    $local int mpi_errno = MPI_SUCCESS
-    $(set:F=$(FunctionName))
-    $(set:state=MPID_STATE_$(F:uc))
-    $(set:mpir=MPIR_FUNC_TERSE)
-
-    $(mpir)_STATE_DECL($(state))
-    $call @_init
-    &call Thread_Lock_global
-        $(mpir)_PT2PT_ENTER_$(FRONT)($(state))
-        BLOCK
-        fn_exit:
-        $(mpir)_PT2PT_EXIT_$(FRONT)($(state))
-    return mpi_errno
-    fn_fail:
-    $call @on_fail
-    goto fn_exit
-
-# -------------
-subcode: MPIR_
-    $(set:F=$(FunctionName))
-    $(set:state=MPID_STATE_$(F:uc))
-    $(if:F~MPI_Init)
-        $(set:mpir=MPIR_FUNC_TERSE_INIT)
-    $(elif:F=MPI_Finalize)
-        $(set:mpir=MPIR_FUNC_TERSE_FINALIZE)
-    $(else)
-        $(set:mpir=MPIR_FUNC_$(TERSE))
-    BLOCK
-
 subcode: ifdef(feat)
     <-|#ifdef $(feat)
     BLOCK
