@@ -1,0 +1,28 @@
+subcode: _autoload
+    $register_name(send_buf) const void *
+    $register_name(recv_buf) void *
+
+    $register_name(cnt) int
+    $register_name(count) MPI_Aint
+
+    $register_name(datatype) MPI_Datatype
+
+    $register_name(comm) MPI_Comm
+    $register_name(comm_ptr) MPIR_Comm *
+
+    $register_name(source,dest,tag) int
+    $register_name(status) MPI_Status *
+
+macros:
+    Send_param: send_buf, cnt, datatype, dest,   tag, comm, status
+    Recv_param: recv_buf, cnt, datatype, source, tag, comm, status
+
+macros: 
+    send_param: const void* buf, MPI_Aint count, MPI_Datatype datatype, int rank, int tag, MPIR_Comm* comm, int n_context_offset
+
+    send_param_1: $(send_param), MPIR_Request** pp_req
+    send_param_2: $(send_param), MPIDI_av_entry_t* av, MPIR_Request** pp_req, int have_request, int is_sync
+
+    send_arg1: buf, count, datatype, rank, tag, comm, n_context_offset, pp_req
+    send_arg2: buf, count, datatype, rank, tag, comm, n_context_offset, av, pp_req
+

@@ -16,21 +16,46 @@ include: macros/argobots.def
 # include: macros/f08_binding.def
 # include: macros/fortran_binding.def
 # include: macros/cxx_binding.def
+include: macros/mpi_api.def
 
 subcode: _autoload
     $register_prefix(has) int
 
+subcode: mpich_pre
+    $local int mpi_errno = MPI_SUCCESS
+    test $(FunctionName)
+    # MPIR_FUNC_..._ENTER
+
+subcode: mpich_post
+    fn_exit:
+        # MPIR_FUNC_..._EXIT
+        return mpi_errno
+    fn_fail:
+        $call @on_fail
+        goto fn_exit
+
 perlcode: _FUNC_HOOK
     my $open = $func->{openblock}
     my $name = $func->{name}
+
     $if $name =~ /^MPI[A-Z]*_/
+        $call @decl_FUNCNAME
+        $call @add_man_docs
+
+    $if $name =~/^MPI_/
+        my @t
+        $call @MPI_weak_symbols
+        $func->{declare_block}=\@t
+
+    # -------------------------------
+    subcode: decl_FUNCNAME
         unshift @$open, "#undef FUNCNAME", "#define FUNCNAME $name", "#undef FCNAME", "#define FCNAME MPL_QUOTE(FUNCNAME)"
+
+    subcode: add_man_docs
         $if -f "docs/$name.txt" # these are direct manpages from man/man3/
             $print "      found docs/$name.txt"
             unshift @$open, "INCLUDE_FILE docs/$name.txt"
-    # ------------------------
-    $if $name =~/^MPI_/
-        my @t
+    subcode: MPI_weak_symbols
         push @t, "/* -- Begin Profiling Symbol Block for routine $name */"
         push @t, "#if defined(HAVE_PRAGMA_WEAK)\n"
         push @t, "#pragma weak $name = P$name\n"
@@ -47,9 +72,9 @@ perlcode: _FUNC_HOOK
         push @t, "#ifndef MPICH_MPI_FROM_PMPI\n"
         push @t, "#undef $name\n"
         push @t, "#define $name P$name\n"
-        $func->{declare_block}=\@t
-
+        
 #----------------------------------------------- 
+#-- Let's do these automatically ...
 subcode: MPIR_enter(TERSE)
     $local int mpi_errno = MPI_SUCCESS
     &call MPIR_
@@ -79,15 +104,6 @@ subcode: PT2PT_enter(FRONT)
         BLOCK
         fn_exit:
         $(mpir)_PT2PT_EXIT_$(FRONT)($(state))
-    return mpi_errno
-    fn_fail:
-    $call @on_fail
-    goto fn_exit
-
-subcode: MPIR_fn
-    $local int mpi_errno = MPI_SUCCESS
-    BLOCK
-    fn_exit:
     return mpi_errno
     fn_fail:
     $call @on_fail

@@ -1,11 +1,4 @@
 include: common.def
-subcode: _autoload
-    $register_name(buf) void*
-    $register_name(count) int
-    $register_name(datatype) MPI_Datatype
-    $register_name(comm) MPI_Comm
-    $register_name(source,dest,tag) int
-
 page: recv # from templates/mpi/pt2pt/recv.c
     $include "mpiimpl.h"
     $list MPI_Recv
@@ -14,7 +7,9 @@ page: send # from templates/mpi/pt2pt/send.c
     $include "mpiimpl.h"
     $list MPI_Send
 
-fncode: MPI_Recv(buf, count, datatype, source, tag, comm, MPI_Status* status)
+fncode: MPI_Recv
+    $param $(Recv_param)
+
     subcode: on_fail
         $call set_error, "**mpi_recv", "**mpi_recv %p %d %D %i %t %C %p", buf, count, datatype, source, tag, comm, status
     &call PT2PT_enter, BACK
@@ -25,7 +20,8 @@ fncode: MPI_Recv(buf, count, datatype, source, tag, comm, MPI_Status* status)
         $call fcall_fail, MPID_Recv(buf, count, datatype, source, tag, comm_ptr, MPIR_CONTEXT_INTRA_PT2PT, status, &request_ptr);
         $call check_request_ptr
 
-fncode: MPI_Send(const void* buf, count, datatype, dest, tag, comm)
+fncode: MPI_Send
+    $param $(Send_param)
     subcode: on_fail
         $call set_error, "**mpi_send", "**mpi_send %p %d %D %i %t %C", buf, count, datatype, dest, tag, comm
 

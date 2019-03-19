@@ -1,5 +1,5 @@
 include: common.def
-include: macros/mpid_send.def
+include: macros/sendrecv.def
 
 page: ch4_send.h, from templates/mpid/ch4/src/ch4_send.h
     module: c

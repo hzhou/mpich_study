@@ -1,0 +1,9 @@
+include: common.def
+page: t
+    skiprun: 1
+
+    $list MPI_Send
+
+fncode: MPI_Send
+    frame: mpich
+
