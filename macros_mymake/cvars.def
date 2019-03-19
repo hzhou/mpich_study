@@ -43,6 +43,11 @@ subcode: get_cvars(f)
                 $cat->{$a}=$t
             $elif $cvar
                 $cvar->{$a}=$t
+                $if $cvar->{type} eq "enum"
+                    my @enum
+                    $while $t=~/^\s*(\w+)\s+-\s/mg
+                        push @enum, $1
+                    $cvar->{enum}=\@enum
 
 #---------------------------------------- 
 subcode: dump_cvar_globals
@@ -78,7 +83,7 @@ subcode: dump_cvar_register_static
         $print "        defaultval,"
         $print "        \"$h->{category}\", /* category */"
         $print "        \"$desc\");"
-        $if $h->{type} eq "string"
+        $if $h->{type} eq "string" or $h->{type} eq "enum"
             $print "    MPIR_CVAR_GET_DEFAULT_STRING($v, &tmp_str);"
 
         my @t
@@ -94,6 +99,8 @@ subcode: dump_cvar_register_static
                 $call @dump_mplenv, $1_$env
         $if $h->{type} eq "string"
             $call dump_copy_tmp_str
+        $elif $h->{type} eq "enum"
+            $call dump_enum_tmp_str
         $print
 
 subcode: dump_cvar_finalize
@@ -123,6 +130,7 @@ subcode: init_cvar_type_hash
         double=>"double",
         string=>"char *",
         boolean=>"int",
+        enum=>"int",
         range=>"MPIR_T_cvar_range_value_t",
     );
     my %mpi_hash=(
@@ -131,6 +139,7 @@ subcode: init_cvar_type_hash
         string=>"MPI_CHAR:MPIR_CVAR_MAX_STRLEN:str",
         boolean=>"MPI_INT:1:d",
         range=>"MPI_INT:2:range",
+        enum=>"MPI_INT:1:d",
     );
     my %env_hash=(
         int=>"int",
@@ -138,6 +147,7 @@ subcode: init_cvar_type_hash
         string=>"str",
         boolean=>"bool",
         range=>"range",
+        enum=>"str",
     );
 
     my %value_hash=(
@@ -167,13 +177,15 @@ subcode: each_cvar
                     $value="(MPIR_T_cvar_range_value_t){$1,$2}"
                 $(else)
                     $value="{$1,$2}"
+        $elif $h->{type} eq "enum"
+            $value = "$v\_$value"
 
     subcode: get_cvar_mpi_type
         my ($mpi_type,$mpi_count,$mpi_field)=split /:/, $mpi_hash{$h->{type}}
         my $mplenv = "MPL_env2$env_hash{$h->{type}}"
 
     subcode: dump_mplenv(name)
-        $if $h->{type} eq "string"
+        $if $h->{type} eq "string" or $h->{type} eq "enum"
             $print "    rc = $mplenv(\"$(name)\", &tmp_str);"
         $elif $h->{type} eq "range"
             $print "    rc = $mplenv(\"$(name)\", &$v.low, &$v.high);"
@@ -196,6 +208,15 @@ subcode: each_cvar
         $print "        $v = NULL;"
         $print "    }"
 
+    subcode: dump_enum_tmp_str
+        $print "    if (tmp_str != NULL) {"
+        my $c = "if"
+        $foreach $t in @{$h->{enum}}
+            $print "        $c (0 == strcmp(tmp_str, \"$t\"))"
+            $print "            $v = $v\_$t;"
+            $c = "else if"
+        $print "        else"
+        $print "            MPIR_ERR_CHKANDJUMP1(1,mpi_errno,MPI_ERR_OTHER,\"**envvarparse\",\"**envvarparse %s\",\"$v: bad enum value\");"
 
 subcode: parse_yaml_block_in_t
     $if $t=~/^([>|])-\s*(.*)/
@@ -276,6 +297,13 @@ subcode: dump_cvars_h
             &call each_cvar
                 $print "/* $h->{file} */"
                 $print "extern $type $v;"
+                $if $h->{enum}
+                    $print "enum $v\_choice {"
+                    my $last = pop @{$h->{enum}}
+                    $foreach $a in @{$h->{enum}}
+                        $print "    $v\_$a,"
+                    $print "    $v\_$last"
+                    $print "};"
             $print
 
             $print "/* TODO: this should be defined elsewhere */"

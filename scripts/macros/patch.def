@@ -1,6 +1,9 @@
 
 subcode: patch_frame
-    my $root = "$ENV{HOME}/work/mpich-github"
+    $(if:root)
+        my $root = "$(root)"
+    $(else)
+        my $root = "$ENV{HOME}/work/mpich-github"
     chdir $root or die
 
     $call grep_$(patch)

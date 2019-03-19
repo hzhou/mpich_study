@@ -1,5 +1,9 @@
 include: coll_common.def
+
+# run: t
+
 page: coll_impl.h, from templates/coll_impl.h
+    module: general
     subcode: decl_algo_enum_types
         #- 84 = ((15+5)*2+2) *2
         $call map_each_coll, decl_algo_enum
@@ -21,15 +25,19 @@ page: coll_impl.h, from templates/coll_impl.h
             extern $(C)_t $(C)_choice;
             NEWLINE
 
-page: coll_impl, from templates/coll_impl.c
+page: coll_impl.c, from templates/coll_impl.c
+    module: c
     subcode: global_coll_algo_vars
         #- 84 = ((15+5)*2+2) *2
         $call map_each_coll, add_algo_choice
         #- 2
-        $(for:bcast,reduce)
+        $(for:bcast,reduce,allreduce)
             MPIR_Tree_type_t MPIR_I$1_tree_type = MPIR_TREE_TYPE_KARY;
 
         subcode: add_algo_choice(coll)
+            $(set:C=MPIR_$(coll:ucfirst)_intra_algo)
+            enum coll_algo $(C)_choice;
+        subcode: add_algo_choice_old(coll)
             $(set:C=MPIR_$(coll:ucfirst)_intra_algo)
             $(C)_t $(C)_choice = 0;
             $(if:coll!~.*scan)
@@ -105,3 +113,31 @@ fncode: MPIR_Coll_comm_init(MPIR_Comm *comm)
     $fcall MPII_Gentran_comm_init(comm)
 
 #---------------------------------------- 
+page: t
+    module: perl
+    run: perl out/t.pl > /tmp/t.h
+
+    my $src="$ENV{HOME}/work/mpich-github"
+    my (%names, %others)
+    &call open_r, $src/src/mpi/coll/include/coll_impl.h
+        $if /MPIR_\w+_ALGO_(\w+)/
+            $if $1 ne "AUTO"
+                $names{lc($1)}++
+        $elif /^\s*(MPIR_\w+)/
+            $others{$1}++
+
+    $call cmp_sub
+    my @t = sort cmp_sub keys %names
+    $print "enum coll_algo {"
+    $print "    COLL_ALGO_auto = 0,"
+    $foreach $t in @t
+        $print "    COLL_ALGO_$t,"
+    $print "};"
+
+    $foreach $k in sort keys %others
+        $print -- $k
+
+    subcode: cmp_sub
+        $sub cmp_sub
+            return $a cmp $b
+

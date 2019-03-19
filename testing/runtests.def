@@ -6,26 +6,38 @@ page: runtests
     $call set_cwd
     # Global variables
     $global %config
-    set_config_default();
+    $call @set_config_default
+    $config{exclude_pattern} = 'type=MPI_(?!INT |DOUBLE )'
+    $if !$ENV{DTP_NUM_OBJS}
+        $ENV{DTP_NUM_OBJS} = 5
+    $config{j} = probe_max_cores() -1
+
     load_config();
     load_environment();
     load_commandline();
     post_config();
-    $print config/include: $config{include}
     
     $call check_mpiexec
 
     $global @alltests
-    LoadTests(".")
-    $call @debug_load
+    $if !@alltests
+        LoadTests(".")
+        $call @debug_load
 
-    $foreach $t in @alltests
-        BuildMPIProgram($t)
+    $print "Building test programs..."
+    $call build_alltests
 
-    $foreach $t in @alltests
-        RunMPIProgram($t)
-
+    $print "Running tests..."
+    $call @init_time_start
+    $if $config{j}<=1
+        $foreach $i,$test in @alltests
+            RunMPIProgram($test)
+            $call print_test_progress
+    $else
+        $print "  maximum jobs: $config{j}"
+        $call spawn_workers, $config{j}
     $call summary
+
 
     # --------------------
     subcode: set_cwd
@@ -34,7 +46,7 @@ page: runtests
         chomp $cwd;
 
     subcode: check_mpiexec
-        my $test = {prog=>"date", np=>1, ResultTest=>"TestStatus"}
+        my $test = {prog=>"date", np=>1, resultTest=>"TestStatusZero"}
         $if RunMPIProgram($test)
             $print $test->{found_error}
             die "Can't run mpiexec [$config{mpiexec}]!\n"
@@ -46,15 +58,36 @@ page: runtests
             $if $config{$1file}
                 dump_$1(\@alltests, $config{$1file})
         my $n = @alltests;
-        my $err_count;
+        my $err_count = 0
+        $print "\n---- SUMMARY ----\n"
         $foreach $test in @alltests
             $if $test->{found_error}
-                $print "Failed: $test->{prog}: [$test->{found_error}] $test->{output}"
+                my $output = $test->{output}
+                $output =~s/^\W+//
+                $if length($output)>20
+                    $output = substr($output, 0, 20) ."..."
+                $print "Failed: $test->{prog}: [$test->{found_error}] - $output"
                 $err_count++;
         $if $err_count
             print "$err_count tests failed out of $n\n";
         $else
             print " All $n tests passed!\n";
+
+#---------------------------------------- 
+subcode: init_time_start
+    my $time_start=time
+    my $time_last=time
+
+subcode: print_test_progress
+    my $time_now = time
+    $if $time_now-$time_last>10
+        $time_last = $time_now
+        my $t = $time_now-$time_start
+        $if $t>=3600
+            $t=sprintf "%02d:%02d:%02d", $t/3600, $t/60%60, $t%60
+        $else
+            $t=sprintf "   %02d:%02d", $t/60, $t%60
+        $print "  [$t] test #%5d: $test->{dir} - $test->{line}", $test->{id}
 
 #---------------------------------------- 
 # ---- config -----
@@ -71,11 +104,12 @@ fncode: load_config
                 $config{$1} = $2;
 
 # ---- default ----
-fncode: set_config_default 
+subcode: set_config_default 
     $config{tests} = "testlist";
     $config{srcdir} = ".";
 
     $config{mpiexec} = "mpiexec";
+    $config{j} = 16
 
     $config{np_arg} = "-n";     # Name of argument to specify the number of processes
     $config{np_default} = 2;    # Default number of processes to use
@@ -102,20 +136,25 @@ fncode: set_config_default
     $config{"stopfile"} = "$cwd/.stoptest";
 
     $config{clean_programs} = 1;
+    $(if:0)
+        my $t = `mpichversion`
+        $if $t=~/MPICH Version:\s*(\d+\.\d+)/
+            $config{mpiversion}=$1
+    $config{MPIMajorVersion} = "unknown"
+    $config{MPIMinorVersion} = "unknown"
 
 macros:
     global_configs: verbose
 
 fncode: post_config
-    if ($config{mpiversion}=~/(\d+)\.(\d+)/) {
+    $if $config{mpiversion}=~/(\d+)\.(\d+)/
         $config{MPIMajorVersion} = $1;
         $config{MPIMinorVersion} = $2;
-    }
-    foreach my $k ("run_strict", "run_mpix", "run_xfail", "run_batch") {
-        if ($config{$k} && $config{$k} =~/^(no|false)$/i) {
+
+    $foreach $k in "run_strict", "run_mpix", "run_xfail", "run_batch"
+        $if $config{$k} && $config{$k} =~/^(no|false)$/i
             $config{$k} = undef;
-        }
-    }
+
     $(for:a in $(global_configs))
         $global $$(a)
         $$(a) = $config{$(a)}
@@ -134,6 +173,11 @@ subcode: _autoload
         MPITEST_BATCH => "run_batch",
         MPITEST_BATCHDIR => "batchdir",
         MPITEST_STOPTEST => "stopfile",
+        MPITEST_NUM_JOBS => "j",
+        MPITEST_INCLUDE_DIR => "include_dir",
+        MPITEST_EXCLUDE_DIR => "exclude_dir",
+        MPITEST_INCLUDE_PATTERN => "include_pattern",
+        MPITEST_EXCLUDE_PATTERN => "exclude_pattern",
         #   MPITEST_PROGRAM_WRAPPER (Value is added after -np but before test
         #                            executable.  Tools like valgrind may be inserted
         #                            this way.)
@@ -155,6 +199,7 @@ fncode: load_environment
 subcode: _autoload
     $global %cmdline_vars
     %cmdline_vars = (
+        j => "j",
         srcdir => "srcdir",
         tests => "tests",
         mpiexec => "mpiexec",
@@ -184,6 +229,11 @@ fncode: load_commandline
             $call usage
         $elif $a=~/^--?dir=(.*)/
             chdir $1 or die "Can't chdir $1\n";
+        $elif $a=~/^--?run=(.*)/
+            my $test = parse_testline($1)
+            $test->{dir} = "."
+            $test->{line} = $1
+            push @alltests, $test
         $elif $a =~/^--?([\w\-]+)=(.*)/
             my ($k, $v) = ($1, $2)
             $if $cmdline_vars{$k}
@@ -229,11 +279,17 @@ fncode: LoadTests($dir)
 
         $call @debug_loading_list
 
+        my %macros
         &call open_r, $listfile
             s/#.*//g;
             s/\r?\n//;
             s/^\s*//;
             $if /^\s*$/
+                next
+
+            $call @expand_macros
+            $if /^set:\s*(\w+)\s*=\s*(.*)/
+                $macros{$1} = $2
                 next
 
             # $print [$_]
@@ -274,6 +330,7 @@ fncode: LoadTests($dir)
             $test->{dir} = $dir
             $test->{line} = $_
             push @alltests, $test
+            $test->{id}=@alltests # 1-based
 
 fncode: parse_testline($line)
     my %test = (line=> $line)
@@ -293,15 +350,21 @@ fncode: parse_testline($line)
 
     # Process the key=value arguments
     $foreach $a in @args
-        $if $a =~ /([^=]+)=(.*)/
-            my ($key,$value) = ($1, $2);
-            $if $key=~/^(resultTest|init|timeLimit|arg|env|mpiexecarg|xfail|mpiversion|strict|mpix)$/
+        $if $a =~ /([^=]+)=(.*)/ -> $key, $value
+            $if $key eq "env"
+                $if $value=~/([^=]+)=(.*)/
+                    $test{env} .= " $value"
+                $else
+                    warn "Environment value not in a=b form: $line"
+            $elif $key=~/^(resultTest|init|timeLimit|arg|env|mpiexecarg|xfail|mpiversion|strict|mpix)$/
                 $if exists $test{$key}
                     $test{$key}.=" $value";
                 $else
                     $test{$key}=$value;
             $else
                 print STDERR "Unrecognized key $key in test line: $line\n";
+        $elif $a eq "skip_id"
+            $test{skip_id} = 1
     $if exists $test{xfail} && $test{xfail} eq ""
         print STDERR "\"xfail=\" requires an argument\n"
 
@@ -317,35 +380,29 @@ fncode: parse_testline($line)
 
 # -- filters: skip tests if return 1 ------------------
 fncode: filter_mpiversion($version_required)
-    if (!$version_required) {
+    $if !$version_required
         return 0;
-    }
-    if ($config{MPIMajorVersion} eq "unknown" or $config{MPIMinorVersion} eq "unknown"){
+    $if $config{MPIMajorVersion} eq "unknown" or $config{MPIMinorVersion} eq "unknown"
         return 0;
-    }
+
     my ($major, $minor) = split /\./, $version_required;
-    if ($major > $config{MPIMajorVersion}) {
+    $if $major > $config{MPIMajorVersion}
         return 1;
-    }
-    if ($major == $config{MPIMajorVersion} && $minor > $config{MPIMinorVersion} ){
+    $if $major == $config{MPIMajorVersion} && $minor > $config{MPIMinorVersion}
         return 1;
-    }
     return 0;
 
 fncode: filter_strict($strict_ok)
     # skip `strict=false` in strict mode
-    if (lc($strict_ok) eq "false" && $config{run_strict}){
+    $if lc($strict_ok) eq "false" && $config{run_strict}
         return 1;
-    }
     return 0;
 
 fncode: filter_xfail($xfail)
-    if ($config{run_strict}) {
+    $if $config{run_strict}
         return 0;
-    }
-    if ($xfail && !$config{run_xfail}) {
+    $if $xfail && !$config{run_xfail}
         return 1;
-    }
     return 0;
 
 fncode: filter_mpix($mpix_required)
@@ -355,6 +412,10 @@ fncode: filter_mpix($mpix_required)
     return 0;
 
 #---------------------------------------- 
+subcode: build_alltests_serial
+    $foreach $t in @alltests
+        BuildMPIProgram($t)
+
 fncode: BuildMPIProgram($test)
     my $prog = $test->{prog}
     my $dir = $test->{dir}
@@ -363,46 +424,108 @@ fncode: BuildMPIProgram($test)
         $print "  $cmd ...\n"
     my $output = `$cmd 2>&1`
     $if ! -x "$dir/$prog"
-	warn "Failed to build $prog; $output\n"
+        $if $config{verbose}
+            $print "Failed to build $prog; $output\n"
         $test->{output} = $output
-        $test->{found_error} = 1
+        $test->{found_error} = "Failed to build $prog"
+
+subcode: build_alltests
+    $my @dirs, %dirs, %dir_test_count
+    $foreach $test in @alltests
+        my $d = $test->{dir}
+        $if !$dirs{$d}
+            push @dirs, $d
+            $dirs{$d} = {}
+        $dirs{$d}->{$test->{prog}} ++
+        $dir_test_count{$d}++
+
+    $foreach $d in @dirs
+        my @prog_list = sort keys %{$dirs{$d}}
+        my $n = @prog_list
+        $print "  $d $n programs - $dir_test_count{$d} tests"
+        my $make="make"
+        $if $d ne "."
+            $make.=" -C $d"
+        $if $config{j}
+            $make.=" -j $config{j}"
+
+        my $t = join ' ', @prog_list
+        `$make clean 2>&1`
+        $if $config{verbose}
+            $print "    $make $t..."
+        `$make $t 2>&1`
 
 #---------------------------------------- 
 fncode: RunMPIProgram($test)
+    $if $test->{dir} && ! -x "$test->{dir}/$test->{prog}"
+        BuildMPIProgram($test)
     $if $test->{found_error}
         # presummably, build error
         return
     my $cmd = get_test_cmd($test)
     $if $verbose
+        $print "\n---- TEST $test->{id} ----\n"
         $print "  [$test->{dir}] $cmd" 
     &call setup_env
+        $use Time::HiRes qw(gettimeofday)
+        my $t1 = gettimeofday();
         $call run_mpi_cmd
-    $if !$test->{ResultTest}
-        $call check_error_default
-    $elif $test->{ResultTest} eq "TestStatus"
-        $call check_error_status
-    $elif $test->{ResultTest} eq "TestStatusNoErrors"
-        # fault tolerance test
-        $call @check_error_noerrors
-        # check $rc != 0
-    $elif $test->{ResultTest} eq "TestErrFatal"
-        $call check_error_return_code
+	my $t2 = gettimeofday();
+        $test->{runtime} = $t2-$t1
+
+    $if !$test->{resultTest}
+        $call check_TestDefault
+    $elif $test->{resultTest} eq "TestStatusZero"
+        $call check_TestStatusZero
+    $elif $test->{resultTest} eq "TestStatus"
+        $print resultTest: $test->{resultTest}
+        $call check_TestStatus
+    $elif $test->{resultTest} eq "TestErrFatal"
+        $call check_TestErrFatal
+    $elif $test->{resultTest} eq "TestStatusNoErrors"
+        $call check_TestStatusNoErrors
+
+    $if $verbose
+        $if $test->{found_error}
+            $print "Failed: [$test->{line}] - $test->{found_error}"
+        $else
+            $print "Success: [$test->{line}]"
+
     return $test->{found_error}
 
     # ------------------
-    subcode: check_error_default
-        # $print found_noerror: $found_noerror
-        # $print err_count: $err_count
-        $call @check_error_noerrors
+    subcode: check_TestDefault
+        $if !$found_noerror
+            $test->{found_error} = "Expect \"No Error\""
         $elif $err_count>0
             $test->{found_error} = "Encounter unexpected output ($err_count counts)"
         # $call @check_error_return_code
         $call @check_error_status
 
-    subcode: check_error_noerrors
-        $case !$found_noerror
-            $test->{found_error} = "Expect \"No Error\""
+    subcode: check_TestStatusZero
+        $if !$rc
+            $test->{found_error}="Expect zero return status"
 
+    subcode: check_TestStatus
+        # assert $hydra_err>0
+        $if $err_count>0 && !$found_noerror
+            $test->{found_error} = "Unexpected output"
+        $if $rc
+            $test->{found_error} = "Expect Non-Zero return status"
+
+    subcode: check_TestErrFatal
+        $if $rc
+            $test->{found_error} = "Expect Non-Zero return status"
+
+    subcode: check_TestStatusNoErrors
+        $if !$found_noerror
+            $test->{found_error} = "Expect \"No Error\""
+        $elif $err_count>0
+            $test->{found_error} = "Encounter unexpected output ($err_count counts)"
+        $elif $rc
+            $test->{found_error} = "Expect Non-Zero return status"
+
+    # ----------------------
     subcode: check_error_return_code
         $case !$rc
             $test->{found_error}= "Non-zero return code: $rc"
@@ -424,21 +547,20 @@ fncode: RunMPIProgram($test)
             $cmd = "cd $test->{dir} && $cmd"
         open( my $MPIOUT, "$cmd 2>&1 |" ) || die "Could not run $test->{prog}\n";
         my ($found_noerror, $err_count, @output)
+        my ($hydra_err)
         $while <$MPIOUT>
             push @output, $_
             $if $verbose
                 print $_
             $if /FORTRAN STOP/
                 next
-            $elif /^\s*No Errors\s*$/i
+            $elif /^\s*(No Errors|Test Passed)\s*$/i
                 $found_noerror += 1
                 next
-            $elif /^\s*Test Passed\s*$/
+            $elif /(requesting checkpoint|checkpoint completed)\s*$/
                 next
-            $elif /requesting checkpoint\s*$/
-                next
-            $elif /checkpoint completed\s*$/
-                next
+            $elif /application called MPI_Abort/
+                $hydra_err++
             $else
                 $err_count++
         my $rc = close( $MPIOUT );
@@ -449,12 +571,10 @@ fncode: RunMPIProgram($test)
         my %saveEnv
         $if $test->{env}
             %saveEnv = %ENV;
+            $call @debug_env
             $foreach $val in split /\s+/, $test->{env}
                 $if $val =~ /([^=]+)=(.*)/
                     $ENV{$1} = $2;
-                $else
-                    # move to parsing time
-		warn "Environment variable/value $val not in a=b form\n";
         BLOCK
         $if $test->{env}
             %ENV = %saveEnv
@@ -463,8 +583,8 @@ fncode: get_test_cmd($test)
     my $cmd = "$config{mpiexec} $config{np_arg} $test->{np}"
     $call @arg_ppn
     $call @arg_timeout
-    $if $test->{mpiexecargs}
-        $cmd.=" $test->{mpiexecargs}"
+    $if $test->{mpiexecarg}
+        $cmd.=" $test->{mpiexecarg}"
     $if $config{program_wrapper}
         $cmd.=" $config{program_wrapper}"
     $if -x "$test->{dir}/$test->{prog}"
@@ -473,33 +593,27 @@ fncode: get_test_cmd($test)
         $cmd.=" $test->{prog}"
     $if $test->{arg}
         $cmd.=" $test->{arg}"
+    $if $test->{id} and !$test->{skip_id}
+        $cmd .=  " -id=$test->{id}"
     return $cmd;
 
     subcode: arg_ppn
-    subcode: arg_timout
+        $if $config{ppn_arg} && $config{ppn_max}>0
+            my $nn = $config{ppn_max}
+            $if $nn > $test->{np}
+                $nn = $test->{np}
+            my $arg = $config{ppn_arg}
+            $arg=~s/\%d/$nn/
+            $cmd .= " $arg"
+
+    subcode: arg_timeout
         my $timeout = $config{timeout_default};
-        if (defined($test->{timeLimit}) && $test->{timeLimit} =~ /^\d+$/) {
-            $timeout = $timeLimit;
-        }
+        $if defined($test->{timeLimit}) && $test->{timeLimit} =~ /^\d+$/
+            $timeout = $test->{timeLimit}
         $if $timeout
             $timeout *= $config{timeout_multiplier};
             $test->{timeout} = $timeout;
-            $ENV{"MPIEXEC_TIMEOUT"} = $timeout;
-
-#---------------------------------------- 
-subcode: debug_loading_list
-    $if $verbose
-        print "Looking in $dir/$f\n"
-
-subcode: debug_load
-    my $n_tests = @alltests
-    $print $n_tests tests loaded
-    my $n_skipped
-    $foreach $t in @alltests
-        $if $t->{skipped}
-            $n_skipped++
-    $if $n_skipped
-        $print $n_skipped tests skipped
+            $test->{env}.=" MPIEXEC_TIMEOUT=$timeout"
 
 #---------------------------------------- 
 fncode: dump_xml($alltests, $xmlfile)
@@ -519,7 +633,7 @@ fncode: dump_xml($alltests, $xmlfile)
             $print $(tag:NAME,$test->{prog})
             $print $(tag:NP,$test->{np})
             $print $(tag:WORKDIR,$test->{dir})
-            $if $test->{skipped}
+            $if $test->{skip}
                 NOOP
             $elif !$test->{found_error}
                 $print $(tag:STATUS,pass)
@@ -533,7 +647,7 @@ fncode: dump_xml($alltests, $xmlfile)
                 # TODO: Also capture any non-printing characters (XML doesn't like them # either).
                 $print $(tag:STATUS,fail)
                 $print $(tag:TESTDIFF,$xout)
-            $print $(tag:TIME,runtime)
+            $print $(tag:TIME,$test->{runtime})
             $print "</MPITEST>"
         $if !$config{noxmlclose}
             $print "</MPITESTRESULTS>"
@@ -543,8 +657,8 @@ fncode: dump_tap($alltests, $tapfile)
     &call open_W, $tapfile
         $print "1..$n\n"
         $foreach $i,$test in @$alltests
-            $if $test->{skipped}
-                $print "ok $i - $test->{dir}/$test->{prog} $test->{np}  \x23 SKIP $test->{skipped}"
+            $if $test->{skip}
+                $print "ok $i - $test->{dir}/$test->{prog} $test->{np}  \x23 SKIP $test->{skip}"
             $elif !$test->{found_error}
                 $print "ok $i - $test->{dir}/$test->{prog} $test->{np} \x23 time=$test->{runtime}"
             $else
@@ -558,7 +672,7 @@ fncode: dump_junit($alltests, $junitfile)
     my $n = @$alltests;
     my ($err_count, $skip_count);
     $foreach $test in @$alltests
-        $if $test->{skipped}
+        $if $test->{skip}
             $skip_count ++;
         $elif $test->{found_error}
             $err_count ++;
@@ -572,25 +686,26 @@ fncode: dump_junit($alltests, $junitfile)
         $print "             date=\"$date\""
         $print "             name=\"summary_junit_xml\">"
         $foreach $i,$test in @$alltests
-            $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\" time=\"$test->{runtime}\">"
-
-            $print "    </testcase>"
-            $if $test->{skipped}
-                $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\">"
-                $print "      <skipped type=\"TodoTestSkipped\">"
-                $print "             message=\"$test->{skip}\"><![CDATA[ok $i - $test->{dir}/$test->{prog} $test->{np}  \x23 SKIP $test->{skipped}]]></skipped>"
+            my $name_short = "$i - $test->{dir}/$test->{prog} $test->{np}"
+            my $name="$name_short $test->{arg} $test->{env}"
+            $if $test->{skip}
+                $print "    <testcase name=\"$name\">"
+                $print "      <skipped type=\"TodoTestSkipped\""
+                $print "             message=\"$test->{skip}\"><![CDATA[ok $name_short \x23 SKIP $test->{skip}]]></skipped>"
                 $print "    </testcase>"
             $elif !$test->{found_error}
-                $print "    <testcase name=\"$i - $test->{dir}/$test->{prog} $test->{np} $test->{arg} $test->{env}\" time=\"$test->{runtime}\"></testcase>"
+                $print "    <testcase name=\"$name\" time=\"$test->{runtime}\"></testcase>"
             $else
                 my $testtag = "failure";
                 $if $test->{xfail}
                     $testtag = "skipped";
+                $print "    <testcase name=\"$name\" time=\"$test->{runtime}\">"
                 $print "      <$testtag type=\"TestFailed\""
-                $print "               message=\"not ok $i - $test->{dir}/$test->{prog} $test->{np}$test->{xfail}\"><![CDATA["
-                $print "not ok $i - $test->{dir}/$test->{prog} $test->{np}$test->{xfail}"
+                $print "               message=\"not ok $name_short$test->{xfail}\"><![CDATA["
+                $print "not ok $name_short$test->{xfail}"
                 $call dump_summary_output
                 $print "    ]]></$testtag>"
+                $print "    </testcase>"
         $print "    <system-out></system-out>"
         $print "    <system-err></system-err>"
         $print "  </testsuite>"
@@ -607,6 +722,7 @@ subcode: dump_summary_output
     $print "  Timeout: $test->{timeout}"
     my $t = localtime
     $print "  Date: \"$t\""
+    $print "  Error: $test->{found_error}"
     $print "  ..."
     # Alternative to the "Output:" YAML block literal above.  Do not put any
     # spaces before the '#', this causes some TAP parsers (including Perl's
@@ -616,3 +732,196 @@ subcode: dump_summary_output
     $foreach $line in split m/\r?\n/, $test->{output}
         chomp $line;
         $print "\x23\x23 $line\n"
+
+#---------------------------------------- 
+subcode: debug_loading_list
+    $if $verbose
+        print "Looking in $dir/$f\n"
+
+subcode: debug_env
+    $if $verbose
+        print "  ENV: $test->{env}\n"
+
+subcode: debug_load
+    my $n_tests = @alltests
+    $print $n_tests tests loaded
+    my $n_skip
+    $foreach $t in @alltests
+        $if $t->{skip}
+            $n_skip++
+    $if $n_skip
+        $print $n_skip tests skipped
+
+#---------------------------------------- 
+fncode: run_worker($IN, $OUT)
+    $while <$IN>
+        $if /run\s+(\d+)/
+            my $test = $alltests[$1]
+            RunMPIProgram($test)
+            $(for:found_error,runtime)
+                print $OUT "$1: $test->{$1}\n"
+            print $OUT "output:\n"
+            print $OUT $test->{output}, "\n"
+            print $OUT "--\n"
+
+subcode: spawn_workers(N)
+    $my $N_j = $(N)
+    $my @worker_load, @worker_pid, @worker_socket
+    $use IO::Select
+    my $io_select = IO::Select->new()
+    $for $i=0:$N_j
+        $use Socket
+        socketpair(my $child, my $parent, AF_UNIX, SOCK_STREAM, PF_UNSPEC) or die "socketpair\n"
+        select(((select($child), $|=1))[0]) # autoflush
+        select(((select($parent), $|=1))[0]) # autoflush
+        my $pid = fork()
+        $if $pid
+            close $parent
+            push @worker_load, 0
+            push @worker_pid, $pid
+            push @worker_socket, $child
+            $io_select->add($child)
+        $else
+            close $child
+            run_worker($parent, $parent)
+            exit
+
+    my $i_test = 0
+    my $n = @alltests
+    my $total_load = 0
+    $while 1
+        # $print total_load: $total_load, i_test=$i_test
+        my $ran_test = 0
+        $if $total_load < $N_j
+            &call run_tests
+                # $print run test #$j - $np on worker #$k
+                $ran_test = 1
+                goto L1
+        L1:
+        $if !$ran_test
+            $call check_workers
+        $if $i_test>=$n && $total_load==0
+            last
+        $(if:0)
+            $if $total_load==0
+                $print i_test:$i_test total_load:$total_load
+                my $test=$alltests[$i_test]
+                $foreach %$test
+                    $print "  $k:$v"
+
+    subcode: run_tests
+        $while $i_test < $n and ($alltests[$i_test]->{skip} or $alltests[$i_test]->{ran}) 
+            $i_test++
+        $for $j=$i_test:$n
+            my $test=$alltests[$j]
+            $if $test->{skip} or $test->{ran}
+                next
+            my $np = $test->{np}
+            $if $total_load+$np <= $N_j || $total_load==0
+                $for $k = 0:$N_j
+                    $if !$worker_load[$k]
+                        $worker_load[$k] = "$j - $np"
+                        my $h = $worker_socket[$k]
+                        print $h "run $j\n"
+                        $test->{ran} = $k+1
+                        $total_load+=$np
+                        BLOCK
+
+    subcode: check_workers
+        my @ready = $io_select->can_read(1)
+        $foreach $h in @ready
+            $for $i=0:$N_j
+                $if $h==$worker_socket[$i]
+                    $if $worker_load[$i]=~/(\d+) - (\d+)/ -> $j, $np
+                        $call get_worker_test_result
+                        $worker_load[$i]=undef
+                        $total_load -= $np
+                    last
+
+        subcode: get_worker_test_result
+            my $test = $alltests[$j]
+            my $expect_output
+            $while <$h>
+                $if /^(found_error|runtime):\s*(.*)/
+                    $test->{$1}=$2
+                $elif /^output:/
+                    $expect_output = 1
+                $elif /^--$/
+                    last
+                $elif $expect_output
+                    $test->{output}.=$_
+            $call @print_test_progress
+
+#---------------------------------------- 
+fncode: probe_max_cores
+    my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
+    $if $cpu_count=~/^(\d+)/
+        return $1
+    return 0
+
+#---------------------------------------- 
+subcode: expand_macros
+    $if /\$\(\w/
+        $_ = expand_macro($_, \%macros)
+
+fncode: get_macro_word($name, $macros)
+    return $macros->{$name}
+
+fncode: get_macro($s, $macros)
+    $if $s=~/^(\w+):(.*)/
+        my $p=$2;
+        my $t=get_macro_word($1, $macros)
+        #--INLINE macro -- $(macro:p1,p2,p3)
+        my @plist=split /,\s*/, $p
+        my $i=1;
+        $foreach $pp in @plist
+            $t=~s/\$$i/$pp/g
+            $i++
+        return $t
+    $elif $s=~/^(\w+)/
+        return get_macro_word($1, $macros)
+
+fncode: expand_macro($line, $macros)
+    my @paren_stack
+    my $segs=[]
+    $(set:dollar=\$(?![\(\.])) # $ not following (
+    &call parse_loop, $line
+        &call if_lex, \$\(
+            push @paren_stack, $segs
+            $segs=[]
+            push @paren_stack, "\$\("
+        $elif !@paren_stack
+            # skip/copy non-macro part
+            &call if_lex, ([^\$]|$(dollar))+
+                # not $ or $ -- not follow '('
+                push @$segs, $&
+        $else
+            # inside $( ... )
+            &call if_lex, \(
+                # @paren_stack: [segs, '$(', segs, '(', ...]
+                push @paren_stack, $segs
+                $segs=[]
+                push @paren_stack, "("
+            &call if_lex, \)
+                my $t=join('', @$segs)
+                my $open=pop @paren_stack
+                $segs=pop @paren_stack
+                $if $open eq "(" or $t!~/^\w/
+                    push @$segs, "$open$t)"
+                $else
+                    # must be $(w.*)
+                    push @$segs, get_macro($t, $macros)
+            &call if_lex, ([^\$\(\)]|$(dollar))+
+                push @$segs, $&
+        $(set:skip_else=1)
+
+    $call check_paren_stack
+    return join('', @$segs)
+
+    subcode: check_paren_stack
+        $while @paren_stack
+            my $t = join('', @$segs)
+            my $open = pop @paren_stack
+            $segs = pop @paren_stack
+            push @$segs, $open
+            push @$segs, $t
