@@ -41,4 +41,6 @@ macros:
     pp_req: MPIR_Request **request
 
 subcode: _autoload
-    $fntype $(si_int) (*MPIDI_UCX_send)($(sendbuf),$(Cnt),datatype,rank,tag,comm_ptr,context_offset, $(av_addr), $(pp_req), int have_request, int is_sync
+    $fntype $(si_int) (*MPIDI_UCX_send)($(sendbuf),$(Cnt),datatype,rank,tag,comm_ptr,context_offset, $(av_addr), $(pp_req), int have_request, int is_sync)
+
+    $fntype $(si_int) (*MPIDI_OFI_send)($(sendbuf),$(Cnt),datatype,rank,tag,comm_ptr,context_offset, $(av_addr), $(pp_req), int noreq, uint64_t syncflag)

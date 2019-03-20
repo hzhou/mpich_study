@@ -130,13 +130,13 @@ macros:
 
 #---------------------------------------- 
 fncode: MPIDI_NM_mpi_send
-    $call NM_send, 0, 0
+    $call NM_send, 0, 0, send
 fncode: MPIDI_NM_mpi_ssend
-    $call NM_send, 0, 1
+    $call NM_send, 0, 1, ssend
 fncode: MPIDI_NM_mpi_isend
-    $call NM_send, 1, 0
+    $call NM_send, 1, 0, isend
 fncode: MPIDI_NM_mpi_issend
-    $call NM_send, 1, 1
+    $call NM_send, 1, 1, issend
 
 fncode: MPIDI_NM_mpi_send_init
     $call NM_send_init, send

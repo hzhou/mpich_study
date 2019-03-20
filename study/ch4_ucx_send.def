@@ -6,7 +6,7 @@ page: ucx_send.h, from templates/mpid/ch4/netmod/ucx/ucx_send.h
     $(for:send,ssend,bsend,rsend)
         $list(skip_declare) MPIDI_NM_mpi_$1_init
 
-subcode: NM_send(have_request, is_sync)
+subcode: NM_send(have_request, is_sync, send)
     $parameter $(send_param_2)
     $return_type static inline int
     return MPIDI_UCX_send($(send_arg2), $(have_request), $(is_sync))
