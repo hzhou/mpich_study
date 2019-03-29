@@ -6,15 +6,15 @@ page: check_whitespace
 
     my $indent = "$cwd/maint/code-cleanup.sh"
     $if !-f $indent
-        $indent = "code-cleanup.sh"
+        die "maint/code-cleanup.sh not found. Must run from top mpich tree.\n"
 
     my @files
-    $if -f $ARGV[0]
-        push @files, $ARGV[0]
-    $elif -f "change.lst"
-        $call get_files_from_change_lst
-    $else
-        $call get_files_from_git_diff
+    $call parse_args
+    $if !@files
+        $if -f "change.lst"
+            $call get_files_from_change_lst
+        $else
+            $call get_files_from_git_diff
 
     $if !@files
         die "Usage: perl $0 file list\n"
@@ -26,20 +26,42 @@ page: check_whitespace
     mkdir "t"
     chdir "t"
 
-    my $i=0
-    $foreach $f in @files
-        $i++
-        $if -f "$cwd/$f"
-            $print checking $cwd/$f ...
-            system "echo ---- $i - $f ----- >>t.diff"
-            system "cp $cwd/$f $i.c"
-            system "$indent $i.c"
-            system "diff $cwd/$f $i.c >> t.diff"
-        $else
-            $print $f not found
-    system "cat t.diff"
+    my $n_diffs=0
+    &call open_w, t.diff
+        $foreach $i,$f in @files
+            $if -f "$cwd/$f"
+                $print " $i - $f ..."
+                system "cp $cwd/$f $i.c"
+                system "$indent $i.c"
+                my $diff = `diff $cwd/$f $i.c`;
+                $if $diff
+                    $n_diffs++
+                    print Out "---- $i - $f ----\n"
+                    print Out "$diff\n"
+                    $if $opts{update}
+                        system "cp $i.c $cwd/$f"
+            $else
+                $print $f not found
+    $if $n_diffs
+        $print --------------\n
+        system "cat t.diff"
+    $else
+        $print whitespace check PASS!
 
 #---------------------------------------- 
+subcode: parse_args
+    $global $base_commit, %opts
+    # whitespace_check [base=xxx] [update=1] 
+    $foreach $a in @ARGV
+        $if $a=~/base=(.+)/
+            $base_commit = $1
+        $elif $a=~/^(\w+)=(.*)/
+            $opts{$1}=$2
+        $elif -f $a
+            push @files, $a
+        $else
+            die "$a not found\n"
+
 subcode: get_files_from_change_lst
     &call open_r, change.lst
         chomp
@@ -51,6 +73,6 @@ subcode: get_files_from_change_lst
                 push @files, "$cwd/$f"
 
 subcode: get_files_from_git_diff
-    &call open_r, "git diff --compact-summary |"
-        $if /^\s*(\S+)\s+\|\s+\d+/
+    &call open_r, "git diff --name-only $base_commit |"
+        $if /^(\S+\.[ch])/
             push @files, $1

@@ -37,9 +37,11 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
-        $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
+        $(for:stage,clean,errmsg,cvars,logs,hydra,test,mpi_h)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
         push @extra_make_rules, ""
+        push @extra_make_rules, ".PHONY: test"
+        $call push_autogen_rule, test, test
 
     subcode: push_autogen_rule(name, file)
         push @extra_make_rules, "$(file):"

@@ -1,9 +1,8 @@
-include: common.def
 page: t
-    skiprun: 1
+    module: perl
 
-    $list MPI_Send
-
-fncode: MPI_Send
-    frame: mpich
+    opendir DIR, "."
+    for my $file (sort readdir DIR) {
+        $print $file
+    }
 

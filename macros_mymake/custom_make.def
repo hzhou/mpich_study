@@ -29,7 +29,8 @@ subcode: temporary_modify
         my $f_ = $f
         $f_=~s/[\.\/]/_/g
         my @m =($f, "mymake/$f_.orig", "mymake/$f_.mod")
-        push @mod_list, \@m
+        $(if:!skip_mod_list)
+            push @mod_list, \@m
 
         system "mv $m[0] $m[1]"
         $call get_file_lines, $m[1]
@@ -37,7 +38,7 @@ subcode: temporary_modify
             $foreach $l in @lines
                 BLOCK
                 print Out $l
-        system "cp $m[2] $m[0]"
+        system "cp -v $m[2] $m[0]"
 
 #---------------------------------------- 
 subcode: parse_Makefile(makefile)
@@ -122,7 +123,7 @@ subcode: dump_custom_make
                 push @install_list, "$(LT:install) install $k $v"
                 push @install_deps, $k
             $elif $v=~/\/bin$/
-                push @install_list, "install $k $v"
+                push @install_list, "$(LT:install) install $k $v"
                 push @install_deps, $k
 
     my $t1 = get_list("include_HEADERS")

@@ -2,10 +2,11 @@ page: ofi_send.h, from templates/mpid/ch4/netmod/ofi/ofi_send.h
 
 macros:
     ctx: comm->context_id+context_offset
+    G: MPIDI_OFI_global.$1
 
 fncode: MPIDI_OFI_send
     $call @Datatype_get_info
-    $(set:is_lw=!syncflag && dt_contig && data_sz<=MPIDI_Global.max_buffered_send)
+    $(set:is_lw=!syncflag && dt_contig && data_sz<=$(G:max_buffered_send))
     $if $(is_lw)
         $if noreq
             $fcall MPIDI_OFI_send_lightweight
@@ -38,7 +39,7 @@ subcode: OFI_send(type)
         $(set:buf=send_buf, data_sz))
         $(set:do=(void*)&(MPIDI_OFI_REQUEST(sreq, context)), MPIDI_OFI_DO_SEND)
     $(else) # huge, send max
-        $(set:buf=send_buf, MPIDI_Global.max_send)
+        $(set:buf=send_buf, $(G:max_send))
         $(set:do=(void*)&(MPIDI_OFI_REQUEST(sreq, context)), MPIDI_OFI_DO_SEND)
 
     $fcall MPIDI_OFI_send_handler($(ctx), $(buf), NULL, comm->rank, $(addr), match_bits, $(do), MPIDI_OFI_CALL_LOCK, $(flag))
@@ -53,7 +54,7 @@ fncode: MPIDI_OFI_send_normal
         $call @ssend_ack
     send_buf = (char *)buf + dt_true_lb
     $if !dt_contig
-        $if MPIDI_OFI_ENABLE_PT2PT_NOPACK && data_sz<=MPIDI_Global.max_send
+        $if MPIDI_OFI_ENABLE_PT2PT_NOPACK && data_sz<=$(G:max_send)
             $fcall MPIDI_OFI_send_iov
             # goto fn_exit if MPI_SUCCESS
         $call set_req, event_id, MPIDI_OFI_EVENT_SEND_PACK
@@ -62,9 +63,9 @@ fncode: MPIDI_OFI_send_normal
         $call set_req, noncontig.pack, NULL
         $call set_req, noncontig.nopack, NULL
 
-    $if data_sz <= MPIDI_Global.max_buffered_send
+    $if data_sz <= $(G:max_buffered_send)
         $call @OFI_send, normal_small
-    $elif data_sz <= MPIDI_Global.max_send
+    $elif data_sz <= $(G:max_send)
         $call @OFI_send, normal_medium
     $else
         ...
