@@ -68,10 +68,7 @@ fncode: PMI_Init(pn_spawned)
     $if PMI_fd == -1
         $call @check_PMIx
     # $dump PMI_fd, PMI_rank, PMI_size
-    $if PMI_fd>=0 && PMI_rank==0
-        $call PMI_CMD, get_universe_size
-        $call PMI_CMD, get_appnum
-        $call PMI_CMD, get_my_kvsname
+    $call @test_PMI
     $call PMI_CMD, barrier_in
 
     # ------------------------------- 
@@ -86,6 +83,15 @@ fncode: PMI_Init(pn_spawned)
         # $dump(PMI_PORT) s_p
         $if s_p
             $dump s_p
+    # ---- PMI v1 -------------------
+    subcode: test_PMI
+        $(set:echo_pmi=1)
+        $if PMI_fd>=0 && PMI_rank==0
+            $call PMI_CMD, get_universe_size
+            $call PMI_CMD, get_appnum
+            $call PMI_CMD, get_my_kvsname
+
+    subcode: PMI_put(key, val)
 
 fncode: PMI_Finalize
     $if PMI_fd>0
@@ -97,5 +103,6 @@ subcode: PMI_CMD(cmd)
     $(eval:n=$(cmd:strlen)+5)
     $call Write, PMI_fd, "cmd=$(cmd)\n", $(n)
     $call Read, PMI_fd, pmi_buf, 1024
-    pmi_buf[tn_ret-1] = 0
-    $print "[$(cmd)]: %s\n", pmi_buf
+    $(if:echo_pmi=1)
+        pmi_buf[tn_ret-1] = 0
+        $print "[$(cmd)]: %s\n", pmi_buf
