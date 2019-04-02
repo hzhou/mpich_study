@@ -1,0 +1,10 @@
+page: t
+    module: perl
+    run: mpirun -n 4 perl out/t.pl
+
+    $print Hello World
+    my $rank = $ENV{PMIX_RANK}
+    $if $rank==0
+        $foreach %ENV
+            $if $k=~/^PMI/
+                $print $k: $v
