@@ -1,0 +1,53 @@
+subcode: init_vc
+    $global int *vc_list
+
+    $allocate(PMI_size) vc_list
+    
+    n_connected = 0
+    n_accepted = 0
+    $for i=0:PMI_size
+        $if i==PMI_rank
+            $call vc_listen
+            tn_ret = 0
+            $while tn_ret == 0
+                $call 
+
+            $if tn_ret
+            count++
+        $else
+            $call vc_connect, 2000+i
+            $if tn_ret==0
+                n_connected++
+            $else
+                # todo
+
+#---------------------------------------- 
+macros:
+    addr: (struct sockaddr*)&addr, sizeof(addr)
+
+subcode: vc_listen
+    tn_port = 2000+PMI_rank
+    $local struct sockaddr_in addr
+    addr.sin_family = AF_INET
+    addr.sin_port = $(port)
+    addr.sin_addr.s_addr = 0x7f000001
+
+    tn_socket_listen = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
+    bind(tn_socket_listen, $(addr))
+    tn_ret = listen(tn_socket_listen, 1024)
+
+subcode: vc_accept
+    tn_ret = accept(tn_socket_listen, $(addr))
+
+subcode: vc_connect(port)
+    $local struct sockaddr_in addr
+    addr.sin_family = AF_INET
+    addr.sin_port = $(port)
+    addr.sin_addr.s_addr = 0x7f000001
+
+    tn_socket_connect = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
+    tn_ret = connect(tn_socket_connect, $(addr))
+
+#---------------------------------------- 
+subcode: init_poll
+

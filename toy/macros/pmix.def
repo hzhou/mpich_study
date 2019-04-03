@@ -1,0 +1,47 @@
+# TODO: server-client protocol?
+
+subcode: check_PMIx
+    $call getenv, char *, PMIX_NAMESPACE, PMIX_NAMESPACE
+    $call getenv, int, PMI_rank, PMIX_RANK
+    $dump PMI_rank
+
+    $global int PMIx_version
+    $call check_uri, PMIX_SERVER_URI4, 0x40
+    $call check_uri, PMIX_SERVER_URI3, 0x30
+    $call check_uri, PMIX_SERVER_URI21, 0x21
+    $call check_uri, PMIX_SERVER_URI2, 0x20
+    got_uri:
+    $if s_p
+        $call pmix_connect
+
+    subcode: check_uri(name, ver)
+        &call if_env, $(name)
+            PMIx_version = $(ver)
+            goto got_uri
+
+
+    subcode: pmix_connect
+        ts_uri = s_p
+        ts_port = NULL
+        ts_host = NULL
+        $while *s_p && *s_p != 't'
+            s_p++
+        $if strncmp(s_p, "tcp4://", 7)==0
+            s_p+=7
+            ts_host = s_p
+            $while *s_p && *s_p!=':'
+                s_p++
+            $if *s_p==':'
+                *s_p='\0'
+                ts_port = s_p+1
+        $if ts_host && ts_port
+            PMI_fd = _tcp_connect(ts_host, ts_port)
+        $dump ts_host, ts_port, PMI_fd
+
+
+include: c/posix.def
+fncode: _tcp_connect(ts_host, ts_port): int
+    $local tn_socket = -1
+    $(set:socket=tn_socket)
+    $call tcp_connect, ts_host, ts_port
+    return tn_socket

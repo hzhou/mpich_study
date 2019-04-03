@@ -1,0 +1,70 @@
+#---------------------------------------- 
+fncode: PMI_Init(pn_spawned)
+    $define(PMI_UNINITIALIZED) 0
+    $global int PMI_initialized = PMI_UNINITIALIZED
+    $global int PMI_fd = -1
+    # default as singleton
+    $global int PMI_rank = 0
+    $global int PMI_size = 1
+
+    $call check_PMI_fd
+    $if PMI_fd == -1
+        $call @check_PMI_port
+    $if PMI_fd == -1
+        $call @check_PMIx
+    # $dump PMI_fd, PMI_rank, PMI_size
+    # $call @test_PMI
+    $(if:0)
+        $if PMI_fd>=0 && PMI_rank==0
+            $call PMI_put, TESTKEY, 100
+        $call PMI_CMD, barrier_in
+        $if PMI_fd>=0 && PMI_rank==1
+            $call PMI_get, TESTKEY
+
+    # ------------------------------- 
+    subcode: check_PMI_fd
+        $call get_env_int, PMI_fd, PMI_FD
+        $call get_env_int, PMI_rank, PMI_RANK
+        $call get_env_int, PMI_size, PMI_SIZE
+
+    # ------------------------------- 
+    subcode: check_PMI_port
+        s_p = getenv("PMI_PORT")
+        # $dump(PMI_PORT) s_p
+        $if s_p
+            $dump s_p
+    # ---- PMI v1 -------------------
+    subcode: test_PMI
+        $(set:echo_pmi=1)
+        $if PMI_fd>=0 && PMI_rank==0
+            $call PMI_CMD, get_universe_size
+            $call PMI_CMD, get_appnum
+            $call PMI_CMD, get_my_kvsname
+
+    subcode: PMI_put(key, val)
+        $local char pmi_buf[1024]
+        tn_ret = snprintf(pmi_buf, 1024, "cmd=put key=$(key) value=%d\n", $(val))
+        $call Write, PMI_fd, pmi_buf, tn_ret
+        $call Read, PMI_fd, pmi_buf, 1024
+        $print "[put]: %s\n", pmi_buf
+
+    subcode: PMI_get(key)
+        $local char pmi_buf[1024]
+        tn_ret = snprintf(pmi_buf, 1024, "cmd=get key=$(key)\n")
+        $call Write, PMI_fd, pmi_buf, tn_ret
+        $call Read, PMI_fd, pmi_buf, 1024
+        $print "[get]: %s\n", pmi_buf
+
+fncode: PMI_Finalize
+    $if PMI_fd>0
+        $call PMI_CMD, finalize
+        close(PMI_fd)
+
+subcode: PMI_CMD(cmd)
+    $local char pmi_buf[1024]
+    $(eval:n=$(cmd:strlen)+5)
+    $call Write, PMI_fd, "cmd=$(cmd)\n", $(n)
+    $call Read, PMI_fd, pmi_buf, 1024
+    $(if:echo_pmi=1)
+        pmi_buf[tn_ret-1] = 0
+        $print "[$(cmd)]: %s\n", pmi_buf

@@ -1,6 +1,7 @@
 include: c/mpi.def
-include: macros/common.def
 include: c/posix.def
+include: macros/common.def
+include: macros/pmi.def
 
 page: test, mpi_frame
     module: c
@@ -53,56 +54,3 @@ fncode: MPI_Get_processor_name(s_buf, pn_len)
     strcpy(s_buf, "TOY")
     *pn_len=3
 
-#---------------------------------------- 
-fncode: PMI_Init(pn_spawned)
-    $define(PMI_UNINITIALIZED) 0
-    $global int PMI_initialized = PMI_UNINITIALIZED
-    $global int PMI_fd = -1
-    # default as singleton
-    $global int PMI_rank = 0
-    $global int PMI_size = 1
-
-    $call check_PMI_fd
-    $if PMI_fd == -1
-        $call @check_PMI_port
-    $if PMI_fd == -1
-        $call @check_PMIx
-    # $dump PMI_fd, PMI_rank, PMI_size
-    $call @test_PMI
-    $call PMI_CMD, barrier_in
-
-    # ------------------------------- 
-    subcode: check_PMI_fd
-        $call get_env_int, PMI_fd, PMI_FD
-        $call get_env_int, PMI_rank, PMI_RANK
-        $call get_env_int, PMI_size, PMI_SIZE
-
-    # ------------------------------- 
-    subcode: check_PMI_port
-        s_p = getenv("PMI_PORT")
-        # $dump(PMI_PORT) s_p
-        $if s_p
-            $dump s_p
-    # ---- PMI v1 -------------------
-    subcode: test_PMI
-        $(set:echo_pmi=1)
-        $if PMI_fd>=0 && PMI_rank==0
-            $call PMI_CMD, get_universe_size
-            $call PMI_CMD, get_appnum
-            $call PMI_CMD, get_my_kvsname
-
-    subcode: PMI_put(key, val)
-
-fncode: PMI_Finalize
-    $if PMI_fd>0
-        $call PMI_CMD, finalize
-        close(PMI_fd)
-
-subcode: PMI_CMD(cmd)
-    $local char pmi_buf[1024]
-    $(eval:n=$(cmd:strlen)+5)
-    $call Write, PMI_fd, "cmd=$(cmd)\n", $(n)
-    $call Read, PMI_fd, pmi_buf, 1024
-    $(if:echo_pmi=1)
-        pmi_buf[tn_ret-1] = 0
-        $print "[$(cmd)]: %s\n", pmi_buf

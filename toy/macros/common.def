@@ -1,0 +1,26 @@
+include: macros/pmix.def
+# ------------------
+subcode: getenv(T, var, name)
+    $global $(T) $(var)
+    &call if_env, $(name)
+        $(if:T=int)
+            $(var) = atoi(s_p)
+        $(else)
+            $(var) = strdup(s_p)
+
+subcode: if_env(name)
+    s_p = getenv("$(name)")
+    $if s_p
+        BLOCK
+
+subcode: get_env_int(var, name)
+    &call if_env, $(name)
+        $(var) = atoi(s_p)
+
+#---------------------------------------- 
+include: c/nonstdfn.def
+subcode: _autoload
+    $include <unistd.h>
+    $include <string.h>
+    $list strdup
+
