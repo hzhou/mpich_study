@@ -12,7 +12,8 @@ fncode: PMI_Init(pn_spawned)
         $call @check_PMI_port
     $if PMI_fd == -1
         $call @check_PMIx
-    # $dump PMI_fd, PMI_rank, PMI_size
+    $(if:debug)
+        $dump PMI_fd, PMI_rank, PMI_size
     # $call @test_PMI
     $(if:0)
         $if PMI_fd>=0 && PMI_rank==0
@@ -59,6 +60,10 @@ fncode: PMI_Finalize
     $if PMI_fd>0
         $call PMI_CMD, finalize
         close(PMI_fd)
+
+fncode: PMI_Barrier
+    $if PMI_fd>0
+        $call PMI_CMD, barrier_in
 
 subcode: PMI_CMD(cmd)
     $local char pmi_buf[1024]

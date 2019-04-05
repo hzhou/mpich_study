@@ -1,53 +1,132 @@
-subcode: init_vc
+macros:
+    PORT_BASE: 2000
+    PORT: $(PORT_BASE)+$1*PMI_size+PMI_rank
+    PORT_listen: $(PORT_BASE)+PMI_size*PMI_size+$1
+    PORT_rank: ($1-$(PORT_BASE))%PMI_size
+
+subcode: toy_tcp_init
     $global int *vc_list
-
-    $allocate(PMI_size) vc_list
+    $allocate(PMI_size, 0) vc_list
     
-    n_connected = 0
-    n_accepted = 0
-    $for i=0:PMI_size
-        $if i==PMI_rank
-            $call vc_listen
-            tn_ret = 0
-            $while tn_ret == 0
-                $call 
+    $call ip4_listen, $(PORT_listen:PMI_rank)
+    n_connect = PMI_rank
+    n_accept = PMI_size - PMI_rank - 1
 
-            $if tn_ret
-            count++
-        $else
-            $call vc_connect, 2000+i
+    &call init_poll
+        $call poll_add_listen
+        $for i=0:PMI_rank
+            $call ip4_connect, $(PORT:i), $(PORT_listen:i)
+            vc_list[i] = socket_connect
             $if tn_ret==0
-                n_connected++
+                n_connect--
             $else
-                # todo
+                $call poll_add_connect, i
+
+        $print "[%d] $n_connect to connect, $n_accept to accept", PMI_rank
+        PMI_Barrier()
+        $while n_connect>0 || n_accept>0
+            &call poll_wait
+                $if $(ctx)>100
+                    $call die, "%d abort...", PMI_rank
+                $if $(ctx)>=0
+                    n_connect--
+                $else
+                    $call ip4_accept
+                    i_rank = $(PORT_rank:addr.sin_port)
+                    vc_list[i_rank] = tn_ret
+                    n_accept--
+
+subcode: toy_tcp_finalize
+    $for i=0:PMI_size
+        $if vc_list[i]>0
+            close(vc_list[i])
 
 #---------------------------------------- 
+subcode: _autoload
+    $register_prefix(socket) int
+
 macros:
+    ip: 0x0100007f
     addr: (struct sockaddr*)&addr, sizeof(addr)
 
-subcode: vc_listen
-    tn_port = 2000+PMI_rank
+subcode: sock_error(which)
+    $call die, "--[%d] Error in ip4_$(which): %d", PMI_rank, errno
+
+subcode: ip4_listen(port)
+    $call ip4_bind, socket_listen, $(ip), $(port)
+
+    tn_ret = listen(socket_listen, 1024)
+    $if tn_ret<0
+        $call sock_error, listen
+
+subcode: ip4_accept
+    tn_addr_len = sizeof(addr)
+    $(set:addr=(struct sockaddr*)&addr, &tn_addr_len)
+    $while 1
+        tn_ret = accept(socket_listen, $(addr))
+        $if tn_ret >= 0
+            break
+        $if errno==EAGAIN
+            continue
+        $else
+            $call sock_error, accept
+            break
+
+subcode: ip4_connect(port_from, port_to)
+    $call ip4_bind, socket_connect, $(ip), $(port_from)
+
+    addr.sin_port = $(port_to)
+    addr.sin_addr.s_addr = $(ip)
+
+    tn_ret = connect(socket_connect, $(addr))
+    $if tn_ret<0 && errno != EINPROGRESS
+        $call sock_error, connect
+
+subcode: ip4_bind(s, ip, port)
     $local struct sockaddr_in addr
     addr.sin_family = AF_INET
     addr.sin_port = $(port)
-    addr.sin_addr.s_addr = 0x7f000001
+    addr.sin_addr.s_addr = $(ip)
 
-    tn_socket_listen = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
-    bind(tn_socket_listen, $(addr))
-    tn_ret = listen(tn_socket_listen, 1024)
-
-subcode: vc_accept
-    tn_ret = accept(tn_socket_listen, $(addr))
-
-subcode: vc_connect(port)
-    $local struct sockaddr_in addr
-    addr.sin_family = AF_INET
-    addr.sin_port = $(port)
-    addr.sin_addr.s_addr = 0x7f000001
-
-    tn_socket_connect = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
-    tn_ret = connect(tn_socket_connect, $(addr))
+    $(s) = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
+    tn_ret = bind($(s), $(addr))
+    $print "-[%d] binding to port %d", PMI_rank, addr.sin_port
+    fflush(stdout)
+    $if tn_ret<0
+        $call sock_error, bind
 
 #---------------------------------------- 
 subcode: init_poll
+    $include <sys/epoll.h>
+    tn_poll_fd = epoll_create(100)
+    $local struct epoll_event t_event={0}
+    $local struct epoll_event p_events[20]
 
+    BLOCK
+
+    subcode: poll_add(fd, ctx)
+        t_event.data.fd = $(ctx)
+        $(if:events)
+            t_event.events = $(events)
+        $(else)
+            t_event.events = EPOLLIN
+        epoll_ctl(tn_poll_fd, EPOLL_CTL_ADD, $(fd), &t_event)
+
+    subcode: poll_add_connect(ctx)
+        $(set:events=EPOLLOUT)
+        $call poll_add, socket_connect, $(ctx)
+
+    subcode: poll_add_listen
+        $(set:events=EPOLLIN)
+        $call poll_add, socket_listen, -1
+
+    subcode: poll_wait
+        tn_events = epoll_wait(tn_poll_fd, p_events, 20, -1)
+        $for i=0:tn_events
+            $(set:ctx=p_events[i].data.fd)
+            BLOCK
+
+#---------------------------------------- 
+fncode: f_tcp_connect(ts_host, ts_port)
+    $call tcp_connect, ts_host, ts_port
+    return $(socket)

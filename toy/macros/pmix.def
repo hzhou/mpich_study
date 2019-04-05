@@ -35,7 +35,7 @@ subcode: check_PMIx
                 *s_p='\0'
                 ts_port = s_p+1
         $if ts_host && ts_port
-            PMI_fd = _tcp_connect(ts_host, ts_port)
+            PMI_fd = f_tcp_connect(ts_host, ts_port)
         $dump ts_host, ts_port, PMI_fd
 
 

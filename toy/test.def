@@ -2,10 +2,14 @@ include: c/mpi.def
 include: c/posix.def
 include: macros/common.def
 include: macros/pmi.def
+include: macros/tcp.def
+
+macros: 
+    debug: 1
 
 page: test, mpi_frame
     module: c
-    exe: mpiexec -np 4 out/test
+    exe: mpiexec -np 3 out/test
 
     $print Hello world from $mpi_name, $mpi_id/$mpi_size
 
@@ -40,9 +44,11 @@ subcode: _autoload
 fncode: MPI_Init(pn_argc, pps_argv)
     $local n_spawned=0
     PMI_Init(&n_spawned)
+    $call toy_tcp_init
 
 fncode: MPI_Finalize()
     PMI_Finalize()
+    $call toy_tcp_finalize
 
 fncode: MPI_Comm_size(i_comm, pn_size)
     *pn_size = PMI_size

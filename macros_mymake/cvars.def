@@ -130,7 +130,7 @@ subcode: init_cvar_type_hash
     my %type_hash=(
         int=>"int",
         double=>"double",
-        string=>"char *",
+        string=>"const char *",
         boolean=>"int",
         enum=>"int",
         range=>"MPIR_T_cvar_range_value_t",
@@ -168,7 +168,7 @@ subcode: each_cvar
         my $value=$h->{default}
         $if defined $value_hash{$value}
             $value=$value_hash{$value}
-        $elif $type eq "char *"
+        $elif $type =~/char\s*\*/
             $if $value eq "NULL"
                 NOOP
             $elif $value!~/^"/
