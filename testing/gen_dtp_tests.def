@@ -1,0 +1,211 @@
+page: gen_dtp_tests
+    module: perl
+    arg: --verbose
+
+    my $srcdir = "."
+    $call parse_cmdline
+    $if $g_verbose
+        $(for:basic,struct,pair)
+            $print $1_typelist: @$1_typelist
+    $call parse_tests, $srcdir/dtp_tests.txt
+    $call dump_testlist
+    $call gen_dtpools_types_h
+
+    $(block:frame_init)
+        NEWLINE
+        $: \x23 parses   `dtp_tests.txt`
+        $: \x23 produces `testlist.dtp` in each respective folder
+        $: \x23 produces `dtpools/include/dtpools_types.h`
+        NEWLINE
+
+    subcode: dump_testlist
+        $foreach %dir_hash
+            $if $k=~/(.*)-test/
+                &call open_W, $srcdir/$1/testlist.dtp
+                    $foreach $l in @$v
+                        $print $l
+
+    subcode: gen_dtpools_types_h
+        &call open_W, $srcdir/dtpools/include/dtpools_types.h
+            $print "#ifndef DTPOOLS_TYPE_LIST"
+            $print "#define DTPOOLS_TYPE_LIST \\"
+            $foreach $t in @dtp_types
+                $print "    {\"$t\", $t}, \\"
+            $print "    {\"MPI_DATATYPE_NULL\", MPI_DATATYPE_NULL}"
+            $print
+            my $t = join(', ', @dtp_types)
+            $print "#define DTP_MPI_DATATYPE $t"
+            $print
+            $print "#endif"
+
+#---------------------------------------- 
+subcode: parse_cmdline
+    $global @basic_typelist, @struct_typelist, @pair_typelist
+    $global $g_verbose
+    $foreach $a in @ARGV
+        $if $a =~/--?type=(.*)/
+            push @basic_typelist, split /[,\s]+/, $1
+        $elif $a =~/--?struct=(.*)/
+            # -struct MPI_CHAR:64,MPI_INT:32,MPI_INT:16,MPI_FLOAT:8
+            push @struct_typelist, $1
+        $elif $a =~/--?pair=(.*)/
+            # -pair MPI_INT,MPI_INT
+            push @pair_typelist, $1
+        $elif $a =~ /--?verbose/
+            $g_verbose = 1
+
+    $if !@basic_typelist
+        add_types_default()
+    $if !@struct_typelist
+        add_struct_default()
+    $if !@pair_typelist
+        add_pair_default()
+
+    $foreach $t in @basic_typelist
+        check_extra_type($t)
+
+fncode: add_types_default
+    push @basic_typelist, qw( MPI_INT MPI_DOUBLE );
+
+fncode: add_struct_default
+    push @struct_typelist, "MPI_CHAR:64,MPI_INT:32,MPI_INT:16,MPI_FLOAT:8"
+
+fncode: add_pair_default
+    push @pair_typelist, "MPI_INT,MPI_INT"
+
+#---------------------------------------- 
+# output: $dir_hash{$dir} [testlines...]
+subcode: parse_tests(file)
+    &call open_r, $(file)
+        chomp
+        $if /^([\w\/]+):.*/
+            my $path = $1
+            my @parts=split /:/
+            $call guess_test_type
+
+            $if $parts[0]=~/(.*)\/(.+)/ -> $dir, $name
+                $call gen_init
+                $if $test_type eq "STRUCT" || $test_type eq "PAIR"
+                    $call gen_struct
+                $else
+                    $call gen_basic
+
+    subcode: guess_test_type
+        my $test_type
+        $if /:(STRUCT|PAIR):/
+            $test_type = $1
+        $elif /^(pt2pt)\//
+            $test_type = $1
+
+    subcode: gen_init
+        $global %dir_hash
+        $if !$dir_hash{"$dir-test"}
+            $dir_hash{"$dir-test"}=[]
+        my $out_test=$dir_hash{"$dir-test"}
+
+        $if $g_verbose
+            $print Generate DTP tests for: $dir/$name ... "
+
+    subcode: gen_basic
+        # my ($path,$macros,$counts,$timelimit,$procs,$other)=split /:/
+
+        my ($counts,$timelimit,$procs)=@parts[1,2,3]
+        my @counts = split /\s+/, $counts
+        my $n_counts = @counts
+        $foreach $type in @basic_typelist
+            $for $i=0:$n_counts
+                my $cnt = $counts[$i]
+                $if $test_type eq "pt2pt"
+                    $call gen_pt2pt
+                $else
+                    $call gen_other
+
+        subcode: gen_pt2pt
+            $(set:min=$1>$2?$2:$1)
+            my $n = $(min:$i+2,$n_counts)
+            $for $i2=$i:$n
+                my $cnt2 = $counts[$i]
+                push @$out_test, "$name $procs arg=-type=$type arg=-sendcnt=$cnt arg=-recvcnt=$cnt2 $timelimit"
+
+        subcode: gen_other
+            push @$out_test, "$name $procs arg=-type=$type arg=-count=$cnt $timelimit"
+
+    subcode: gen_struct
+        # my ($path,$macros,$type,$timelimit,$procs,$other)=split /:/
+        my ($type,$timelimit,$procs)=@parts[1,2,3]
+        $if $test_type eq "PAIR"
+            $foreach $t in @pair_typelist
+                $call add_struct_test, $t
+        $elif $test_type eq "STRUCT"
+            $foreach $t in @struct_typelist
+                $call add_struct_test, $t
+
+        subcode: add_struct_test(t)
+            my ($n, $types, $counts)=parse_struct_type($(t))
+            push @$out_test, "$name\_struct $procs arg=-numtypes=$n arg=-types=$types arg=-counts=$counts $timelimit"
+
+fncode: parse_struct_type($t)
+    my ($n, @types, @counts)
+    $foreach $s in split /,/, $t
+        $if $s=~/^(\w+):(\d+)/
+            $n++
+            push @types, $1
+            push @counts, $2
+        $elif $s=~/^(\w+)$/
+            $n++
+            push @types, $1
+            push @counts, 1
+        $else
+            warn "dtp: error parsing struct type field: $t\n"
+    return ($n, join(',',@types), join(',', @counts))
+
+
+#---------------------------------------- 
+fncode: check_extra_type($t)
+    $if !$dtp_types{$t}
+        $dtp_types{$t}=1
+        push @dtp_types, $t
+
+subcode: _autoload
+    $global @dtp_types, %dtp_types
+    $call init_dtp_list
+    $foreach $t in @dtp_types
+        $dtp_types{$t}=1
+
+    subcode: init_dtp_list
+        $(mode:bypass)
+        push @dtp_types, qw(
+            MPI_CHAR
+            MPI_BYTE
+            MPI_WCHAR
+            MPI_SHORT
+            MPI_INT
+            MPI_LONG
+            MPI_LONG_LONG_INT
+            MPI_UNSIGNED_CHAR
+            MPI_UNSIGNED_SHORT
+            MPI_UNSIGNED
+            MPI_UNSIGNED_LONG
+            MPI_UNSIGNED_LONG_LONG
+            MPI_FLOAT
+            MPI_DOUBLE
+            MPI_LONG_DOUBLE
+            MPI_INT8_T
+            MPI_INT16_T
+            MPI_INT32_T
+            MPI_INT64_T
+            MPI_UINT8_T
+            MPI_UINT16_T
+            MPI_UINT32_T
+            MPI_UINT64_T
+            MPI_C_COMPLEX
+            MPI_C_FLOAT_COMPLEX
+            MPI_C_DOUBLE_COMPLEX
+            MPI_C_LONG_DOUBLE_COMPLEX
+            MPI_FLOAT_INT
+            MPI_DOUBLE_INT
+            MPI_LONG_INT
+            MPI_2INT
+            MPI_SHORT_INT
+            MPI_LONG_DOUBLE_INT
+        );

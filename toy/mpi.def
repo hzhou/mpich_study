@@ -1,0 +1,10 @@
+include: macros/mpi.def
+
+page: mpi
+    module: c
+    dump_h: mpi.h
+
+    $list MPI_Init, MPI_Finalize
+    $list MPI_Comm_size, MPI_Comm_rank
+    $list MPI_Get_processor_name, MPI_Wtime
+    $list MPI_Send, MPI_Recv

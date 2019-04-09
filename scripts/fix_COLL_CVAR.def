@@ -1,0 +1,28 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: COLL_CVAR
+    root: $ENV{HOME}/work/pull_requests/coll_impl
+
+subcode: grep_COLL_CVAR
+    $call grep_l, 'MPIR_CVAR.*ALGORITHM'
+
+subcode: filter_lines_COLL_CVAR
+    $(block:_patch_local)
+        my $cvar
+    $if $(l)=~/^\s*-\s*name\s+:\s*(MPIR_CVAR_\w+_ALGORITHM)\b/
+        $cvar = $1
+    $elif $(l)=~/^\s*$/
+        undef $cvar
+    $elif $cvar and $(l)=~/type\s*:\s*string/
+        $(l)=~s/string/enum/
+        $cnt++
+    $elif $(l)=~/MPIR_(\w+)_algo_choice/
+        my $t = "MPIR_CVAR_".uc($1)."_ALGORITHM"
+        $(l)=~s/MPIR_\w+_algo_choice/$t/
+        $cnt++
+    $elif $(l)=~/MPIR_(\w+)_ALGO_(\w+)/
+        my $t = "MPIR_CVAR_".uc($1)."_ALGORITHM_".lc($2)
+        $(l)=~s/MPIR_\w+_ALGO_\w+/$t/
+        $cnt++
+

@@ -1,0 +1,130 @@
+page: test_coll
+    module: perl
+
+    # my $src_dir  = "$ENV{HOME}/work/pull_requests/mpich-colls"
+    my $src_dir  = "$ENV{HOME}/work/pull_requests/mpich3612"
+    my $coll_dir = "$src_dir/test/mpi/coll"
+
+    $(if:1)
+        $(set:coll=bcast)
+        $(set:algos=tree)
+    $(elif:0)
+        $(set:coll=gatherv)
+        $(set:algos=gentran_linear)
+    $(elif:0)
+        $(set:coll=allgather)
+        $(set:algos=gentran_ring)
+    $(elif:0)
+        $(set:coll=allgatherv)
+        $(set:algos=gentran_brucks)
+        $ENV{MPIR_CVAR_IALLGATHERV_BRUCKS_KVAL} = 2
+    $(elif:0)
+        $(set:coll=alltoall)
+        $(set:algos=gentran_ring)
+        # $(set:algos=gentran_brucks)
+        $ENV{MPIR_CVAR_IALLTOALL_BRUCKS_KVAL} = 3
+        $ENV{MPIR_CVAR_IALLTOALL_BRUCKS_BUFFER_PER_NBR} = 1
+    $(elif:1)
+        $(set:coll=alltoallv)
+        $(set:algos=gentran_scattered)
+        $ENV{MPIR_CVAR_IALLTOALLV_SCATTERED_BATCH_SIZE} = 1        # 1 2 4
+        $ENV{MPIR_CVAR_IALLTOALLV_SCATTERED_OUTSTANDING_TASKS} = 2 # 4 8
+    $(elif:0)
+        $(set:coll=neighb_alltoallw)
+        $(set:algos=gentran_linear)
+    $(elif:1)
+        $(set:coll=allreduce)
+        $(set:algos=ring)
+    $(elif:0)
+        $(set:coll=scan)
+        $(set:algos=gentran_recursive_doubling)
+    $(elif:1)
+        $(set:coll=neighbor_allgather)
+        $(set:coll=neighbor_allgatherv)
+        $(set:coll=neighbor_alltoallw)
+        $(set:coll=neighbor_alltoallv)
+        $(set:coll=neighbor_alltoall)
+        $(set:algos=gentran_linear)
+
+    $call init_tests
+    $call run_tests
+
+#---------------------------------------- 
+subcode: init_tests
+    my @tests
+    $(if:coll=bcast)
+        # push @tests, "10 bcasttest"
+        push @tests, "1 bcastzerotype"
+    $(elif:coll=gatherv)
+        push @tests, "5 gatherv"
+    $(elif:coll=allgather)
+        push @tests, "10 allgather2"
+        push @tests, "10 allgather3"
+    $(elif:coll=allgatherv)
+        push @tests, "10 allgatherv2"
+        push @tests, "10 allgatherv3"
+    $(elif:coll=alltoall)
+        push @tests, "10 alltoall1"
+    $(elif:coll=alltoallv)
+        push @tests, "8 alltoallv"
+        push @tests, "10 alltoallv0"
+    $(elif:coll~neighbor_)
+        push @tests, "4 neighb_$(coll:9:word) mpiversion=3.0"
+    $(elif:coll=allreduce)
+        push @tests, "4 allred 100"
+        push @tests, "7 allred"
+        push @tests, "4 allredmany"
+        push @tests, "4 allred2"
+        push @tests, "10 allred3"
+        push @tests, "4 allred4"
+        push @tests, "5 allred5"
+        push @tests, "4 allred6"
+        push @tests, "7 allred6"
+    $(elif:coll=scan)
+        push @tests, "4 scantst"
+
+    $(if:algos~tree)
+        $ENV{MPIR_CVAR_I$(coll:uc)_TREE_TYPE}="kary"
+        $ENV{MPIR_CVAR_I$(coll:uc)_TREE_KVAL}=3
+    #---------------------------------------- 
+    my %tests
+    $foreach $t in @tests
+        $if $t=~/^(\d+)\s+(\w+)(.*)/
+            $t = "mpirun -n $1 ./$2$3"
+            $tests{$2}++
+
+#---------------------------------------- 
+subcode: run_tests
+    $(if:0)
+        $(set:c_file=i$(coll)/i$(coll)_gentran_algos.c)
+        chdir $src_dir or die "Can't chdir $src_dir\n"
+        system "touch src/mpi/coll/$(c_file)"
+        system "make"
+        system "make install"
+
+    #---------------------------------------- 
+    $(if:1)
+        my @t = sort keys %tests
+        chdir $coll_dir or die "Can't chdir $coll_dir\n"
+        system "touch *.c"
+        system "make @t" 
+
+    #---------------------------------------- 
+    $ENV{MPICH_DBG}="FILE"
+    $ENV{MPICH_DBG_CLASS}="ALL"
+    $ENV{MPICH_DBG_LEVEL} = "VERBOSE"
+
+    $ENV{MPIR_CVAR_$(coll:uc)_DEVICE_COLLECTIVE}=0
+    $ENV{MPIR_CVAR_I$(coll:uc)_DEVICE_COLLECTIVE}=0
+    $ENV{MPIR_CVAR_$(coll:uc)_INTRA_ALGORITHM}="nb"
+
+    $foreach $algo in qw( $(algos) )
+        $ENV{MPIR_CVAR_I$(coll:uc)_INTRA_ALGORITHM}=$algo
+
+        $foreach $t in @tests
+            $print $t...
+            system "rm -f *.log"
+            $ENV{MPICH_DBG_FILENAME}="dbg-%d.log"
+            system $t
+            system "grep -c MPIR_TSP_I$(coll:uc)_SCHED_ *.log"
+
