@@ -1,0 +1,85 @@
+include: macros/common.def
+include: macros/pmi.def
+# include: macros/pmix.def
+include: macros/datatype.def
+
+include: macros/tcp.def
+include: c/posix.def
+
+macros:
+    SKIP_SYSTEM_MPI: 1
+
+subcode: _autoload
+    $define(MPI_COMM_WORLD) 1
+    $define(MPI_MAX_PROCESSOR_NAME) 128
+
+fncode: MPI_Init(pn_argc, pps_argv): int
+    $local n_spawned=0
+    PMI_Init(&n_spawned)
+    $if PMI_fd>=0
+        PMI_build_nodemap()
+    # $dump PMI_fd, PMI_rank, PMI_size
+    $call @on_MPI_Init
+    $call @on_MPI_Init_2
+    return 0
+
+fncode: MPI_Finalize(): int
+    PMI_Finalize()
+    $call @on_MPI_Finalize
+    return 0
+
+fncode: MPI_Comm_size(i_comm, pn_size): int
+    *pn_size = PMI_size
+    return 0
+
+fncode: MPI_Comm_rank(i_comm, pn_rank): int
+    *pn_rank = PMI_rank
+    return 0
+
+fncode: MPI_Get_processor_name(s_buf, pn_len): int
+    strcpy(s_buf, "TOY")
+    *pn_len=3
+    return 0
+
+fncode: MPI_Barrier: int
+    PMI_Barrier()
+    return 0
+
+#---------------------------------------- 
+subcode: _autoload
+    $typedef int MPI_Datatype
+    $typedef int MPI_Comm
+    $typedef int MPI_Status
+    $define(MPI_STATUS_IGNORE) NULL
+
+    $register_name(send_buf) const void *
+    $register_name(recv_buf) void *
+    $register_name(send_cnt) int
+    $register_name(recv_cnt) int
+    $register_name(send_type) MPI_Datatype
+    $register_name(recv_type) MPI_Datatype
+    $register_name(src) int
+    $register_name(dst) int
+    $register_name(tag) int
+    $register_name(comm) MPI_Comm
+
+fncode: MPI_Send(send_buf, send_cnt, send_type, dst, tag, comm): int
+    $call @on_MPI_Send
+    return 0
+
+fncode: MPI_Recv(recv_buf, recv_cnt, recv_type, src, tag, comm, MPI_Status *p_status): int
+    $call @on_MPI_Recv
+    return 0
+
+#---- misc ------------------------------------ 
+subcode:: on_MPI_Init
+    $global time_t time_base = 0
+    $my struct timespec t
+    clock_gettime(CLOCK_REALTIME, &t)
+    time_base = t.tv_sec
+    time_base -= time_base % 3600
+
+fncode: MPI_Wtime: double
+    $local struct timespec t
+    clock_gettime(CLOCK_REALTIME, &t)
+    return (double)(t.tv_sec - time_base) + 1e-9*t.tv_nsec

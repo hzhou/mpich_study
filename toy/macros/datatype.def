@@ -1,0 +1,93 @@
+subcode: _autoload
+    $call define_MPI_Datatype
+
+subcode: define_MPI_Datatype # KIND = 3
+    # BUILTIN TYPE: 010011[00...]
+    # DIRECT  TYPE: 100011[00...]
+    $typedef(MPI_Datatype) int
+    $call def, DATATYPE_NULL,   0x0c000000
+    $call def, CHAR,            0x4c000101
+    $call def, UNSIGNED_CHAR,   0x4c000102
+    $call def, SHORT,           0x4c000203
+    $call def, UNSIGNED_SHORT,  0x4c000204
+    $call def, INT,             0x4c000405
+    $call def, UNSIGNED,        0x4c000406
+    $call def, LONG,            0x4c000807
+    $call def, UNSIGNED_LONG,   0x4c000808
+    $call def, LONG_LONG_INT,   0x4c000809
+    $call def, FLOAT,           0x4c00040a
+    $call def, DOUBLE,          0x4c00080b
+    $call def, LONG_DOUBLE,     0x4c00100c
+    $call def, BYTE,            0x4c00010d
+    $call def, WCHAR,           0x4c00040e
+    $call def, PACKED,          0x4c00010f
+    $call def, LB,              0x4c000010
+    $call def, UB,              0x4c000011
+    $call def, 2INT,            0x8c000816
+    $call def, SIGNED_CHAR,     0x4c000118
+    $call def, UNSIGNED_LONG_LONG, 0x4c000819
+    # struct types
+    $call def, FLOAT_INT,       0x8c000000
+    $call def, DOUBLE_INT,      0x8c000001
+    $call def, LONG_INT,        0x8c000002
+    $call def, SHORT_INT,       0x8c000003
+    $call def, LONG_DOUBLE_INT, 0x8c000004
+    # Fortran types
+    $call def, CHARACTER,       0x4c00011a
+    $call def, INTEGER,         0x4c00041b
+    $call def, REAL,            0x4c00041c
+    $call def, LOGICAL,         0x4c00041d
+    $call def, COMPLEX,         0x4c00081e
+    $call def, DOUBLE_PRECISION,0x4c00081f
+    $call def, 2INTERGER,       0x4c000820
+    $call def, 2REAL,           0x4c000821
+    $call def, DOUBLE_COMPLEX,  0x4c001022
+    $call def, 2DOUBLE_PRECISION, 0x4c001023
+    $(if:0)
+        $call def, 2COMPLEX,        0x4c001024
+        $call def, 2DOUBLE_COMPLEX, 0x4c002025
+    # Size-specific
+    $call def, REAL4,           0x4c000427
+    $call def, REAL8,           0x4c000829
+    $call def, REAL16,          0x4c00102b
+    $call def, COMPLEX8,                0x4c000828
+    $call def, COMPLEX16,               0x4c00102a
+    $call def, COMPLEX32,               0x4c00202c
+    $call def, INTEGER1,                0x4c00012d
+    $call def, INTEGER2,                0x4c00022f
+    $call def, INTEGER4,                0x4c000430
+    $call def, INTEGER8,                0x4c000831
+    # $call def, INTEGER16,               0x4c001032
+    $call def, CXX_BOOL,        0x4c000133
+    $call def, CXX_FLOAT_COMPLEX,0x4c000834
+    $call def, CXX_DOUBLE_COMPLEX,0x4c001035
+    $call def, CXX_LONG_DOUBLE_COMPLEX,0x4c002036
+
+    $call def, INT8_T,          0x4c000137
+    $call def, INT16_T,         0x4c000238
+    $call def, INT32_T,         0x4c000439
+    $call def, INT64_T,         0x4c00083a
+    $call def, UINT8_T,         0x4c00013b
+    $call def, UINT16_T,        0x4c00023c
+    $call def, UINT32_T,        0x4c00043d
+    $call def, UINT64_T,        0x4c00083e
+    $call def, C_BOOL,          0x4c00013f
+    $call def, C_FLOAT_COMPLEX, 0x4c000840
+    $call def, C_DOUBLE_COMPLEX,0x4c001041
+    $call def, C_LONG_DOUBLE_COMPLEX,0x4c002042
+    # address/offset
+    $call def, AINT,            0x4c000843
+    $call def, OFFSET,          0x4c000844
+    $call def, COUNT,           0x4c000845
+    # extension
+    $call def, C_FLOAT16,       0x4c000243
+
+    $define(MPI_LONG_LONG) MPI_LONG_LONG_INT
+    $define(MPI_C_COMPLEX) MPI_C_FLOAT_COMPLEX
+
+    subcode: def(name, val)
+        $define(MPI_$(name)) ((MPI_Datatype)$(val))
+
+macros:
+    type_size: (($1 & 0xff00)>>8)
+
