@@ -18,14 +18,18 @@ page: mymake
     my $pwd=`pwd`
     chomp $pwd
     $call set_mymake
+    $call set_mymake_DO
+
     $if -d "pm"
         system "perl $mymake\_hydra.pl @ARGV"
         exit(0)
+
     $call parse_args
+
     $if $opts{do}
         system "perl $mymake\_$opts{do}.pl"
         exit(0)
-    $call set_mymake_DO
+
     $call save_last_ARGV
     $call @dump_args
 
