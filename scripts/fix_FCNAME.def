@@ -2,8 +2,8 @@ include: macros/patch.def
 
 page: t, patch_frame
     module: perl
-    patch: FCNAME
-    # patch: FCNAME_defs
+    # patch: FCNAME
+    patch: FCNAME_defs
 
 #---------------------------------------- 
 subcode: grep_FCNAME
@@ -15,7 +15,7 @@ subcode: grep_FCNAME
 
     my @files = sort keys %files
 
-subcode: patch_FCNAME
+subcode: filter_lines_FCNAME
     $if $(l)=~/FCNAME/ && $(l)!~/#(define|undef)/
         $(l)=~s/FCNAME/__func__/g
         $cnt++
@@ -26,7 +26,7 @@ subcode: grep_FCNAME_defs
     push @files, "maint/extractcvars.in"
     push @files, "src/binding/fortran/mpif_h/buildiface"
 
-subcode: patch_FCNAME_defs
+subcode: filter_lines_FCNAME_defs
     $if $(l)=~/^#(define|undef)\s+(FCNAME|FUNCNAME)/
         $call delete, $(l)
         $cnt++

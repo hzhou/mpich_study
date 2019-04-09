@@ -83,7 +83,7 @@ subcode: mpich_configure
         system "./configure --disable-fortran --disable-romio --with-pm=none $t"
         system "mv Makefile mymake/Makefile.orig"
         &call temporary_modify
-            $call modify_libtool
+            $call patch_libtool
 
     # -------------------
     subcode: modify_configure_ac
@@ -112,13 +112,6 @@ subcode: mpich_configure
                 next
         $if $opts{device}=~/ucx/
             $call patch_configure_ucx
-
-    subcode: modify_libtool
-        $(set:skip_mod_list=1)
-        &call modify, libtool
-            $if $l=~/^AR_FLAGS=/
-                $l = "AR_FLAGS=\"cr\"\n"
-        system "chmod a+x libtool"
 
 subcode: need_mpich_preproc
     $(set:errhan=src/mpi/errhan/$1)

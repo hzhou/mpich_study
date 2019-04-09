@@ -1,62 +1,16 @@
+include: macros/mpi.def
 include: c/mpi.def
-include: c/posix.def
-include: macros/common.def
-include: macros/pmi.def
-include: macros/tcp.def
-
+include: c/mpi_test.def
 macros: 
     debug: 1
+    # DO_TCP_INIT_NB: 1  #FIXME: need debug
 
 page: test, mpi_frame
     module: c
     exe: mpiexec -np 3 out/test
+    use_double: 1
 
-    $print Hello world from $mpi_name, $mpi_id/$mpi_size
-
-#---------------------------------------- 
-subcode: mpi_run
-    $(if:0)
-        $include mpi
-        $uselib mpi
-
-    $global int mpi_size, int mpi_id, is_mpi_main
-    MPI_Init(NULL, NULL)
-    MPI_Comm_size($(comm), &mpi_size)
-    MPI_Comm_rank($(comm), &mpi_id)
-    $if mpi_id==0
-        is_mpi_main = 1
-    $else
-        is_mpi_main = 0
-
-    $global char mpi_name[MPI_MAX_PROCESSOR_NAME]
-    $local tn_len
-    MPI_Get_processor_name(mpi_name, &tn_len)
-
-    BLOCK
-
-    MPI_Finalize()
-
-#---------------------------------------- 
-subcode: _autoload
-    $define(MPI_COMM_WORLD) 1
-    $define(MPI_MAX_PROCESSOR_NAME) 128
-
-fncode: MPI_Init(pn_argc, pps_argv)
-    $local n_spawned=0
-    PMI_Init(&n_spawned)
-    $call toy_tcp_init
-
-fncode: MPI_Finalize()
-    PMI_Finalize()
-    $call toy_tcp_finalize
-
-fncode: MPI_Comm_size(i_comm, pn_size)
-    *pn_size = PMI_size
-
-fncode: MPI_Comm_rank(i_comm, pn_rank)
-    *pn_rank = PMI_rank
-
-fncode: MPI_Get_processor_name(s_buf, pn_len)
-    strcpy(s_buf, "TOY")
-    *pn_len=3
+    tf_time = MPI_Wtime()
+    $print Hello world from $mpi_name, $mpi_id/$mpi_size ($tf_time)
+    $call test_p2p, 0, 1
 

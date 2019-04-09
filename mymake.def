@@ -17,11 +17,15 @@ page: mymake
 
     my $pwd=`pwd`
     chomp $pwd
-    $call parse_args
     $call set_mymake
+    $if -d "pm"
+        system "perl $mymake\_hydra.pl @ARGV"
+        exit(0)
+    $call parse_args
     $if $opts{do}
         system "perl $mymake\_$opts{do}.pl"
         exit(0)
+    $call set_mymake_DO
     $call save_last_ARGV
     $call @dump_args
 
@@ -51,11 +55,13 @@ page: mymake
             $mymake .= "$pwd/$1"
         $mymake .="/mymake"
 
+    subcode: set_mymake_DO
         $(for:stage,clean,errmsg,cvars,logs,hydra,test,mpi_h)
             push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
         push @extra_make_rules, ""
-        push @extra_make_rules, ".PHONY: test"
-        $call push_autogen_rule, test, test
+        push @extra_make_rules, ".PHONY: test cvars errmsg"
+        $(for:test,cvars,errmsg)
+            $call push_autogen_rule, $1, $1
 
     subcode: push_autogen_rule(name, file)
         push @extra_make_rules, "$(file):"
@@ -143,6 +149,8 @@ subcode: parse_args
     $foreach $a in @ARGV
         $if $a=~/^--(prefix)=(.*)/
             $opts{$1}=$2
+        $elif $a=~/^--enable-strict/
+            $opts{strict}=1
         $elif $a=~/^(\w+)=(.*)/
             $opts{$1}=$2
         $elif $a=~/^(--.*)/
@@ -152,10 +160,12 @@ subcode: parse_args
         $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
             $opts{do}=$1
 
-    $if -f "maint/version.m4"
-        $srcdir = "."
     $if $ENV{MODDIR}
         $moddir = $ENV{MODDIR}
+    NOOP
+    $(for:.,..,../..,../../..)
+        $case -f "$1/maint/version.m4"
+            $srcdir = "$1"
 
     $map opt_set, srcdir, moddir, prefix
 
@@ -163,6 +173,19 @@ subcode: parse_args
         $global $$(name) = "$($(name:uc))"
         $if $opts{$(name)}
             $$(name) = $opts{$(name)}
+
+subcode:: overwrite_makefile_vars
+    $if $opts{strict}
+        my $t = "-Werror -Wall -Wextra -DGCC_WALL"
+        $t .= " -Wstrict-prototypes -Wmissing-prototypes -Wshadow -Wmissing-declarations -Wundef -Wpointer-arith -Wbad-function-cast -Wwrite-strings -Wold-style-definition -Wnested-externs -Winvalid-pch -Wvariadic-macros -Wtype-limits -Werror-implicit-function-declaration -Wstack-usage=262144"
+        $t .= " -Wno-missing-field-initializers -Wno-unused-parameter -Wno-unused-label -Wno-long-long -Wno-endif-labels -Wno-sign-compare -Wno-multichar -Wno-deprecated-declarations -Wno-pointer-sign -Wno-format-zero-length"
+        $(if:0)
+            $t .= " -Wno-long-long"
+            $t .= " -Wno-endif-labels"
+            $t .= " -Wno-multichar"
+            $t .= " -Wno-deprecated-declarations"
+            $t .= " -Wno-format-zero-length"
+        $objects{CFLAGS} = "-O2 $t"
 
 subcode: load_last_ARGV
     my $need_save_args

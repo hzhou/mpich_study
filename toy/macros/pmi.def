@@ -12,8 +12,6 @@ fncode: PMI_Init(pn_spawned)
         $call @check_PMI_port
     $if PMI_fd == -1
         $call @check_PMIx
-    $(if:debug)
-        $dump PMI_fd, PMI_rank, PMI_size
     # $call @test_PMI
     $(if:0)
         $if PMI_fd>=0 && PMI_rank==0
@@ -21,6 +19,10 @@ fncode: PMI_Init(pn_spawned)
         $call PMI_CMD, barrier_in
         $if PMI_fd>=0 && PMI_rank==1
             $call PMI_get, TESTKEY
+            s = strstr(pmi_buf, "value=100")
+            $if s
+                $print "  PMI_put/get OK."
+
 
     # ------------------------------- 
     subcode: check_PMI_fd
@@ -42,19 +44,114 @@ fncode: PMI_Init(pn_spawned)
             $call PMI_CMD, get_appnum
             $call PMI_CMD, get_my_kvsname
 
+    subcode: chomp
+        s = strrchr(pmi_buf, '\n')
+        $if s
+            *s = '\0'
+
     subcode: PMI_put(key, val)
         $local char pmi_buf[1024]
         tn_ret = snprintf(pmi_buf, 1024, "cmd=put key=$(key) value=%d\n", $(val))
         $call Write, PMI_fd, pmi_buf, tn_ret
         $call Read, PMI_fd, pmi_buf, 1024
-        $print "[put]: %s\n", pmi_buf
+        $call chomp
+        $print "[put]: [%s]", pmi_buf
 
     subcode: PMI_get(key)
         $local char pmi_buf[1024]
         tn_ret = snprintf(pmi_buf, 1024, "cmd=get key=$(key)\n")
         $call Write, PMI_fd, pmi_buf, tn_ret
         $call Read, PMI_fd, pmi_buf, 1024
-        $print "[get]: %s\n", pmi_buf
+        $call chomp
+        $print "[get]: [%s]", pmi_buf
+
+fncode: PMI_build_nodemap
+    $global int *p_nodemap, unsigned int *p_ipv4_list
+    $allocate(PMI_size, 0) p_nodemap
+    &call PMI_get, PMI_process_mapping
+        $call parse_mapping
+    $if n_max_nodes>0
+        $allocate(n_max_nodes, 0) p_ipv4_list
+        &call PMI_get, PMI_ipv4_list
+            $call parse_ipv4_list
+    # $print "%d nodes: %x", PMI_nodes, p_ipv4_list[0]
+
+    subcode: PMI_get(key)
+        $local char pmi_buf[1024]
+        tn_ret = snprintf(pmi_buf, 1024, "cmd=get key=$(key)\n")
+        $call Write, PMI_fd, pmi_buf, tn_ret
+        $call Read, PMI_fd, pmi_buf, 1024
+        s = strstr(pmi_buf, "value=")
+        $if s
+            s+=6
+            BLOCK
+
+    subcode: parse_ipv4_list
+        i_node=0
+        $while *s && *s>='0' && *s<='9'
+            $my unsigned int tmp[4]
+            $for i=0:4
+                tmp[i]=atoi(s)
+                $while *s && *s>='0' && *s<='9'
+                    s++
+                s++
+            p_ipv4_list[i_node++] = (tmp[0]<<24)+(tmp[1]<<16)+(tmp[2]<<8)+tmp[3]
+            $if i_node>=n_max_nodes
+                break
+        $global int PMI_nodes
+        PMI_nodes = i_node
+
+    subcode: parse_mapping
+        $if s $eq "(vector,"
+            s+=8
+        $call count_n_blocks
+        $allocate(n*3,0) pn_blocks 
+        $call parse_n_blocks
+        $call set_nodemap
+        free(pn_blocks)
+
+        subcode: set_nodemap
+            i_rank = 0
+            i_block = 0
+            n_max_nodes = 0
+            $while i_block<n
+                $(mset:i0=pn_blocks[i_block*3],nb=pn_blocks[i_block*3+1],np=pn_blocks[i_block*3+2])
+                $for i_node=0:$(nb)
+                    $for i_proc=0:$(np)
+                        p_nodemap[i_rank] = $(i0)+i_node
+                        $if n_max_nodes < $(i0)+i_node+1
+                            n_max_nodes = $(i0)+i_node+1
+                        i_rank++
+                        $if i_rank==PMI_size
+                            goto done_set_nodemap
+            done_set_nodemap:
+
+        subcode: count_n_blocks
+            n = 0
+            s2 = s
+            $while *s2
+                $if *s2 == '('
+                    n++
+                s2++
+
+        subcode: parse_n_blocks
+            i = 0
+            s2 = s
+            $while *s2
+                $if *s2 == '(' || *s2==','
+                    s2++
+                    pn_blocks[i++] = atoi(s2)
+                    $if i>=n*3
+                        break
+                $elif *s2==')'
+                    s2++
+                    $if *s2==','
+                        s2++
+                    $else
+                        break
+                $else
+                    # must be digits, taken cared by atoi
+                    s2++
 
 fncode: PMI_Finalize
     $if PMI_fd>0

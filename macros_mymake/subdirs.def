@@ -1,45 +1,63 @@
 macros:
     subdir_list: mpl, opa, hwloc, izem, ucx, ofi
 
-    Dmpl: src/mpl
-    Impl: src/mpl/include
-    Lmpl: src/mpl/libmpl.la
+    embed_mpl: src/mpl
+    Dmpl: $moddir/mpl
+    Impl: $(Dmpl)/include
+    Lmpl: $(Dmpl)/libmpl.la
     Hmpl: $(Impl)/mplconfig.h
 
-    Dopa: src/openpa
-    Iopa: src/openpa/src
-    Lopa: src/openpa/src/libopa.la
+    embed_opa: src/openpa
+    Dopa: $moddir/openpa
+    Iopa: $(Dopa)/src
+    Lopa: $(Dopa)/src/libopa.la
     Hopa: $(Iopa)/opa_config.h
 
+    embed_hwloc: src/hwloc
     Dhwloc: $moddir/hwloc
     Ihwloc: $moddir/hwloc/include
     Lhwloc: $moddir/hwloc/hwloc/libhwloc_embedded.la
     Hhwloc: $(Ihwloc)/hwloc/autogen/config.h
 
+    embed_izem: src/izem
     Dizem: $moddir/izem
     Iizem: $moddir/izem/src/include
     Lizem: $moddir/izem/src/libzm.la
     Hizem: $(Iizem)/izem/src/include/zm_config.h
 
+    embed_ucx: src/mpid/ch4/netmod/ucx/ucx
     Ducx: $moddir/ucx
     Iucx: $(Ducx)/src
     Lucx: $(Ducx)/src/ucp/libucp.la
     Hucx: $(Ducx)/config.h
 
+    embed_ofi: src/mpid/ch4/netmod/ofi/libfabric
     Dofi: $moddir/libfabric
     Iofi: $(Dofi)/include
     Lofi: $(Dofi)/src/libfabric.la
     Hofi: $(Dofi)/config.h
 
+subcode: copy_subdir_module(dir)
+    $(if:embed_$(dir))
+        $if !-d "$(D$(dir))"
+            $call do_cmd, cp -r $(embed_$(dir)) $(D$(dir))
+            $(if:dir=mpl)
+                $call do_cmd, cp -r confdb $(D$(dir))/
+
+subcode: do_cmd(@cmd)
+    my $cmd = "$(cmd)"
+    $print $cmd
+    system $cmd
+
 #---------------------------------------- 
 subcode: need_mpl
+    $call copy_subdir_module, mpl 
     $I_list .= " -I$(Impl)"
     $L_list .= " $(Lmpl)"
     push @CONFIGS, "$(Hmpl)"
     $call set_config_args
     &call add_subdir_rule_block, $(Dmpl), $(Hmpl)
         push @t, "\x24(DO_stage) Configure MPL"
-        push @t, "rsync -r ../../confdb/ confdb/" 
         push @t, "autoreconf -ivf"
         push @t, "./configure $config_args"
     $call add_subdir_make, $(Dmpl), $(Lmpl), $(Hmpl)
@@ -52,6 +70,7 @@ subcode: need_mpl
 
 #---------------------------------------- 
 subcode: need_opa
+    $call copy_subdir_module, opa
     $I_list .= " -I$(Iopa)"
     $L_list .= " $(Lopa)"
     push @CONFIGS, "$(Hopa)"
@@ -71,6 +90,7 @@ subcode: filter_lib_mpl_etc
 
 #---------------------------------------- 
 subcode: need_hwloc
+    $call copy_subdir_module, hwloc
     $I_list .= " -I$(Ihwloc)"
     $L_list .= " $(Lhwloc)"
     push @CONFIGS, "$(Hhwloc)"
@@ -88,6 +108,7 @@ subcode: filter_var_hwloc
 
 #---------------------------------------- 
 subcode: need_izem
+    $call copy_subdir_module, izem
     $I_list .= " -I$(Iizem)"
     $L_list .= " $(Lizem)"
     push @CONFIGS, "$(Hizem)"
@@ -99,6 +120,7 @@ subcode: need_izem
 
 #---------------------------------------- 
 subcode: need_ucx
+    $call copy_subdir_module, ucx
     $I_list .= " -I$(Iucx)"
     $L_list .= " $(Lucx)"
     push @CONFIGS, "$(Hucx)"
@@ -129,6 +151,7 @@ subcode: filter_lib_ucx
 
 #---------------------------------------- 
 subcode: need_ofi
+    $call copy_subdir_module, ofi
     $I_list .= " -I$(Iofi)"
     $L_list .= " $(Lofi)"
     push @CONFIGS, "$(Hofi)"

@@ -34,11 +34,21 @@ subcode: temporary_modify
 
         system "mv $m[0] $m[1]"
         $call get_file_lines, $m[1]
+        my $flag_skip=0
         &call open_W, $m[2]
             $foreach $l in @lines
                 BLOCK
+                $if $flag_skip
+                    next
                 print Out $l
         system "cp -v $m[2] $m[0]"
+
+    subcode: patch_libtool
+        $(set:skip_mod_list=1)
+        &call modify, libtool
+            $if $l=~/^AR_FLAGS=/
+                $l = "AR_FLAGS=\"cr\"\n"
+        system "chmod a+x libtool"
 
 #---------------------------------------- 
 subcode: parse_Makefile(makefile)

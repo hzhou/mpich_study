@@ -6,9 +6,9 @@ macros:
 
 #---- mymake_hydra.pl -------------------- 
 subcode: prepare_hydra
-    my $dir="src/pm/hydra"
-    my $srcdir="../../.."
-    chdir $dir or die "Can't chdir $dir\n"
+    $if $srcdir
+        my $dir="$srcdir/src/pm/hydra"
+        chdir $dir or die "Can't chdir $dir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
     $if !-f "mymake/Makefile.orig"
@@ -18,9 +18,7 @@ subcode: prepare_hydra
     $dst_hash{"LN_S-$bin/mpiexec"}="$bin/mpiexec.hydra"
     $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
 
-
-    $I_list .= " -I$(Impl_hydra)"
-    $L_list .= " $(Lmpl_hydra)"
+    $call need_mpl
     $call need_hwloc
     $call custom_make
 
@@ -38,31 +36,52 @@ subcode: prepare_hydra
 
 # -------------------
 subcode: hydra_config
-    system "rsync -r $srcdir/confdb/ confdb/" 
-    system "cp $srcdir/maint/version.m4 ."
+    $if $srcdir
+        my $o="../../.."
+        system "rsync -r $o/confdb/ confdb/" 
+        system "cp $o/maint/version.m4 ."
+    $else
+        $if !-d "confdb" 
+            die "hydra: missing confdb/\n"
+        $if !-f "version.m4"
+            die "hydra: missing version.m4\n"
+
     &call temporary_modify
         &call modify, configure.ac
-            $if $l=~/^\s*HWLOC_/
+            $if $l=~/^\s*hwloc\)/
+                print Out $l
+                $flag_skip=1
                 next
-            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
+            $elif $flag_skip && $l=~/AC_MSG_RESULT/
+                $flag_skip=2
+            $elif $flag_skip==2 && $l=~/^(\s*)if test.*\$have_hwloc.*then/
+                $l = $1."if true ; then\n"
+                $flag_skip=0
+            $elif $l=~/^(HWLOC_DO_AM_CONDITIONALS)/
+                $l = "\x23 $1"
+            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/ # mpl
                 $l = "$1: \x23 $2\n"
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
-        my $flag
-        &call modify, tools/topo/hwloc/Makefile.mk
-            $if $l=~/if\s+hydra_use_embedded_hwloc/
-                $flag=1
+        &call modify, tools/topo/Makefile.mk
+            $if $l=~/if\s+hydra_have_hwloc/
                 next
             $elif $l=~/endif/
-                $flag=0
                 next
-            $if $flag
+        &call modify, tools/topo/hwloc/Makefile.mk
+            $if $l=~/if\s+hydra_use_embedded_hwloc/
+                $flag_skip=1
+                next
+            $elif $l=~/endif/
+                $flag_skip=0
                 next
 
         system "autoreconf -ivf"
     system "rm -f Makefile"
     system "./configure"
+    &call temporary_modify
+        $call patch_libtool
     system "mv Makefile mymake/Makefile.orig"
 
 #---- rules in mpich Makefile ------------------ 

@@ -1,4 +1,3 @@
-include: macros/pmix.def
 # ------------------
 subcode: getenv(T, var, name)
     $global $(T) $(var)

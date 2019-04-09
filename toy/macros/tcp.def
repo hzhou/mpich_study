@@ -1,29 +1,69 @@
 macros:
-    PORT_BASE: 2000
-    PORT: $(PORT_BASE)+$1*PMI_size+PMI_rank
-    PORT_listen: $(PORT_BASE)+PMI_size*PMI_size+$1
-    PORT_rank: ($1-$(PORT_BASE))%PMI_size
+    PORT_BASE: 10000
+    port: $(PORT_BASE)+$1
+    port_nb: $(PORT_BASE)+$1*PMI_size+PMI_rank
+    port_nbl: $(PORT_BASE)+PMI_size*PMI_size+$1
 
-subcode: toy_tcp_init
+subcode:: on_MPI_Init
     $global int *vc_list
     $allocate(PMI_size, 0) vc_list
+
+subcode:: on_MPI_Init_2
+    $(if:DO_TCP_INIT_NB)
+        $call toy_tcp_init_nb
+    $(else)
+        $call toy_tcp_init
     
-    $call ip4_listen, $(PORT_listen:PMI_rank)
+subcode:: on_MPI_Finalize
+    $for i=0:PMI_size
+        $if vc_list[i]>0
+            close(vc_list[i])
+
+subcode: on_MPI_Send
+    n = (int)$(type_size:send_type) * send_cnt
+    $call Write, vc_list[dst], send_buf, n
+    # $print "write $n bytes: $tn_ret - %d [%d]", errno, vc_list[dst]
+
+subcode: on_MPI_Recv
+    n = (int)$(type_size:recv_type) * recv_cnt
+    $call Read, vc_list[src], recv_buf, n
+    # $print "Read $n bytes: $tn_ret - %d [%d]", errno, vc_list[src]
+    $if p_status
+        *p_status = tn_ret
+
+#---------------------------------------- 
+subcode: toy_tcp_init
+    $call ip4_listen, 0
+    PMI_Barrier()
+    $for i=0:PMI_size
+        $for j=i+1:PMI_size
+            $if i==PMI_rank
+                $call ip4_connect, j
+                $call toy_tcp_send, socket_connect, &PMI_rank, 4
+                vc_list[j] = socket_connect
+            $elif j==PMI_rank
+                $call ip4_accept
+                $my i_rank
+                $call toy_tcp_recv, socket_accept, &i_rank, 4
+                vc_list[i_rank] = socket_accept
+
+subcode: toy_tcp_init_nb
+    $call ip4_listen, nb
+    PMI_Barrier()
+
     n_connect = PMI_rank
     n_accept = PMI_size - PMI_rank - 1
 
     &call init_poll
         $call poll_add_listen
         $for i=0:PMI_rank
-            $call ip4_connect, $(PORT:i), $(PORT_listen:i)
+            $call ip4_connect_nb, i
             vc_list[i] = socket_connect
             $if tn_ret==0
                 n_connect--
             $else
                 $call poll_add_connect, i
 
-        $print "[%d] $n_connect to connect, $n_accept to accept", PMI_rank
-        PMI_Barrier()
         $while n_connect>0 || n_accept>0
             &call poll_wait
                 $if $(ctx)>100
@@ -32,28 +72,34 @@ subcode: toy_tcp_init
                     n_connect--
                 $else
                     $call ip4_accept
-                    i_rank = $(PORT_rank:addr.sin_port)
-                    vc_list[i_rank] = tn_ret
+                    i_rank = (addr.sin_port-$(PORT_BASE)) % PMI_size
+                    vc_list[i_rank] = socket_accept
                     n_accept--
 
-subcode: toy_tcp_finalize
-    $for i=0:PMI_size
-        $if vc_list[i]>0
-            close(vc_list[i])
+#---------------------------------------- 
+subcode: toy_tcp_send(s, p, n)
+    $call Write, $(s), (void*)$(p), $(n)
+
+subcode: toy_tcp_recv(s, p, n)
+    $call Read, $(s), (void*)$(p), $(n)
 
 #---------------------------------------- 
 subcode: _autoload
     $register_prefix(socket) int
 
 macros:
-    ip: 0x0100007f
+    # ip: 0x0100007f
     addr: (struct sockaddr*)&addr, sizeof(addr)
 
 subcode: sock_error(which)
     $call die, "--[%d] Error in ip4_$(which): %d", PMI_rank, errno
 
-subcode: ip4_listen(port)
-    $call ip4_bind, socket_listen, $(ip), $(port)
+subcode: ip4_listen(nb)
+    $(set:ip=htonl(p_ipv4_list[p_nodemap[PMI_rank]]))
+    $(if:nb=nb)
+        $call ip4_bind, socket_listen, $(ip), $(port_nbl:PMI_rank)
+    $(else)
+        $call ip4_bind, socket_listen, $(ip), $(port:PMI_rank)
 
     tn_ret = listen(socket_listen, 1024)
     $if tn_ret<0
@@ -62,38 +108,55 @@ subcode: ip4_listen(port)
 subcode: ip4_accept
     tn_addr_len = sizeof(addr)
     $(set:addr=(struct sockaddr*)&addr, &tn_addr_len)
-    $while 1
-        tn_ret = accept(socket_listen, $(addr))
-        $if tn_ret >= 0
-            break
-        $if errno==EAGAIN
-            continue
-        $else
-            $call sock_error, accept
-            break
+    socket_accept = accept(socket_listen, $(addr))
+    $if socket_accept < 0
+        $call sock_error, accept
 
-subcode: ip4_connect(port_from, port_to)
-    $call ip4_bind, socket_connect, $(ip), $(port_from)
+subcode: ip4_connect_nb(rank)
+    $(set:ip=htonl(p_ipv4_list[p_nodemap[PMI_rank]]))
+    $call ip4_bind, socket_connect, $(ip), $(port_nb:$(rank))
 
-    addr.sin_port = $(port_to)
+    $(set:ip=htonl(p_ipv4_list[p_nodemap[$(rank)]]))
+    addr.sin_port = $(port_nbl:$(rank))
     addr.sin_addr.s_addr = $(ip)
 
     tn_ret = connect(socket_connect, $(addr))
     $if tn_ret<0 && errno != EINPROGRESS
         $call sock_error, connect
 
+subcode: ip4_connect(rank)
+    $local struct sockaddr_in addr
+    addr.sin_family = AF_INET
+    $(set:ip=htonl(p_ipv4_list[p_nodemap[$(rank)]]))
+    addr.sin_port = $(port:$(rank))
+    addr.sin_addr.s_addr = $(ip)
+
+    socket_connect = socket(AF_INET, SOCK_STREAM, 0)
+
+    tn_ret = connect(socket_connect, $(addr))
+    $if tn_ret<0
+        $call sock_error, connect
+
+# ----
 subcode: ip4_bind(s, ip, port)
     $local struct sockaddr_in addr
     addr.sin_family = AF_INET
     addr.sin_port = $(port)
     addr.sin_addr.s_addr = $(ip)
 
-    $(s) = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
+    $(if:s=socket_listen)
+        $(s) = socket(AF_INET, SOCK_STREAM, 0)
+    $(else)
+        $(s) = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)
+    $call @set_SO
     tn_ret = bind($(s), $(addr))
-    $print "-[%d] binding to port %d", PMI_rank, addr.sin_port
-    fflush(stdout)
     $if tn_ret<0
         $call sock_error, bind
+
+    subcode: set_SO
+        tn_ret = setsockopt($(s), SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))
+        $if tn_ret<0
+            $call sock_error, setsockopt
 
 #---------------------------------------- 
 subcode: init_poll
