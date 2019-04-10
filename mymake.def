@@ -15,10 +15,7 @@ output_dir: ./mymake
 page: mymake
     module: perl
 
-    my $pwd=`pwd`
-    chomp $pwd
     $call set_mymake
-    $call set_mymake_DO
 
     $if -d "pm"
         system "perl $mymake\_hydra.pl @ARGV"
@@ -33,6 +30,7 @@ page: mymake
     $call save_last_ARGV
     $call @dump_args
 
+    $call set_mymake_DO
     $call add_rule_hydra
     # $call add_rule_testing
     $call compile_mpich
@@ -50,14 +48,6 @@ page: mymake
             $if !-f 'src/util/cvar/mpir_cvars.c'
                 system "touch src/util/cvar/mpir_cvars.c"
 
-
-    subcode: set_mymake
-        my $mymake
-        $if $0=~/^(\/.*)\//
-            $mymake = $1
-        $elif $0=~/^(.*)\//
-            $mymake .= "$pwd/$1"
-        $mymake .="/mymake"
 
     subcode: set_mymake_DO
         $(for:stage,clean,errmsg,cvars,logs,hydra,test,mpi_h)
@@ -111,6 +101,12 @@ page: mymake_mpi_h
 page: mymake_hydra
     module: perl
 
+    $call set_mymake
+    $if !-d "mymake"
+        mkdir "mymake" or die "can't mkdir mymake\n"
+    $(for:stage,clean)
+        push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
+    push @extra_make_rules, ""
     $call parse_args
     $call prepare_hydra
 
@@ -127,6 +123,7 @@ page: mymake_stage
     module: perl
     my $t = join(' ', @ARGV)
     $call stage, $t
+    exit(0)
 
 page: mymake_clean
     module: perl
@@ -146,6 +143,17 @@ page: mymake_clean
         system "rm -fv $t"
 
 #---------------------------------------- 
+subcode: set_mymake
+    my $pwd=`pwd`
+    chomp $pwd
+
+    my $mymake
+    $if $0=~/^(\/.*)\//
+        $mymake = $1
+    $elif $0=~/^(.*)\//
+        $mymake .= "$pwd/$1"
+    $mymake .="/mymake"
+
 subcode: parse_args
     $global (%opts, @config_args)
     $opts{V}=0
