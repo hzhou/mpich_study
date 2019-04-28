@@ -41,7 +41,7 @@ subcode: copy_subdir_module(dir)
     $(if:embed_$(dir))
         $if !-d "$(D$(dir))"
             $call do_cmd, cp -r $(embed_$(dir)) $(D$(dir))
-            $(if:dir=mpl)
+            $(if:dir=mpl or dir=opa)
                 $call do_cmd, cp -r confdb $(D$(dir))/
 
 subcode: do_cmd(@cmd)
@@ -76,7 +76,6 @@ subcode: need_opa
     push @CONFIGS, "$(Hopa)"
     &call add_subdir_rule_block, $(Dopa), $(Hopa)
         push @t, "\x24(DO_stage) Configure OpenPA"
-        push @t, "rsync -r ../../confdb/ confdb/" 
         push @t, "autoreconf -ivf"
         # check --with-atomic-primitives [auto_allow_emulation]
         push @t, "./configure --disable-versioning --enable-embedded"
@@ -156,7 +155,7 @@ subcode: need_ofi
     $L_list .= " $(Lofi)"
     push @CONFIGS, "$(Hofi)"
     &call add_subdir_rule_block, $(Dofi), $(Hofi)
-        push @t, "\x24(DO_stage) Configure UCX"
+        push @t, "\x24(DO_stage) Configure libfabric"
         push @t, "sh autogen.sh"
         push @t, "./configure --enable-embedded --with-prefix=$prefix"
     $call add_subdir_make, $(Dofi), $(Lofi), $(Hofi)

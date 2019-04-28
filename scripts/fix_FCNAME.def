@@ -31,3 +31,7 @@ subcode: filter_lines_FCNAME_defs
         $call delete, $(l)
         $cnt++
         next
+
+# post FCNAME: src/mpi/attr/attrutil.c src/mpi/coll/op/op_create.c  src/mpi/datatype/type_free.c src/mpi/errhan/win_set_errhandler.c src/nameserv/file/file_nameserv.c src/nameserv/pmi/pmi_nameserv.c
+
+# post FCNAME_defs: src/mpi/coll/iallgather/iallgather_intra_gentran_recexch_doubling.c src/mpi/coll/iallgather/iallgather_intra_gentran_recexch_halving.c src/mpi/coll/iallgatherv/iallgatherv_intra_gentran_recexch_doubling.c src/mpi/coll/iallgatherv/iallgatherv_intra_gentran_recexch_halving.c src/mpi/coll/iallreduce/iallreduce_intra_gentran_recexch_multiple_buffer.c src/mpi/coll/iallreduce/iallreduce_intra_gentran_recexch_single_buffer.c src/mpi/coll/iallreduce/iallreduce_intra_gentran_tree.c src/mpi/coll/ibcast/ibcast_intra_gentran_ring.c src/mpi/coll/ibcast/ibcast_intra_gentran_scatter_recexch_allgather.c src/mpi/coll/ibcast/ibcast_intra_gentran_tree.c src/mpi/coll/igather/igather_intra_gentran_tree.c src/mpi/coll/ireduce/ireduce_intra_gentran_ring.c src/mpi/coll/ireduce/ireduce_intra_gentran_tree.c src/mpi/coll/ireduce_scatter/ireduce_scatter_intra_gentran_recexch.c src/mpi/coll/ireduce_scatter_block/ireduce_scatter_block_intra_gentran_recexch.c src/mpi/coll/iscatter/iscatter_intra_gentran_tree.c 

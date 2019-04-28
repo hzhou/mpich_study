@@ -109,7 +109,7 @@ subcode: dump_cvar_finalize
     &call each_cvar
         $if $h->{type} eq "string"
             $print "    if ($v != NULL) {"
-            $print "        MPL_free($v);"
+            $print "        MPL_free((void *)$v);"
             $print "        $v = NULL;"
             $print "    }"
             $print

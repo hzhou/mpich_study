@@ -12,5 +12,6 @@ page: test, mpi_frame
 
     tf_time = MPI_Wtime()
     $print Hello world from $mpi_name, $mpi_id/$mpi_size ($tf_time)
-    $call test_p2p, 0, 1
+    # $call test_p2p, 0, 1
+    $call test_p2p_v2, 0, 1
 

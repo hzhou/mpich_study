@@ -1,0 +1,381 @@
+
+output_dir: ./mymake
+
+page: update.sh
+    module: general
+
+    git submodule update --init --recursive
+    $call config, hwloc, --enable-embedded-mode --enable-visibility
+    $call config, izem, --enable-embedded
+    $call config, ucx, --disable-static --enable-embedded --with-prefix=../_inst
+    $call config, libfabric, --enable-embedded --with-prefix=../_inst
+
+    subcode: config(dir, option)
+        cd $(dir)
+        sh autogen.sh
+        ./configure $(option)
+        cd ..
+
+macros: 
+    slurm_job:   sh mymake/slurm_job.sh
+    # test_worker: sh mymake/test-worker.sh
+    test_worker: perl mymake/test_mymake.pl
+
+page: jenkins.sh
+    module: general
+
+    compiler=gnu
+    jenkins_configure=stricterror
+    queue=ib64
+    export compiler jenkins_configure queue
+    # export GIT_BRANCH="master"
+    # export GIT_BRANCH WORKSPACE
+
+    RUN="$B"
+    export RUN
+
+    if test "$queue" = "ib64" -o "$queue" = "ubuntu32" -o "$queue" = "freebsd64" -o "$queue" = "freebsd32" ; then
+        salloc -J "${JOB_NAME}:${BUILD_NUMBER}:${GIT_BRANCH}" -p $queue -N 1 --nice=1000 -t 90 $(slurm_job)
+    else
+        $(test_worker)
+    fi
+
+page: slurm_job.sh
+    module: general
+
+    TARBALL="mpich.tar"
+    REMOTE_WS=`srun --chdir=/tmp mktemp -d /sandbox/jenkins.tmp.XXXXXXXX`
+    $(set:srun=srun --chdir="$REMOTE_WS")
+
+    tar --exclude=${TARBALL} -cf ${TARBALL} * .*
+    sbcast ${TARBALL} "$REMOTE_WS/${TARBALL}"
+    $(srun) tar xf "$REMOTE_WS/$TARBALL" -C "$REMOTE_WS"
+    $(srun) ls -al
+    $(srun) $(test_worker)
+        
+    srun --chdir=/tmp rm -rf "$REMOTE_WS"
+    rm ${TARBALL}
+
+    exit 0
+
+#---------------------------------------- 
+page: test_mymake
+    module: perl
+
+    $global @mpich_config, @testmpi_config
+    # my $compiler = $ENV{compiler}
+    # my $queue = $ENV{queue}
+    # my $config = $ENV{config}
+    $call parse_config
+    $call parse_trigger_phrase
+    $call filter_config
+    $call set_N_MAKE_JOBS
+
+    system "sh mymake/test_worker.sh"
+    my $ret = $?>>8
+
+    $if $ENV{SLURM_SUBMIT_HOST}
+        $call CollectResults
+
+    exit $ret
+    
+    subcode: parse_config
+        my $config = $ENV{config}
+        $if $config=~/^(default|ch3:tcp)/
+            NOOP
+        $elif $config=~/^ch[34]/
+            push @mpich_config, "--with-device=$config"
+
+    subcode: parse_trigger_phrase
+        my $trigger_phrase = $ENV{ghprbCommentBody}
+        $while $trigger_phrase =~/(--(enable|disable|with|without)-\S+)/g
+            push @mpich_config, $1
+
+    subcode: CollectResults
+        my @files=qw(filtered-make.txt apply-xfail.sh autogen.log config.log c.txt m.txt.mi.txt summary.junit.xml)
+        my $t = "find . \\( "
+        $foreach $f in @files
+            $t .= "-name \"$f\" -o "
+        $t=~s/ -o $/ \\)/
+
+        system "$t -exec ssh $ENV{SLURM_SUBMIT_HOST} \"mkdir -p $ENV{SLURM_SUBMIT_DIR}/`dirname {}`"
+        system "$t -exec scp {} $ENV{SLURM_SUBMIT_HOST}:$ENV{SLURM_SUBMIT_DIR}/{}"
+
+    subcode: RandomConfig
+        my @enable_array=(
+            'error-checking;no;runtime;all',
+            'error-messages;all;generic;class;none',
+            'timer-type;linux86_cycle;clock_gettime;gettimeofday',
+            'timing;none;all;runtime;log;log_detailed',
+            'g;none;all;handle;dbg;log;meminit;handlealloc;instr;mem;mutex;mutexnesting',
+            'fast;O0;O1;O2;O3;ndebug;all;yes;none',
+            'fortran',
+            'cxx',
+            'romio',
+            'check-compiler-flags',
+            'strict;c99;posix',
+            'debuginfo',
+            'weak-symbols;no;yes',
+            'threads;single;multiple;runtime',
+            'thread-cs;global',
+            'refcount;lock-free;none',
+            'mutex-timing',
+            'handle-allocation;tls;mutex',
+            'multi-aliases',
+            'predefined-refcount',
+            'alloca',
+            'yield;sched_yield;select',
+            'runtimevalues',
+        )
+        my @with_array=(
+            'logging;none',
+            'pmi;simple',
+            'pm;gforker',
+            'namepublisher;no;file',
+            'device;ch3;ch3:sock',
+            'shared-memory;sysv',
+        )
+        $call rand_array, enable_array, enable, disable
+        $call rand_array, with_array, with, without
+
+        subcode: rand_array(which, opt, neg)
+            $foreach $o in @$(which)
+                $if rand(10)>5
+                    next
+                my @parts=split /;/, $o
+                my $n=@parts
+                $if $n==1
+                    $if rand(10)>5
+                        push @mpich_config, "--$opt-$o"
+                    $else
+                        push @mpich_config, "--$neg-$o"
+                $else
+                    my $i = int(rand($n)-1)+1
+                    push @mpich_config, "--$opt-$parts[0]=$parts[$i]"
+
+    subcode: filter_config
+        $if @mpich_config
+            my (%config_hash)
+            $foreach $t in @mpich_config
+                my $k=$t
+                $k=~s/=.*$//
+                $k=~s/^--(disable|enable|with|without)-//
+                $if $config_hash{$k}
+                    $t=''
+                    next
+                $config_hash{$k}=1
+                
+                $if $t=~/--(disable|enable)-(.*-tests)/
+                    push @testmpi_config, $t
+                    $t=''
+                    next
+                $if $t=~/ch3:sock/
+                    push @testmpi_config, "--disable-ft-tests"
+                    push @testmpi_config, "--disable-comm-overlap-tests"
+                    next
+
+            my $t = join(' ', @mpich_config)
+            $if $t=~/gforker/ 
+                $if $t!~/--with-namepublisher/
+                    $t .= " --with-namepublisher=file"
+                $else
+                    $t=~s/--with-pm=gforker//
+            $ENV{mpich_config}=$t
+
+        $if @testmpi_config
+            my $t=join ' ', @testmpi_config
+            $ENV{testmpi_config} = $t
+
+        $if $ENV{queue} eq "ubuntu32" and $ENV{compiler} eq "solstudio"
+            $ENV{CFLAGS}="-O1"
+
+    subcode: set_N_MAKE_JOBS
+        my $n = 8
+        my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
+        $if $cpu_count=~/^(\d+)/
+            $n= $1
+        $ENV{N_MAKE_JOBS}=$n
+
+page: test_worker.sh
+    module: general
+
+    $call pre_check
+    $call PrepareEnv
+    $call SetCompiler
+    WORKSPACE=$PWD
+    SRC=$PWD
+    # $call prepare_from_tarball
+    PREFIX=$WORKSPACE/_inst
+    MPIEXEC=$PREFIX/bin/mpiexec
+    $(if:1)
+        git submodule update --init --recursive
+        $call run, sh autogen.sh, autogen.log
+        $call run, ./configure --prefix=$PREFIX $mpich_config, c.txt
+        $call run, make -j$N_MAKE_JOBS, m.txt
+        $call run, make install, mi.txt
+        cat m.txt mi.txt | ./maint/clmake > filtered-make.txt 2>&1
+        $call run, $MPIEXEC -n 2 examples/cpi, cpi.log
+
+    $(if:1)
+        export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
+        cd test/mpi
+        $call run, sh autogen.sh, autogen.log
+        $call run, ./configure $testmpi_config, c.txt
+        make testing
+
+    subcode: run(cmd, log)
+        $(cmd) 2>&1 | tee $(log)
+        if test "${pipestatus[-2]}" != "0"; then 
+            exit 1
+        fi
+
+    subcode: pre_check
+        set -x
+        set -e
+        hostname
+        date
+        uptime
+        pgrep mpiexec | wc -l
+
+template: PrepareEnv
+    case "$queue" in
+        "ubuntu32")
+            source /software/common/adm/etc/softenv-aliases.sh
+            source /software/common/adm/etc/softenv-load.sh
+            ;;
+        "ib64")
+            source /software/common/adm/etc/softenv-aliases.sh
+            source /software/common/adm/etc/softenv-load.sh
+            . /home/autotest/software/mellanox.new/hpcx-init.sh
+            hpcx_load
+            MXM_LOG_LEVEL=error
+            export MXM_LOG_LEVEL
+            UCX_LOG_LEVEL=error
+            export UCX_LOG_LEVEL
+            ;;
+        "freebsd64")
+            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
+            alias sed='gsed'
+            ;;
+        "freebsd32")
+            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
+            alias sed='gsed'
+            ;;
+        "solaris")
+            PATH=/usr/gnu/bin:$PATH
+            ;;
+        "osx")
+            PATH=/usr/local/bin:$PATH
+            ;;
+    esac
+    # redhat nodes use modules instead of softenv
+    if test -e /etc/redhat-release ; then
+        export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
+        source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
+    fi
+    PATH=$HOME/software/autotools/bin:$PATH
+    export PATH
+    echo "$PATH"
+
+template: SetCompiler
+    case "$compiler" in
+        "gnu")
+            case "$queue" in
+                "osx")
+                    CC=gcc-7
+                    CXX=g++-7
+                    F77=gfortran-7
+                    FC=gfortran-7
+                    ;;
+                *)
+                    CC=gcc
+                    CXX=g++
+                    F77=gfortran
+                    FC=gfortran
+                    ;;
+            esac
+            ;;
+        "clang")
+            CC=clang
+            CXX=clang++
+            F77=gfortran
+            FC=gfortran
+            ;;
+        "intel")
+            if test -e /etc/redhat-release ; then
+                module load intel-parallel-studio
+            fi
+            CC=icc
+            CXX=icpc
+            F77=ifort
+            FC=ifort
+            ;;
+        "pgi")
+            if test -e /etc/redhat-release ; then
+                module load pgi
+            else
+                soft add +pgi
+            fi
+            CC=pgcc
+            CXX=pgc++
+            F77=pgf77
+            FC=pgfortran
+            ;;
+        "absoft")
+            if test -e /etc/redhat-release ; then
+                module load absoft
+            else
+                soft add +absoft
+            fi
+            CC=gcc
+            CXX=g++
+            F77=af77
+            FC=af90
+            ;;
+        "nag")
+            if test -e /etc/redhat-release ; then
+                module load nag
+            else
+                soft add +nagfor
+            fi
+            CC=gcc
+            CXX=g++
+            F77=nagfor
+            FC=nagfor
+            FFLAGS="-mismatch"
+            FCFLAGS="-mismatch"
+            export FFLAGS
+            export FCFLAGS
+            ;;
+        "solstudio")
+            case "$queue" in
+                "ubuntu32" | "ib64" )
+                    soft add +solarisstudio-12.4
+                    ;;
+                "solaris")
+                    export PATH=/opt/developerstudio12.5/bin:$PATH
+                    ;;
+            esac
+            if test -e /etc/redhat-release ; then
+                module load solarisstudio
+            fi
+            CC=suncc
+            CXX=sunCC
+            F77=sunf77
+            FC=sunf90
+            ;;
+        *)
+            echo "Unknown compiler suite"
+            exit 1
+    esac
+
+    export CC
+    export CXX
+    export F77
+    export FC
+
+    which $CC
+    which $CXX
+    which $F77
+    which $FC
+

@@ -25,6 +25,7 @@ page: mymake
     $if $opts{do}
         system "perl $mymake\_$opts{do}.pl"
         exit(0)
+    $call setup_mymake
     $call set_mymake_DO
     $call save_last_ARGV
     $call @dump_args
