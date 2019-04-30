@@ -162,8 +162,6 @@ subcode: parse_args
     $foreach $a in @ARGV
         $if $a=~/^--(prefix)=(.*)/
             $opts{$1}=$2
-        $elif $a=~/^--enable-strict/
-            $opts{strict}=1
         $elif $a=~/^(\w+)=(.*)/
             $opts{$1}=$2
         $elif $a=~/^(--.*)/
@@ -186,19 +184,6 @@ subcode: parse_args
         $global $$(name) = "$($(name:uc))"
         $if $opts{$(name)}
             $$(name) = $opts{$(name)}
-
-subcode:: overwrite_makefile_vars
-    $if $opts{strict}
-        my $t = "-Werror -Wall -Wextra -DGCC_WALL"
-        $t .= " -Wstrict-prototypes -Wmissing-prototypes -Wshadow -Wmissing-declarations -Wundef -Wpointer-arith -Wbad-function-cast -Wwrite-strings -Wold-style-definition -Wnested-externs -Winvalid-pch -Wvariadic-macros -Wtype-limits -Werror-implicit-function-declaration -Wstack-usage=262144"
-        $t .= " -Wno-missing-field-initializers -Wno-unused-parameter -Wno-unused-label -Wno-long-long -Wno-endif-labels -Wno-sign-compare -Wno-multichar -Wno-deprecated-declarations -Wno-pointer-sign -Wno-format-zero-length"
-        $(if:0)
-            $t .= " -Wno-long-long"
-            $t .= " -Wno-endif-labels"
-            $t .= " -Wno-multichar"
-            $t .= " -Wno-deprecated-declarations"
-            $t .= " -Wno-format-zero-length"
-        $objects{CFLAGS} = "-O2 $t"
 
 subcode: load_last_ARGV
     my $need_save_args

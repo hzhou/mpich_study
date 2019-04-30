@@ -1,0 +1,162 @@
+page: pr_signoff
+    module: perl
+    arg: 3767 wesley
+    # arg: 3721
+
+    my $ORG="pmodels"
+    my $REPO="mpich"
+    my $base="$ENV{HOME}/work/mpich-github"
+    my $default_signoff="hzhou"
+    $call init_signoff
+
+    $call @usage
+    my $pr = $ARGV[0]
+    my $by = $ARGV[1]
+    $if !$by
+        $by = $default_signoff
+    $if !$users{$by}
+        die "Signoff user '$by' un-recognized.\n"
+
+    # --------------------------
+    my $curl = "curl"
+    $call @get_oauth_token
+    $call get_pr_info
+    $print PR $pr - $author : $branch\n--------------\n
+    $if $by eq $author
+        die "PR cannot be signed-off by author\n"
+    # my $remote = "https://github.com/$author/$REPO.git"
+    my $remote = "git\@github.com:$author/$REPO.git"
+    # exit 0
+
+    chdir $base or die "Can't chdir $base\n"
+    $call get_git_remotes
+    $if !$remote_hash{"gh-$author"}
+        $print :    add remote gh-$author
+        my $t = `git remote add gh-$author $remote`
+    $else
+        $print :    remote gh-$author exists
+
+    # --------------------------
+    my $t = `git checkout master 2>&1`
+    my $t = `git pull origin master 2>&1`
+    # OK if "error: branch 'xxx' not found."
+    my $t = `git branch -D $branch 2>&1`
+    my $t = `git fetch gh-$author 2>&1`
+    my $t = `git checkout -b $branch gh-$author/$branch 2>&1`
+
+    my $t = `git rebase master`
+    $if $?
+        die "Failed rebasing master:\n$t"
+
+    my $t = `git log --oneline master..$branch`
+    my @commits
+    $while $t=~/^([0-9a-f]+)\s+(.+)/mg
+        $print :    commit $1: $2
+        push @commits, $1
+    my $n = @commits
+    $print :    $n commits.
+
+    # --------------------------
+    my $P="$ENV{HOME}/bin"
+    $ENV{GIT_SEQUENCE_EDITOR}="pr_signoff_seq"
+    $ENV{GIT_EDITOR}="pr_signoff_commit"
+    $ENV{signoff}=$users{$by}
+
+    # my $commit_mark = $commits[$n-1] # won't work, one-off
+    my $commit_mark="HEAD~$n"
+    my $t = `git rebase -i $commit_mark 2>&1`
+    $if $t=~/edit (\d+) commits/ && $1 eq $n
+        # OK
+    $else
+        system "git rebase --abort"
+        die "Inconsistent rebase: $t"
+
+    my $t
+    $for $i=0:$n
+        $print :    sign-off commit $commits[$i]
+        $t = `git commit --amend 2>&1`
+        $t = `git rebase --continue 2>&1`
+    $if $t=~/Successfully rebased/
+        $print :    sign-off successful.
+    $else
+        system "git rebase --abort"
+        die "Sign-off unsuccessful."
+        
+    # --------------------------
+    system "git push -f gh-$author $branch"
+
+    #---------------------------------------- 
+    subcode: usage
+        $if !$ARGV[0]>0
+            die "Usage: $0 PR\x23 reviewer\n"
+
+    subcode: get_oauth_token
+        my ($user, $token)
+        &call open_r, $ENV{HOME}/.ssh/github.token
+            $if /^(\w+):\s+(\S+)/
+                $user = $1
+                $token= $2
+                last
+        $if $token
+            $curl = "curl -H \"Authorization: token $token\""
+
+    subcode: get_pr_info
+        my ($author, $branch)
+        my $url = "https://api.github.com/repos/$ORG/$REPO/pulls/$pr"
+        $print Querying $url ...
+        my $t=`$curl --silent $url`
+        $if $t=~/^\s*"label":\s*"(\w+):(\S+)",/m
+            $if $1 ne $ORG
+                $author = $1
+                $branch = $2
+        $if !$author or !$branch
+            die "Failed to gather PR information\n"
+        $(if:0)
+            &call open_W, /tmp/t.json
+                $print $t
+
+    subcode: init_signoff
+        my %users=(
+            hzhou=>'Hui Zhou <hzhou321@anl.gov>',
+            pavan=>'Pavan Balaji <balaji@mcs.anl.gov>',
+            ken=>'Ken Raffenetti <raffenet@mcs.anl.gov>',
+            yanfei=>'Yanfei Guo <yguo@anl.gov>',
+            wesley=>'Wesley Bland <wesley.bland@intel.com>',
+            min=>'Min Si <msi@anl.gov>',
+        );
+
+    subcode: get_git_remotes
+        my %remote_hash
+        my $t=`git remote -v`
+        $while $t=~/^(gh-\w+)\s+(\S+)\s+\(fetch\)/mg
+            # $print $1 $2
+            $remote_hash{$1} = $2
+
+page: pr_signoff_seq
+    module: perl
+
+    my $f_in = $ARGV[0]
+    $if !-f $f_in
+        die "File $f_in not found.\n"
+    $call get_file_in_t, $f_in
+    my $n = ($t=~s/^pick /edit /mg)
+    &call open_w, $f_in
+        print Out $t
+    $print edit $n commits
+
+page: pr_signoff_commit
+    module: perl
+
+    my $f_in = $ARGV[0]
+    $if !-f $f_in
+        die "File $f_in not found.\n"
+    my $signoff=$ENV{signoff}
+    $call get_file_in_t, $f_in
+    $(if:1)
+        # add sign-off. TODO: specify which commit
+        $t=~s/^(# .*)/Signed-off-by: $signoff\n\1/m
+    $(else)
+        # fix a sign-off mistake :(
+        $t=~s/^(Signed-off-by: .*)/Signed-off-by: $signoff\n/m
+    &call open_w, $f_in
+        print Out $t

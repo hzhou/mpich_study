@@ -37,6 +37,12 @@ macros:
     Lofi: $(Dofi)/src/libfabric.la
     Hofi: $(Dofi)/config.h
 
+    embed_romio: src/mpi/romio
+    Dromio: src/mpi/romio
+    Iromio: $(Dromio)/include
+    Lromio: $(Dromio)/libromio.la
+    Hromio: $(Dromio)/adio/include/romioconf.h
+
 subcode: copy_subdir_module(dir)
     $(if:embed_$(dir))
         $if !-d "$(D$(dir))"
@@ -82,10 +88,27 @@ subcode: need_opa
     $call add_subdir_make, $(Dopa), $(Lopa), $(Hmpl)
 
 subcode: filter_var_mpl_etc
-    $t=~s/-I.*\/(mpl|openpa)\/\S+\s*//g
+    $t=~s/-I.*\/(mpl|openpa|romio)\/\S+\s*//g
 
 subcode: filter_lib_mpl_etc
     $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
+    $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
+
+#---------------------------------------- 
+subcode: need_romio
+    $(if:0)
+        # not ready yet, need test
+        $I_list .= " -I$(Iromio)"
+        $L_list .= " $(Lromio)"
+        push @CONFIGS, "$(Hromio)"
+    &call add_subdir_rule_block, $(Dromio), $(Hromio)
+        push @t, "\x24(DO_stage) Configure ROMIO"
+        push @t, "sh autogen.sh"
+        push @t, "FROM_MPICH=yes ./configure"
+    $call add_subdir_make, $(Dromio), $(Lromio), $(Hromio)
+
+subcode: filter_var_romio
+subcode: filter_lib_romio
 
 #---------------------------------------- 
 subcode: need_hwloc
@@ -125,8 +148,11 @@ subcode: need_ucx
     push @CONFIGS, "$(Hucx)"
     &call add_subdir_rule_block, $(Ducx), $(Hucx)
         push @t, "\x24(DO_stage) Configure UCX"
-        push @t, "sh autogen.sh"
-        push @t, "./configure --disable-static --enable-embedded --with-prefix=$prefix"
+        # push @t, "sh autogen.sh"
+        push @t, "mkdir -p config/m4 config/aux"
+        push @t, "autoreconf -iv"
+        # push @t, "./configure --disable-static --enable-embedded --with-prefix=NONE"
+        push @t, "./configure --disable-shared --with-pic"
     $call add_subdir_make, $(Ducx), $(Lucx), $(Hucx)
 
 subcode: patch_configure_ucx
@@ -157,8 +183,33 @@ subcode: need_ofi
     &call add_subdir_rule_block, $(Dofi), $(Hofi)
         push @t, "\x24(DO_stage) Configure libfabric"
         push @t, "sh autogen.sh"
-        push @t, "./configure --enable-embedded --with-prefix=$prefix"
+        $(set:C=$(join:--enable-$1=no: :psm,psm2,verbs,usnic,mlx,gni,ugni,rxm,mrail,rxd,bgq,rstream,udp,perf))
+        push @t, "./configure --enable-embedded --enable-sockets=yes $(C)"
     $call add_subdir_make, $(Dofi), $(Lofi), $(Hofi)
+
+# assuming using sockets provider
+subcode: patch_configure_ofi
+    my $flag
+    &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
+        $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/
+            $flag = 1
+            next
+        $elif $flag
+            $if $l=~/^\]\).*AM_COND_IF\(BUILD_CH4_NETMOD_OFI/
+                $flag = 0
+                $call @print_Out_defines
+                next
+            $else
+                next
+    subcode: print_Out_defines
+        $(if:1)
+            print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_RUNTIME], [1], [Define to use runtime capability set])\n"
+        $(else)
+            print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_SOCKETS], [1], [Define to use sockets capability set])\n"
+
+subcode: filter_var_ofi
+subcode: filter_lib_ofi
+    $t=~s/\@ofilib\@\s*//g
 
 #---- common --------------------------- 
 subcode: chdir_subdir(dir)

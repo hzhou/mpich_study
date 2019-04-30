@@ -5,10 +5,11 @@ page: update.sh
     module: general
 
     git submodule update --init --recursive
-    $call config, hwloc, --enable-embedded-mode --enable-visibility
-    $call config, izem, --enable-embedded
-    $call config, ucx, --disable-static --enable-embedded --with-prefix=../_inst
-    $call config, libfabric, --enable-embedded --with-prefix=../_inst
+    $(if:0)
+        $call config, hwloc, --enable-embedded-mode --enable-visibility
+        $call config, izem, --enable-embedded
+        $call config, ucx, --disable-static --enable-embedded --with-prefix=../_inst
+        $call config, libfabric, --enable-embedded --with-prefix=../_inst
 
     subcode: config(dir, option)
         cd $(dir)
@@ -24,10 +25,9 @@ macros:
 page: jenkins.sh
     module: general
 
-    compiler=gnu
-    jenkins_configure=stricterror
-    queue=ib64
-    export compiler jenkins_configure queue
+    # compiler=gnu
+    # queue=ib64
+    export queue=$label
     # export GIT_BRANCH="master"
     # export GIT_BRANCH WORKSPACE
 
@@ -50,7 +50,6 @@ page: slurm_job.sh
     tar --exclude=${TARBALL} -cf ${TARBALL} * .*
     sbcast ${TARBALL} "$REMOTE_WS/${TARBALL}"
     $(srun) tar xf "$REMOTE_WS/$TARBALL" -C "$REMOTE_WS"
-    $(srun) ls -al
     $(srun) $(test_worker)
         
     srun --chdir=/tmp rm -rf "$REMOTE_WS"
@@ -59,9 +58,54 @@ page: slurm_job.sh
     exit 0
 
 #---------------------------------------- 
+# For manual run from a scratch disk
+page: run_pr
+    module: perl
+
+    $call set_mymake_dir
+    $call checkout_pr
+    $ENV{compiler}="gnu"
+    $ENV{test_script}="test_quick"
+    $ENV{skip_test}=1
+    $ENV{config}="default"
+    $if !$ENV{configOption}
+        $ENV{configOption}="--enable-strict --disable-romio --disable-fortran"
+    $ENV{SLURM_SUBMIT_HOST}=""
+    $ENV{SLURM_SUBMIT_DIR}=""
+    system "perl $mymake_dir/test_mymake.pl"
+
+    subcode: checkout_pr
+        my $pr=$ARGV[0]
+        $if ! $pr > 0
+            die "Usage: $0 pr-number\n"
+        $call get_pr_info
+        $if !$author
+            die "Failed to fetch PR information\n"
+
+        $if !-d "mpich-$pr"
+            $call run, git clone https://github.com/pmodels/mpich mpich-$pr
+            chdir "mpich-$pr" or die "Can't chdir mpich-$pr\n"
+            $call run, git checkout -b $branch master
+            $call run, git pull https://github.com/$author/mpich.git $branch
+        $else
+            chdir "mpich-$pr" or die "Can't chdir mpich-$pr\n"
+
+    subcode: run(cmd)
+        system("$(cmd)") == 0 or die "Error: $(cmd)\n"
+
+    subcode: get_pr_info
+        my ($author, $branch)
+        &call open_r, curl https://api.github.com/repos/pmodels/mpich/pulls/$pr |
+            $if /^\s*"label":\s*"(\w+):(\S+)",/
+                $if $1 ne "pmodels"
+                    $author = $1
+                    $branch = $2
+                    last
+#---------------------------------------- 
 page: test_mymake
     module: perl
 
+    $call set_mymake_dir
     $global @mpich_config, @testmpi_config
     # my $compiler = $ENV{compiler}
     # my $queue = $ENV{queue}
@@ -71,35 +115,78 @@ page: test_mymake
     $call filter_config
     $call set_N_MAKE_JOBS
 
-    system "sh mymake/test_worker.sh"
-    my $ret = $?>>8
+    $call @dump_config
+
+    my $time_start=time()
+    my $ret
+    $if $ENV{test_script} eq "test_quick"
+        $ret = system "bash $mymake_dir/test_quick.sh"
+    $else
+        $ret = system "bash $mymake_dir/test_build.sh"
+    my $time_finish=time()
+    $if $ret
+        $ret = $?>>8
+    $else
+        $call report_make_log
 
     $if $ENV{SLURM_SUBMIT_HOST}
         $call CollectResults
 
     exit $ret
     
+    subcode: dump_config
+        $print test_mymake.pl:
+        $(for:mymake_dir,compiler,config,queue,mpich_config,testmpi_config,N_MAKE_JOBS,test_script,SLURM_SUBMIT_HOST,SLURM_SUBMIT_DIR)
+            $print "    $1: $ENV{$1}"
+
     subcode: parse_config
         my $config = $ENV{config}
         $if $config=~/^(default|ch3:tcp)/
             NOOP
         $elif $config=~/^ch[34]/
             push @mpich_config, "--with-device=$config"
+        $elif $config eq "stricterror"
+            push @mpich_config, "--enable-strict=error"
 
     subcode: parse_trigger_phrase
-        my $trigger_phrase = $ENV{ghprbCommentBody}
+        my $trigger_phrase = $ENV{ghprbCommentBody} . ' ' . $ENV{configOption}
         $while $trigger_phrase =~/(--(enable|disable|with|without)-\S+)/g
             push @mpich_config, $1
 
+
+    subcode: report_make_log
+        my @make_log
+        $call parse_make_log
+        my $n_fails = @make_log
+        my $n_tests = $n_fails+1
+        &call open_W, summary.junit.xml
+            $print <testsuites>
+            $print <testsuite failures="$n_fails" errors="0" skipped="0" tests="$n_tests" name="build">
+            my $dur = $time_finish-$time_start
+            $print <testcase name="1 - build" time="$dur"></testcase>
+            my $i = 1
+            $foreach $t in @make_log
+                $i++
+                $print <testcase name="$i">
+                $print <failure message="$t"></failure>
+                $print </testcase>
+            $print </testsuite>
+            $print </testsuites>
+
+        subcode: parse_make_log
+            &call open_r, make.log
+                $if /^(\S+:\d+:\s*(error|warning):\s*.*)/
+                    push @make_log, $1
+
     subcode: CollectResults
-        my @files=qw(filtered-make.txt apply-xfail.sh autogen.log config.log c.txt m.txt.mi.txt summary.junit.xml)
+        my @files=qw(apply-xfail.sh config.log make.log Makefile.custom summary.junit.xml)
         my $t = "find . \\( "
         $foreach $f in @files
             $t .= "-name \"$f\" -o "
         $t=~s/ -o $/ \\)/
 
-        system "$t -exec ssh $ENV{SLURM_SUBMIT_HOST} \"mkdir -p $ENV{SLURM_SUBMIT_DIR}/`dirname {}`"
-        system "$t -exec scp {} $ENV{SLURM_SUBMIT_HOST}:$ENV{SLURM_SUBMIT_DIR}/{}"
+        system "$t -exec ssh $ENV{SLURM_SUBMIT_HOST} \"mkdir -p $ENV{SLURM_SUBMIT_DIR}/\\\x24(dirname {})\" \\;"
+        system "$t -exec scp {} $ENV{SLURM_SUBMIT_HOST}:$ENV{SLURM_SUBMIT_DIR}/{} \\;"
 
     subcode: RandomConfig
         my @enable_array=(
@@ -138,8 +225,8 @@ page: test_mymake
         $call rand_array, enable_array, enable, disable
         $call rand_array, with_array, with, without
 
-        subcode: rand_array(which, opt, neg)
-            $foreach $o in @$(which)
+        subcode: rand_array(array, opt, neg)
+            $foreach $o in @$(array)
                 $if rand(10)>5
                     next
                 my @parts=split /;/, $o
@@ -196,46 +283,97 @@ page: test_mymake
             $n= $1
         $ENV{N_MAKE_JOBS}=$n
 
-page: test_worker.sh
+page: test_build.sh
     module: general
 
-    $call pre_check
-    $call PrepareEnv
-    $call SetCompiler
-    WORKSPACE=$PWD
-    SRC=$PWD
-    # $call prepare_from_tarball
-    PREFIX=$WORKSPACE/_inst
-    MPIEXEC=$PREFIX/bin/mpiexec
-    $(if:1)
+    &call test_frame
         git submodule update --init --recursive
-        $call run, sh autogen.sh, autogen.log
-        $call run, ./configure --prefix=$PREFIX $mpich_config, c.txt
-        $call run, make -j$N_MAKE_JOBS, m.txt
-        $call run, make install, mi.txt
-        cat m.txt mi.txt | ./maint/clmake > filtered-make.txt 2>&1
-        $call run, $MPIEXEC -n 2 examples/cpi, cpi.log
+        $call run, sh autogen.sh
+        $call run, ./configure --prefix=$PREFIX $mpich_config
+        $call run_make
+        $call run, make install
+        $call run, $MPIEXEC -n 2 examples/cpi
 
-    $(if:1)
-        export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
-        cd test/mpi
-        $call run, sh autogen.sh, autogen.log
-        $call run, ./configure $testmpi_config, c.txt
-        make testing
+        &call test_testing
+            cd test/mpi
+            $call run, sh autogen.sh
+            $call run, ./configure $testmpi_config
+            make testing
 
-    subcode: run(cmd, log)
-        $(cmd) 2>&1 | tee $(log)
-        if test "${pipestatus[-2]}" != "0"; then 
-            exit 1
+page: test_quick.sh
+    module: general
+
+    export MODDIR=$PWD/modules
+    mkdir -p $MODDIR
+    pushd $MODDIR
+    $(if:0)
+        git clone https://github.com/pmodels/hwloc
+        git clone https://github.com/pmodels/izem
+        git clone https://github.com/pmodels/ucx
+        git clone https://github.com/ofiwg/libfabric
+    $(else)
+        $(for:hwloc,izem,ucx,libfabric)
+            cp -r /home/autotest/hzhou/$1 .
+    popd
+    &call test_frame
+        $call run, perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
+        $call run_make
+        $call run, make install
+        $call run_make, hydra
+        $call run, make hydra-install
+
+        &call test_testing
+            $call run, make test
+
+#---------------------------------------- 
+subcode: test_frame
+    $call test_prepare
+    set -o pipefail
+    BLOCK
+
+    subcode: run(cmd)
+        $(cmd) 2>&1 || exit 1
+
+    subcode: run_make(@target)
+        make -j$N_MAKE_JOBS $(target) 2>&1 | tee -a make.log
+        if test "$?" != "0"; then
+            exit $?
         fi
 
-    subcode: pre_check
-        set -x
-        set -e
-        hostname
-        date
-        uptime
-        pgrep mpiexec | wc -l
+    subcode: test_prepare
+        $call pre_check
+        $call PrepareEnv
+        $call SetCompiler
+        $(for:autoconf,automake,libtool)
+            which $1
+            $1 --version
+        $(for:CC,CXX,F77,FC)
+            export $1
+            which $$1
+            $$1 --version
+        WORKSPACE=$PWD
+        SRC=$PWD
+        # $call prepare_from_tarball
+        PREFIX=$WORKSPACE/_inst
+        MPIEXEC=$PREFIX/bin/mpiexec
+
+        subcode: pre_check
+            set -x
+            set -e
+            hostname
+            date
+            uptime
+            pgrep mpiexec | wc -l
+
+    subcode: test_testing
+        if test x$skip_test = x1 ; then 
+            exit 0
+        else
+            export PATH=$PREFIX/bin:$PATH
+            export CPATH=$PREFIX/include:$CPATH
+            export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
+            BLOCK
+        fi
 
 template: PrepareEnv
     case "$queue" in
@@ -273,9 +411,10 @@ template: PrepareEnv
         export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
         source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
     fi
-    PATH=$HOME/software/autotools/bin:$PATH
-    export PATH
-    echo "$PATH"
+    
+    if test -d $HOME/software/autotools/bin; then
+        export PATH=$HOME/software/autotools/bin:$PATH
+    fi
 
 template: SetCompiler
     case "$compiler" in
@@ -369,13 +508,15 @@ template: SetCompiler
             exit 1
     esac
 
-    export CC
-    export CXX
-    export F77
-    export FC
-
-    which $CC
-    which $CXX
-    which $F77
-    which $FC
+#---------------------------------------- 
+subcode: set_mymake_dir
+    my $mymake_dir = $ENV{mymake_dir}
+    $if ! $mymake_dir
+        $if $0=~/^(\/.*)\//
+            $mymake_dir = $1
+        $elif $0=~/^(.*)\//
+            my $pwd=`pwd`
+            chomp $pwd
+            $mymake_dir .= "$pwd/$1"
+        $ENV{mymake_dir}=$mymake_dir
 

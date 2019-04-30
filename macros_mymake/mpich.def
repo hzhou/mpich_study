@@ -5,7 +5,7 @@ subcode: compile_mpich
     $call add_rule_cpi
 
     $call need_mpich_preproc
-    $(for:mpl,opa,hwloc)
+    $(for:mpl,opa,hwloc,romio)
         $call need_$1
     $if $opts{device}=~/ucx/
         $call need_ucx
@@ -24,6 +24,7 @@ subcode: compile_mpich
         $(if:which=ltlibs)
             $call filter_lib_mpl_etc
             $call filter_lib_ucx
+            $call filter_lib_ofi
             $t.= $L_list
     # ---------------------------
     subcode: post_mpich_configure
@@ -80,7 +81,7 @@ subcode: mpich_configure
         $call stage, Configure MPICH
         system "rm -f Makefile"
         my $t = join ' ', @config_args
-        system "./configure --disable-fortran --disable-romio --with-pm=none $t"
+        system "./configure --with-pm=no $t" # we'll configure/build hydra separately
         system "mv Makefile mymake/Makefile.orig"
         &call temporary_modify
             $call patch_libtool
@@ -112,6 +113,8 @@ subcode: mpich_configure
                 next
         $if $opts{device}=~/ucx/
             $call patch_configure_ucx
+        $if $opts{device}=~/ofi/
+            $call patch_configure_ofi
 
 subcode: need_mpich_preproc
     $(set:errhan=src/mpi/errhan/$1)
