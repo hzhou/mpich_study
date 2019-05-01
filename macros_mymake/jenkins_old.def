@@ -1,0 +1,56 @@
+macros: 
+    jenkins_old: 1
+
+subcode: jenkins_old
+    if test "$queue" = "ib64" -o "$queue" = "ubuntu32" -o "$queue" = "freebsd64" -o "$queue" = "freebsd32" ; then
+        salloc -J "${JOB_NAME}:${BUILD_NUMBER}:${GIT_BRANCH}" -p $queue -N 1 --nice=1000 -t 90 $(slurm_job)
+    else
+        $(test_worker)
+    fi
+
+subcode: slurm_job_old
+    TARBALL="mpich.tar"
+    REMOTE_WS=`srun --chdir=/tmp mktemp -d /sandbox/jenkins.tmp.XXXXXXXX`
+    $(set:srun=srun --chdir="$REMOTE_WS")
+
+    tar --exclude=${TARBALL} -cf ${TARBALL} * .*
+    sbcast ${TARBALL} "$REMOTE_WS/${TARBALL}"
+    $(srun) tar xf "$REMOTE_WS/$TARBALL" -C "$REMOTE_WS"
+    $(srun) $(test_worker)
+        
+    srun --chdir=/tmp rm -rf "$REMOTE_WS"
+    rm ${TARBALL}
+
+    exit 0
+
+subcode: prepareEnv
+    case "$queue" in
+        "ubuntu32")
+            source /software/common/adm/etc/softenv-aliases.sh
+            source /software/common/adm/etc/softenv-load.sh
+            ;;
+        "ib64")
+            source /software/common/adm/etc/softenv-aliases.sh
+            source /software/common/adm/etc/softenv-load.sh
+            . /home/autotest/software/mellanox.new/hpcx-init.sh
+            hpcx_load
+            MXM_LOG_LEVEL=error
+            export MXM_LOG_LEVEL
+            UCX_LOG_LEVEL=error
+            export UCX_LOG_LEVEL
+            ;;
+        "freebsd64")
+            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
+            alias sed='gsed'
+            ;;
+        "freebsd32")
+            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
+            alias sed='gsed'
+            ;;
+        "solaris")
+            PATH=/usr/gnu/bin:$PATH
+            ;;
+        "osx")
+            PATH=/usr/local/bin:$PATH
+            ;;
+    esac

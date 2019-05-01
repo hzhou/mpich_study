@@ -1,61 +1,23 @@
-
+# include: macros_mymake/jenkins_old.def
+include: macros_mymake/jenkins_new.def
 output_dir: ./mymake
 
-page: update.sh
-    module: general
-
-    git submodule update --init --recursive
-    $(if:0)
-        $call config, hwloc, --enable-embedded-mode --enable-visibility
-        $call config, izem, --enable-embedded
-        $call config, ucx, --disable-static --enable-embedded --with-prefix=../_inst
-        $call config, libfabric, --enable-embedded --with-prefix=../_inst
-
-    subcode: config(dir, option)
-        cd $(dir)
-        sh autogen.sh
-        ./configure $(option)
-        cd ..
-
 macros: 
-    slurm_job:   sh mymake/slurm_job.sh
     # test_worker: sh mymake/test-worker.sh
     test_worker: perl mymake/test_mymake.pl
+    slurm_job:   sh mymake/slurm_job.sh
 
 page: jenkins.sh
     module: general
 
-    # compiler=gnu
-    # queue=ib64
-    export queue=$label
-    # export GIT_BRANCH="master"
-    # export GIT_BRANCH WORKSPACE
-
-    RUN="$B"
-    export RUN
-
-    if test "$queue" = "ib64" -o "$queue" = "ubuntu32" -o "$queue" = "freebsd64" -o "$queue" = "freebsd32" ; then
-        salloc -J "${JOB_NAME}:${BUILD_NUMBER}:${GIT_BRANCH}" -p $queue -N 1 --nice=1000 -t 90 $(slurm_job)
-    else
+    $(if:has_code:jenkins_old)
+        $call jenkins_old
+    $(else)
         $(test_worker)
-    fi
 
 page: slurm_job.sh
     module: general
-
-    TARBALL="mpich.tar"
-    REMOTE_WS=`srun --chdir=/tmp mktemp -d /sandbox/jenkins.tmp.XXXXXXXX`
-    $(set:srun=srun --chdir="$REMOTE_WS")
-
-    tar --exclude=${TARBALL} -cf ${TARBALL} * .*
-    sbcast ${TARBALL} "$REMOTE_WS/${TARBALL}"
-    $(srun) tar xf "$REMOTE_WS/$TARBALL" -C "$REMOTE_WS"
-    $(srun) $(test_worker)
-        
-    srun --chdir=/tmp rm -rf "$REMOTE_WS"
-    rm ${TARBALL}
-
-    exit 0
+    $call @slurm_job_old
 
 #---------------------------------------- 
 # For manual run from a scratch disk
@@ -306,14 +268,7 @@ page: test_quick.sh
     export MODDIR=$PWD/modules
     mkdir -p $MODDIR
     pushd $MODDIR
-    $(if:0)
-        git clone https://github.com/pmodels/hwloc
-        git clone https://github.com/pmodels/izem
-        git clone https://github.com/pmodels/ucx
-        git clone https://github.com/ofiwg/libfabric
-    $(else)
-        $(for:hwloc,izem,ucx,libfabric)
-            cp -r /home/autotest/hzhou/$1 .
+    tar xf $mymake_dir/modules.tar.gz
     popd
     &call test_frame
         $call run, perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
@@ -324,6 +279,28 @@ page: test_quick.sh
 
         &call test_testing
             $call run, make test
+
+page: build_modules.sh
+    module: general
+
+    git clone https://github.com/pmodels/hwloc
+    git clone https://github.com/pmodels/izem
+    git clone https://github.com/pmodels/ucx
+    git clone https://github.com/ofiwg/libfabric
+
+    $call config, hwloc, --enable-embedded-mode --enable-visibility
+    $call config, izem, --enable-embedded
+    $call config, ucx, --disable-shared
+    $call config, libfabric, --enable-embedded
+
+    tar czf modules.tar.gz hwloc izem ucx libfabric
+
+    subcode: config(dir, option)
+        cd $(dir)
+        sh autogen.sh
+        ./configure $(option)
+        make -j 16
+        cd ..
 
 #---------------------------------------- 
 subcode: test_frame
@@ -343,6 +320,10 @@ subcode: test_frame
     subcode: test_prepare
         $call pre_check
         $call PrepareEnv
+        if test -d $HOME/software/autotools/bin; then
+            export PATH=$HOME/software/autotools/bin:$PATH
+        fi
+
         $call SetCompiler
         $(for:autoconf,automake,libtool)
             which $1
@@ -374,47 +355,6 @@ subcode: test_frame
             export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
             BLOCK
         fi
-
-template: PrepareEnv
-    case "$queue" in
-        "ubuntu32")
-            source /software/common/adm/etc/softenv-aliases.sh
-            source /software/common/adm/etc/softenv-load.sh
-            ;;
-        "ib64")
-            source /software/common/adm/etc/softenv-aliases.sh
-            source /software/common/adm/etc/softenv-load.sh
-            . /home/autotest/software/mellanox.new/hpcx-init.sh
-            hpcx_load
-            MXM_LOG_LEVEL=error
-            export MXM_LOG_LEVEL
-            UCX_LOG_LEVEL=error
-            export UCX_LOG_LEVEL
-            ;;
-        "freebsd64")
-            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
-            alias sed='gsed'
-            ;;
-        "freebsd32")
-            export LDFLAGS="-L/usr/local/lib/gcc48 -Wl,-rpath=/usr/local/lib/gcc48"
-            alias sed='gsed'
-            ;;
-        "solaris")
-            PATH=/usr/gnu/bin:$PATH
-            ;;
-        "osx")
-            PATH=/usr/local/bin:$PATH
-            ;;
-    esac
-    # redhat nodes use modules instead of softenv
-    if test -e /etc/redhat-release ; then
-        export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
-        source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
-    fi
-    
-    if test -d $HOME/software/autotools/bin; then
-        export PATH=$HOME/software/autotools/bin:$PATH
-    fi
 
 template: SetCompiler
     case "$compiler" in
