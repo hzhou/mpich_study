@@ -1,19 +1,17 @@
-# include: macros_mymake/jenkins_old.def
+
+include: macros_mymake/jenkins_old.def
 include: macros_mymake/jenkins_new.def
+include: macros_mymake/test_utils.def
 output_dir: ./mymake
 
 macros: 
     # test_worker: sh mymake/test-worker.sh
     test_worker: perl mymake/test_mymake.pl
-    slurm_job:   sh mymake/slurm_job.sh
 
 page: jenkins.sh
     module: general
 
-    $(if:has_code:jenkins_old)
-        $call jenkins_old
-    $(else)
-        $(test_worker)
+    $call @jenkins_old
 
 page: slurm_job.sh
     module: general
@@ -74,25 +72,21 @@ page: test_mymake
     # my $config = $ENV{config}
     $call parse_config
     $call parse_trigger_phrase
+    $call @set_missing_default
     $call filter_config
     $call set_N_MAKE_JOBS
 
     $call @dump_config
 
     my $time_start=time()
-    my $ret
-    $if $ENV{test_script} eq "test_quick"
-        $ret = system "bash $mymake_dir/test_quick.sh"
-    $else
-        $ret = system "bash $mymake_dir/test_build.sh"
+    my $ret = system "bash -xe $mymake_dir/$test_script.sh"
     my $time_finish=time()
     $if $ret
         $ret = $?>>8
     $else
         $call report_make_log
 
-    $if $ENV{SLURM_SUBMIT_HOST}
-        $call CollectResults
+    $call @CollectResults
 
     exit $ret
     
@@ -101,8 +95,20 @@ page: test_mymake
         $(for:mymake_dir,compiler,config,queue,mpich_config,testmpi_config,N_MAKE_JOBS,test_script,SLURM_SUBMIT_HOST,SLURM_SUBMIT_DIR)
             $print "    $1: $ENV{$1}"
 
+    subcode: set_missing_default
+        my $test_script = $ENV{test_script}
+        $if !$test_script
+            $test_script = "test_quick"  # or "test_build"
+
+        $if !$ENV{compiler}
+            $ENV{compiler}='gnu'
+
+        $if !@mpich_config
+            push @mpich_config, "--disable-fortran", "--disable-romio"
+
     subcode: parse_config
         my $config = $ENV{config}
+        $config=~s/[\/-]/:/g
         $if $config=~/^(default|ch3:tcp)/
             NOOP
         $elif $config=~/^ch[34]/
@@ -140,67 +146,13 @@ page: test_mymake
                 $if /^(\S+:\d+:\s*(error|warning):\s*.*)/
                     push @make_log, $1
 
-    subcode: CollectResults
-        my @files=qw(apply-xfail.sh config.log make.log Makefile.custom summary.junit.xml)
-        my $t = "find . \\( "
-        $foreach $f in @files
-            $t .= "-name \"$f\" -o "
-        $t=~s/ -o $/ \\)/
-
-        system "$t -exec ssh $ENV{SLURM_SUBMIT_HOST} \"mkdir -p $ENV{SLURM_SUBMIT_DIR}/\\\x24(dirname {})\" \\;"
-        system "$t -exec scp {} $ENV{SLURM_SUBMIT_HOST}:$ENV{SLURM_SUBMIT_DIR}/{} \\;"
-
-    subcode: RandomConfig
-        my @enable_array=(
-            'error-checking;no;runtime;all',
-            'error-messages;all;generic;class;none',
-            'timer-type;linux86_cycle;clock_gettime;gettimeofday',
-            'timing;none;all;runtime;log;log_detailed',
-            'g;none;all;handle;dbg;log;meminit;handlealloc;instr;mem;mutex;mutexnesting',
-            'fast;O0;O1;O2;O3;ndebug;all;yes;none',
-            'fortran',
-            'cxx',
-            'romio',
-            'check-compiler-flags',
-            'strict;c99;posix',
-            'debuginfo',
-            'weak-symbols;no;yes',
-            'threads;single;multiple;runtime',
-            'thread-cs;global',
-            'refcount;lock-free;none',
-            'mutex-timing',
-            'handle-allocation;tls;mutex',
-            'multi-aliases',
-            'predefined-refcount',
-            'alloca',
-            'yield;sched_yield;select',
-            'runtimevalues',
-        )
-        my @with_array=(
-            'logging;none',
-            'pmi;simple',
-            'pm;gforker',
-            'namepublisher;no;file',
-            'device;ch3;ch3:sock',
-            'shared-memory;sysv',
-        )
-        $call rand_array, enable_array, enable, disable
-        $call rand_array, with_array, with, without
-
-        subcode: rand_array(array, opt, neg)
-            $foreach $o in @$(array)
-                $if rand(10)>5
-                    next
-                my @parts=split /;/, $o
-                my $n=@parts
-                $if $n==1
-                    $if rand(10)>5
-                        push @mpich_config, "--$opt-$o"
-                    $else
-                        push @mpich_config, "--$neg-$o"
-                $else
-                    my $i = int(rand($n)-1)+1
-                    push @mpich_config, "--$opt-$parts[0]=$parts[$i]"
+    subcode: set_N_MAKE_JOBS
+        my $n = 16
+        $(if:0)
+            my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
+            $if $cpu_count=~/^(\d+)/
+                $n= $1
+        $ENV{N_MAKE_JOBS}=$n
 
     subcode: filter_config
         $if @mpich_config
@@ -218,11 +170,16 @@ page: test_mymake
                     push @testmpi_config, $t
                     $t=''
                     next
+
                 $if $t=~/ch3:sock/
                     push @testmpi_config, "--disable-ft-tests"
                     push @testmpi_config, "--disable-comm-overlap-tests"
                     next
 
+                $if $t=~/--disable-(romio|fortran)/
+                    push @testmpi_config, $t
+
+            # -----------------------------
             my $t = join(' ', @mpich_config)
             $if $t=~/gforker/ 
                 $if $t!~/--with-namepublisher/
@@ -231,19 +188,11 @@ page: test_mymake
                     $t=~s/--with-pm=gforker//
             $ENV{mpich_config}=$t
 
+        push @testmpi_config, "--disable-ft-tests"
+        push @testmpi_config, "--disable-perftest"
         $if @testmpi_config
             my $t=join ' ', @testmpi_config
             $ENV{testmpi_config} = $t
-
-        $if $ENV{queue} eq "ubuntu32" and $ENV{compiler} eq "solstudio"
-            $ENV{CFLAGS}="-O1"
-
-    subcode: set_N_MAKE_JOBS
-        my $n = 8
-        my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
-        $if $cpu_count=~/^(\d+)/
-            $n= $1
-        $ENV{N_MAKE_JOBS}=$n
 
 page: test_build.sh
     module: general
@@ -258,19 +207,15 @@ page: test_build.sh
 
         &call test_testing
             cd test/mpi
-            $call run, sh autogen.sh
-            $call run, ./configure $testmpi_config
+            # $call run, sh autogen.sh
+            # $call run, ./configure $testmpi_config
             make testing
 
 page: test_quick.sh
     module: general
 
-    export MODDIR=$PWD/modules
-    mkdir -p $MODDIR
-    pushd $MODDIR
-    tar xf $mymake_dir/modules.tar.gz
-    popd
     &call test_frame
+        $call copy_modules
         $call run, perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
         $call run_make
         $call run, make install
@@ -280,8 +225,21 @@ page: test_quick.sh
         &call test_testing
             $call run, make test
 
+    subcode: copy_modules
+        export MODDIR=$PWD/modules
+        mkdir -p $MODDIR
+        pushd $MODDIR
+        tar xf $mymake_dir/modules.tar.gz
+        $(if:1)
+            pushd ucx
+            make clean
+            
+        popd
+
 page: build_modules.sh
     module: general
+
+    uname -a
 
     git clone https://github.com/pmodels/hwloc
     git clone https://github.com/pmodels/izem
@@ -290,14 +248,18 @@ page: build_modules.sh
 
     $call config, hwloc, --enable-embedded-mode --enable-visibility
     $call config, izem, --enable-embedded
-    $call config, ucx, --disable-shared
+    $call config, ucx, --disable-shared --with-pic
     $call config, libfabric, --enable-embedded
 
     tar czf modules.tar.gz hwloc izem ucx libfabric
 
     subcode: config(dir, option)
         cd $(dir)
-        sh autogen.sh
+        $(if:dir=ucx)
+            mkdir -p config/m4 config/aux
+            autoreconf -iv
+        $(else)
+            sh autogen.sh
         ./configure $(option)
         make -j 16
         cd ..
@@ -317,14 +279,22 @@ subcode: test_frame
             exit $?
         fi
 
+    subcode: mult_call(proc)
+        if test -n $jenkins_old ; then
+            $call $(proc)_old
+        else
+            $call $(proc)
+        fi
     subcode: test_prepare
         $call pre_check
-        $call PrepareEnv
+        $call mult_call, PrepareEnv
         if test -d $HOME/software/autotools/bin; then
             export PATH=$HOME/software/autotools/bin:$PATH
         fi
 
-        $call SetCompiler
+        if test -n $compiler ; then
+            $call mult_call, SetCompiler
+        fi
         $(for:autoconf,automake,libtool)
             which $1
             $1 --version
@@ -339,8 +309,6 @@ subcode: test_frame
         MPIEXEC=$PREFIX/bin/mpiexec
 
         subcode: pre_check
-            set -x
-            set -e
             hostname
             date
             uptime
@@ -355,98 +323,6 @@ subcode: test_frame
             export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
             BLOCK
         fi
-
-template: SetCompiler
-    case "$compiler" in
-        "gnu")
-            case "$queue" in
-                "osx")
-                    CC=gcc-7
-                    CXX=g++-7
-                    F77=gfortran-7
-                    FC=gfortran-7
-                    ;;
-                *)
-                    CC=gcc
-                    CXX=g++
-                    F77=gfortran
-                    FC=gfortran
-                    ;;
-            esac
-            ;;
-        "clang")
-            CC=clang
-            CXX=clang++
-            F77=gfortran
-            FC=gfortran
-            ;;
-        "intel")
-            if test -e /etc/redhat-release ; then
-                module load intel-parallel-studio
-            fi
-            CC=icc
-            CXX=icpc
-            F77=ifort
-            FC=ifort
-            ;;
-        "pgi")
-            if test -e /etc/redhat-release ; then
-                module load pgi
-            else
-                soft add +pgi
-            fi
-            CC=pgcc
-            CXX=pgc++
-            F77=pgf77
-            FC=pgfortran
-            ;;
-        "absoft")
-            if test -e /etc/redhat-release ; then
-                module load absoft
-            else
-                soft add +absoft
-            fi
-            CC=gcc
-            CXX=g++
-            F77=af77
-            FC=af90
-            ;;
-        "nag")
-            if test -e /etc/redhat-release ; then
-                module load nag
-            else
-                soft add +nagfor
-            fi
-            CC=gcc
-            CXX=g++
-            F77=nagfor
-            FC=nagfor
-            FFLAGS="-mismatch"
-            FCFLAGS="-mismatch"
-            export FFLAGS
-            export FCFLAGS
-            ;;
-        "solstudio")
-            case "$queue" in
-                "ubuntu32" | "ib64" )
-                    soft add +solarisstudio-12.4
-                    ;;
-                "solaris")
-                    export PATH=/opt/developerstudio12.5/bin:$PATH
-                    ;;
-            esac
-            if test -e /etc/redhat-release ; then
-                module load solarisstudio
-            fi
-            CC=suncc
-            CXX=sunCC
-            F77=sunf77
-            FC=sunf90
-            ;;
-        *)
-            echo "Unknown compiler suite"
-            exit 1
-    esac
 
 #---------------------------------------- 
 subcode: set_mymake_dir

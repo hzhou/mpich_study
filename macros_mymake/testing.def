@@ -12,15 +12,11 @@ subcode: run_tests
     system "make testing"
 
 # --------------------------------
-macros:
-    # FIXME: test features
-    disable_tests: --disable-romio --disable-ft-tests --disable-perftest
-
 subcode: testing_config
     system "rsync -r $srcdir/confdb/ confdb/"
     system "cp $srcdir/maint/version.m4 ."
     system "sh autogen.sh"
     system "autoreconf -ivf"
-    system "./configure $(disable_tests)"
+    system "./configure $ENV{testmpi_config}"
 
     system "cp Makefile mymake/Makefile.orig"
