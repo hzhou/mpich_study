@@ -1,3 +1,4 @@
+include: macros_mymake/args.def
 include: macros_mymake/custom_make.def
 include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
@@ -144,64 +145,6 @@ page: mymake_clean
         system "rm -fv $t"
 
 #---------------------------------------- 
-subcode: set_mymake
-    my $pwd=`pwd`
-    chomp $pwd
-
-    my $mymake
-    $if $0=~/^(\/.*)\//
-        $mymake = $1
-    $elif $0=~/^(.*)\//
-        $mymake .= "$pwd/$1"
-    $mymake .="/mymake"
-
-subcode: parse_args
-    $global (%opts, @config_args)
-    $opts{V}=0
-    $call @load_last_ARGV
-    $foreach $a in @ARGV
-        $if $a=~/^--(prefix)=(.*)/
-            $opts{$1}=$2
-        $elif $a=~/^(\w+)=(.*)/
-            $opts{$1}=$2
-        $elif $a=~/^(--.*)/
-            push @config_args, $1
-            $if $a=~/^--with-device=(.*)/
-                $opts{device}=$1
-        $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
-            $opts{do}=$1
-
-    $if $ENV{MODDIR}
-        $moddir = $ENV{MODDIR}
-    NOOP
-    $(for:.,..,../..,../../..)
-        $case -f "$1/maint/version.m4"
-            $srcdir = "$1"
-
-    $map opt_set, srcdir, moddir, prefix
-
-    subcode: opt_set(name)
-        $global $$(name) = "$($(name:uc))"
-        $if $opts{$(name)}
-            $$(name) = $opts{$(name)}
-
-subcode: load_last_ARGV
-    my $need_save_args
-    $if !@ARGV && -f "mymake/args"
-        $call get_file_in_t, mymake/args
-        @ARGV = split /\s+/, $t
-    $elif @ARGV
-        # has to wait until mymake folder is made
-        $need_save_args = 1
-
-subcode: save_last_ARGV
-    $if $need_save_args
-        my $t = join(' ', @ARGV)
-        &call open_w, mymake/args
-            print Out $t
-        system "rm -f mymake/Makefile.orig"
-        system "rm -f $(Hmpl) $(Hopa)"
-
 #---- stages ---------------------------- 
 subcode: stage(@name)
     $print ---------------------------\n

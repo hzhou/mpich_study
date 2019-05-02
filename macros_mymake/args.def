@@ -1,0 +1,75 @@
+#- findout mymake directory
+subcode: set_mymake
+    my $pwd=`pwd`
+    chomp $pwd
+
+    my $mymake
+    $if $0=~/^(\/.*)\//
+        $mymake = $1
+    $elif $0=~/^(.*)\//
+        $mymake .= "$pwd/$1"
+    $mymake .="/mymake"
+
+#- cmdline, sort out options 
+subcode: parse_args
+    $global %opts
+    $global @config_args, @test_config_args
+    $call @set_opts_default
+    $call @load_last_ARGV
+    $call parse_ARGV
+    $if $ENV{MODDIR}
+        $moddir = $ENV{MODDIR}
+    NOOP
+    $call probe_srcdir
+    $map opt_set, srcdir, moddir, prefix
+
+    subcode: probe_srcdir
+        $(for:.,..,../..,../../..)
+            $case -f "$1/maint/version.m4"
+                $srcdir = "$1"
+
+    subcode: opt_set(name)
+        $global $$(name) = "$($(name:uc))"
+        $if $opts{$(name)}
+            $$(name) = $opts{$(name)}
+
+    subcode: set_opts_default
+        $opts{V}=0
+
+    subcode: load_last_ARGV
+        my $need_save_args
+        $if !@ARGV && -f "mymake/args"
+            $call get_file_in_t, mymake/args
+            @ARGV = split /\s+/, $t
+        $elif @ARGV
+            # has to wait until mymake folder is made
+            $need_save_args = 1
+
+    subcode: save_last_ARGV
+        $if $need_save_args
+            my $t = join(' ', @ARGV)
+            &call open_w, mymake/args
+                print Out $t
+            system "rm -f mymake/Makefile.orig"
+            system "rm -f $(Hmpl) $(Hopa)"
+
+    subcode: parse_ARGV
+        $foreach $a in @ARGV
+            $if $a=~/^--(prefix)=(.*)/
+                $opts{$1}=$2
+            $elif $a=~/^(\w+)=(.*)/
+                $opts{$1}=$2
+            $elif $a=~/^--/
+                $if $a=~/^--with-device=(.*)/
+                    $opts{device}=$1
+                    push @config_args, $a
+                $elif $a=~/--(dis|en)able-.*tests/
+                    push @test_config_args, $a
+                $elif $a=~/--diable-(romio|fortran)/
+                    push @config_args, $a
+                    push @test_config_args, $a
+                $else
+                    push @config_args, $a
+            $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
+                $opts{do}=$1
+
