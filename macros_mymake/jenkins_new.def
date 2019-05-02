@@ -1,7 +1,32 @@
 subcode: PrepareEnv
-    # redhat nodes use modules instead of softenv
-    if test -e /etc/redhat-release ; then
-        export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
-        source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
-    fi
+    export PATH=/nfs/gce/software/spack/bin:$PATH
+    export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
+    # source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
     
+subcode: SetCompiler
+    # gcc-8, osx-gcc ...
+    case $compiler in
+        gcc|gnu)
+            CC=gcc
+            CXX=g++
+            F77=gfortran
+            FC=gfortran
+            ;;
+        clang)
+            CC=clang
+            CXX=clang++
+            F77=gfortran
+            FC=gfortran
+            ;;
+        intel)
+            module load intel-parallel-studio
+            CC=icc
+            CXX=icpc
+            F77=ifort
+            FC=ifort
+            ;;
+        *)
+            echo "Unknown compiler suite"
+            exit 1
+    esac
+

@@ -36,23 +36,6 @@ subcode: parse_args
     subcode: set_opts_default
         $opts{V}=0
 
-    subcode: load_last_ARGV
-        my $need_save_args
-        $if !@ARGV && -f "mymake/args"
-            $call get_file_in_t, mymake/args
-            @ARGV = split /\s+/, $t
-        $elif @ARGV
-            # has to wait until mymake folder is made
-            $need_save_args = 1
-
-    subcode: save_last_ARGV
-        $if $need_save_args
-            my $t = join(' ', @ARGV)
-            &call open_w, mymake/args
-                print Out $t
-            system "rm -f mymake/Makefile.orig"
-            system "rm -f $(Hmpl) $(Hopa)"
-
     subcode: parse_ARGV
         $foreach $a in @ARGV
             $if $a=~/^--(prefix)=(.*)/
@@ -72,4 +55,22 @@ subcode: parse_args
                     push @config_args, $a
             $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
                 $opts{do}=$1
+
+#----------------------
+subcode: load_last_ARGV
+    my $need_save_args
+    $if !@ARGV && -f "mymake/args"
+        $call get_file_in_t, mymake/args
+        @ARGV = split /\s+/, $t
+    $elif @ARGV
+        # has to wait until mymake folder is made
+        $need_save_args = 1
+
+subcode: save_last_ARGV
+    $if $need_save_args
+        my $t = join(' ', @ARGV)
+        &call open_w, mymake/args
+            print Out $t
+        system "rm -f mymake/Makefile.orig"
+        system "rm -f $(Hmpl) $(Hopa)"
 
