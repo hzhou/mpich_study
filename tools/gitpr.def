@@ -1,0 +1,61 @@
+page: gitpr
+    module: perl
+
+    my $root = "$ENV{HOME}/work/mpich-github"
+    chdir $root or die "Can't chdir $root\n"
+
+    my @pr_list
+    my $level=0
+    &call open_r, git log --graph --oneline |
+        $if /^\|\\/
+            # confirm
+        $elif /^\|\//
+            my $pr = shift @pr_list
+            dump_pr($pr)
+        $elif /^\*[ \|]*(\w+)\s+.*Merge (.*)/  # pull request #(\d+) from (.*)/
+            # $print $1 PR $2 \t - $3
+            my $pr = {hash=>$1, title=>$2, commits=>[]}
+            my $t = $2
+            $if $t=~/pull request #(\d+) from (.*)/
+                $pr->{num}=$1
+                $pr->{src}=$2
+            push @pr_list, $pr
+        $elif /^([ \|]+) \* ([ \|]*)(\w+)\s+(.*)/
+            my ($t1, $t2, $sha, $title)=($1, $2, $3, $4)
+            my $i = get_i($t1)
+            push @{$pr_list[-$i]->{commits}}, {sha=>$sha, title=>$title}
+        $else
+            $if /^\*\s*(\w+)\s+(.*)/
+                $call do_print, "* $1 $2"
+    $call show
+
+macros:
+    Merge: \x1b[31mMerge $1\x1b[0m
+    SHA: \x1b[32m$pr->{hash}\x1b[0m
+    sha: \x1b[33m$c->{sha}\x1b[0m
+    in:  \x1b[32m\\\x1b[0m
+    out: \x1b[32m\/\x1b[0m
+
+fncode: get_i($t)
+    $t=~s/ //g
+    return length($t)
+
+fncode: dump_pr($pr)
+    $global $i_line=0
+    $if $pr->{num}
+        $call do_print, "* $(SHA) $(Merge:PR #$pr->{num}    ($pr->{src}))"
+    $else
+        $call do_print, "* $(SHA) $(Merge:$pr->{title})"
+
+    $call do_print, "|$(in)"
+    $foreach $c in @{$pr->{commits}}
+        $call do_print, "| * $(sha) $c->{title}"
+    $call do_print, "|$(out)"
+
+subcode: do_print(@t)
+    $global @lines
+    push @lines, $(t)
+
+subcode: show
+    $for $i=0:50
+        $print $lines[$i]
