@@ -1,7 +1,10 @@
+output_dir: ./mymake
+
 page: runtests
     module: perl
     arg: -help
     arg: -dir=$HOME/work/mpich_test/runtests/test/mpi -include-dir=attr -exclude-pattern=types?=
+    arg: -tests=testlist.custom -junitfile=summary.junit.xml
     
     $call set_cwd
     # Global variables
@@ -16,6 +19,7 @@ page: runtests
     load_environment();
     load_commandline();
     post_config();
+    $call dump_config
     
     $call check_mpiexec
 
@@ -72,6 +76,12 @@ page: runtests
             print "$err_count tests failed out of $n\n";
         $else
             print " All $n tests passed!\n";
+
+    subcode: dump_config
+        $print "dump_config --->"
+        $foreach $k in sort keys %config
+            $print "    $k: $config{$k}"
+        $print
 
 #---------------------------------------- 
 subcode: init_time_start
@@ -150,6 +160,10 @@ fncode: post_config
     $if $config{mpiversion}=~/(\d+)\.(\d+)/
         $config{MPIMajorVersion} = $1;
         $config{MPIMinorVersion} = $2;
+
+    $if $config{tests}!~/\s/
+        # handle alternative delimiters here
+        $config{tests}=~s/,/ /g
 
     $foreach $k in "run_strict", "run_mpix", "run_xfail", "run_batch"
         $if $config{$k} && $config{$k} =~/^(no|false)$/i
@@ -270,14 +284,15 @@ fncode: LoadTests($dir)
             $listfile = "$dir/$f"
         $elif -e "$srcdir/$dir/$f"
             $listfile = "$srcdir/$dir/$f";
+
         $if !$listfile
-            $print [$listfile] not found
+            # $print [$dir/$f] not found
             next
         $elif $loaded_listfile{$f}
             next
         $loaded_listfile{$f} = 1
 
-        $call @debug_loading_list
+        $print Loading $listfile...
 
         my %macros
         &call open_r, $listfile
@@ -327,7 +342,10 @@ fncode: LoadTests($dir)
             $else
                 $test = parse_testline($_)
             # $print line: [$_]
-            $test->{dir} = $dir
+            $if $test->{dir}
+                $test->{dir} = "$dir/$test->{dir}"
+            $else
+                $test->{dir} = $dir
             $test->{line} = $_
             push @alltests, $test
             $test->{id}=@alltests # 1-based
@@ -340,6 +358,10 @@ fncode: parse_testline($line)
     my @args = split(/\s+/,$line);
     my $programname = shift @args;
     my $np = shift @args;
+
+    $if $programname=~/^(\S+)\/(\S+)$/
+        $test{dir}=$1
+        $programname = $2
 
     $if !$np 
         $np = $config{np_default}
@@ -478,7 +500,6 @@ fncode: RunMPIProgram($test)
     $elif $test->{resultTest} eq "TestStatusZero"
         $call check_TestStatusZero
     $elif $test->{resultTest} eq "TestStatus"
-        $print resultTest: $test->{resultTest}
         $call check_TestStatus
     $elif $test->{resultTest} eq "TestErrFatal"
         $call check_TestErrFatal
@@ -496,7 +517,7 @@ fncode: RunMPIProgram($test)
     # ------------------
     subcode: check_TestDefault
         $if !$found_noerror
-            $test->{found_error} = "Expect \"No Error\""
+            $test->{found_error} = "Expect \"No Errors\""
         $elif $err_count>0
             $test->{found_error} = "Encounter unexpected output ($err_count counts)"
         # $call @check_error_return_code
@@ -519,7 +540,7 @@ fncode: RunMPIProgram($test)
 
     subcode: check_TestStatusNoErrors
         $if !$found_noerror
-            $test->{found_error} = "Expect \"No Error\""
+            $test->{found_error} = "Expect \"No Errors\""
         $elif $err_count>0
             $test->{found_error} = "Encounter unexpected output ($err_count counts)"
         $elif $rc
@@ -554,7 +575,7 @@ fncode: RunMPIProgram($test)
                 print $_
             $if /FORTRAN STOP/
                 next
-            $elif /^\s*(No Errors|Test Passed)\s*$/i
+            $elif /^\s*(No Errors|Test Passed)/i
                 $found_noerror += 1
                 next
             $elif /(requesting checkpoint|checkpoint completed)\s*$/
@@ -593,8 +614,9 @@ fncode: get_test_cmd($test)
         $cmd.=" $test->{prog}"
     $if $test->{arg}
         $cmd.=" $test->{arg}"
-    $if $test->{id} and !$test->{skip_id}
-        $cmd .=  " -id=$test->{id}"
+    $(if:0)
+        $if $test->{id} and !$test->{skip_id}
+            $cmd .=  " -id=$test->{id}"
     return $cmd;
 
     subcode: arg_ppn

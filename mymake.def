@@ -117,7 +117,10 @@ page: mymake_test
 
     $call parse_args
     $call prepare_testing
-    $call run_tests
+    $if $ENV{skip_test} eq "custom"
+        $call run_tests_custom
+    $else
+        $call run_tests
 
 # ----------------
 # print out a stage header
@@ -164,7 +167,6 @@ subcode: each_ch_file
     my @files
     $foreach $dir in qw($(mpi_src_dirs))
         $call find_files, src/$dir, *.[ch]
-    $call load_err_patterns
     $foreach $f in @files
         BLOCK
 

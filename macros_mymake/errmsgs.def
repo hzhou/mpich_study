@@ -7,6 +7,7 @@ subcode: defmsg_h
     &call each_name_file, errnames.txt
         $call get_errnames, $f
     $(if:!skip_usage)
+        $call load_err_patterns
         &call each_ch_file
             $call get_err_usage, $f
         # src/util/cvar/mpir_cvars.c

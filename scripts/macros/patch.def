@@ -9,9 +9,10 @@ subcode: patch_frame
     $call grep_$(patch)
 
     $foreach $f in @files
-        $print patching $f... -
-        my $cnt = patch($f)
-        $print $cnt changes
+        $if $f
+            $print patching $f... -
+            my $cnt = patch($f)
+            $print $cnt changes
 
 fncode: patch($f)
     $call get_file_lines, $f

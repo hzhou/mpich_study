@@ -1,0 +1,49 @@
+subcode: report_make_log
+    my @make_log
+    $if $ENV{compiler}=~/intel/
+        $call parse_make_log_icc
+    $else
+        $call parse_make_log
+    my $n_fails = @make_log
+    my $n_tests = $n_fails+1
+    &call open_W, summary.junit.xml
+        $print <testsuites>
+        $print <testsuite failures="$n_fails" errors="0" skipped="0" tests="$n_tests" name="warning">
+        my $dur = $time_finish-$time_start
+        $print <testcase name="1 - build" time="$dur"></testcase>
+        my $i = 1
+        $foreach $t in @make_log
+            $i++
+            $t=~s/"//g
+            $t=~s/</&lt;/g
+            $t=~s/>/&gt;/g
+            $if $t=~/^(\S+):(\d+):/
+                $print <testcase name="$1:$2">
+            $elif $t=~/^(\S+)\((\d+)\):/
+                $print <testcase name="$1:$2">
+            $else
+                $print <testcase name="$i">
+            $print <failure message="$t">
+            # $print <![CDATA[$t]]>
+            $print </failure>
+            $print </testcase>
+        $print </testsuite>
+        $print </testsuites>
+
+    subcode: parse_make_log
+        my $f="make.log"
+        $if $ENV{outoftree} eq "true"
+            $f="build/make.log"
+        &call open_r, $f
+            $if /^(\S+:\d+:\s*(error|warning):\s*.*)/ -> $t
+                # gcc
+                push @make_log, $t
+
+    subcode: parse_make_log_icc
+        &call open_r, make.log
+            $if /^(\S+\(\d+\): (error|warning) #\d+:\s*.*)/ -> $t
+                $if $t=~/warning #177:/
+                    # label "xxx" was declared but never referenced
+                $else
+                    push @make_log, $t
+

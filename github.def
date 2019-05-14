@@ -44,6 +44,7 @@ page: pr_signoff
     my $t = `git fetch gh-$author 2>&1`
     my $t = `git checkout -b $branch gh-$author/$branch 2>&1`
 
+    $print :    git rebase master ...
     my $t = `git rebase master`
     $if $?
         die "Failed rebasing master:\n$t"

@@ -1,25 +1,46 @@
 subcode: PrepareEnv
-    export PATH=/nfs/gce/software/spack/bin:$PATH
-    export MODULEPATH="/nfs/gce/software/spack/share/spack/lmod/linux-centos7-x86_64/Core:/nfs/gce/software/custom/linux-centos7-x86_64/modulefiles"
-    # source /nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/lmod-7.8-wch6ykd/lmod/lmod/init/bash
+    export UCX_NET_DEVICES=mlx5_0:1
     
 subcode: SetCompiler
     # gcc-8, osx-gcc ...
     case $compiler in
-        gcc|gnu)
+        gnu|gcc|gcc-4*)
             CC=gcc
             CXX=g++
             F77=gfortran
             FC=gfortran
             ;;
-        clang)
+        gcc-8*)
+            export PATH=$HOME/software/gcc-8/bin:$PATH
+            export LD_LIBRARY_PATH=$HOME/software/gcc-8/lib64:$LD_LIBRARY_PATH
+            CC=gcc-8
+            CXX=g++-8
+            F77=gfortran-8
+            FC=gfortran-8
+            ;;
+        clang|clang-3*)
             CC=clang
             CXX=clang++
             F77=gfortran
             FC=gfortran
             ;;
+        clang-8*)
+            export PATH=$HOME/software/clang-8/bin:$PATH
+            export LD_LIBRARY_PATH=$HOME/software/gcc-8/lib64:$HOME/software/clang-8/lib:$LD_LIBRARY_PATH
+            CC=clang-8
+            CXX=clang++
+            F77=gfortran
+            FC=gfortran
+            ;;
         intel)
-            module load intel-parallel-studio
+            $(if:0)
+                source /etc/profile.d/spack.sh
+                module load intel-parallel-studio
+            $(else)
+                #intel=/nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-4.8.5/intel-parallel-studio-professional.2019.1-vqb6is2
+                intel=/nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-6.5.0/intel-parallel-studio-professional.2019.3-xfiyvwh
+                export PATH=$intel/bin:$PATH
+                export INTEL_LICENSE_FILE=28518@lic001.cels.anl.gov
             CC=icc
             CXX=icpc
             F77=ifort

@@ -85,7 +85,7 @@ subcode: need_opa
         push @t, "autoreconf -ivf"
         # check --with-atomic-primitives [auto_allow_emulation]
         push @t, "./configure --disable-versioning --enable-embedded"
-    $call add_subdir_make, $(Dopa), $(Lopa), $(Hmpl)
+    $call add_subdir_make, $(Dopa), $(Lopa), $(Hopa)
 
 subcode: filter_var_mpl_etc
     $t=~s/-I.*\/(mpl|openpa|romio)\/\S+\s*//g

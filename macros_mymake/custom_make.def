@@ -81,7 +81,7 @@ subcode: parse_Makefile(makefile)
 subcode: dump_custom_make
     $if @CONFIGS
         $global @CONFIGS
-        $print "CONFIGS = @CONFIGS"
+        $call P, "CONFIGS = @CONFIGS"
         $print
     $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
     $print
@@ -108,7 +108,7 @@ subcode: dump_custom_make
     $call @custom_make_extra
     $global @extra_make_rules
     $foreach $l in @extra_make_rules
-        $print $l
+        $call P, $l
     $print "\x23 --------------------\n"
     $print "%.o: %.c"
     $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
@@ -174,17 +174,23 @@ subcode: dump_custom_make
 
 
     # ----------------------------
+    subcode: P(@line)
+        $(if:line!=$l)
+            my $l = $(line)
+        $l=~s/$moddir/\x24(MODDIR)/g
+        $print $l
+
     subcode: dump_variable(key)
         my $t = get_object("$(key)")
         $call @dump_variable_custom
-        $print "$(key) = $t"
+        $call P, "$(key) = $t"
 
     subcode: dump_object(key, tlist)
         $print "$(key) = \\"
         my $last_item = pop $(tlist)
         $foreach $t in $(tlist)
-            $print "    $t \\"
-        $print "    $last_item"
+            $call P, "    $t \\"
+        $call P, "    $last_item"
 
         $if @CONFIGS and "$(key)"=~/_OBJECTS$/
             $print "\x24($(key)): \x24(CONFIGS)"

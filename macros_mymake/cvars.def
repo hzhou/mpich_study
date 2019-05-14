@@ -217,8 +217,9 @@ subcode: each_cvar
             $print "        $c (0 == strcmp(tmp_str, \"$t\"))"
             $print "            $v = $v\_$t;"
             $c = "else if"
-        $print "        else"
-        $print "            MPIR_ERR_CHKANDJUMP1(1,mpi_errno,MPI_ERR_OTHER,\"**envvarparse\",\"**envvarparse %s\",\"$v: bad enum value\");"
+        $(if:0)
+            $print "        else"
+            $print "            MPIR_ERR_CHKANDJUMP1(1,mpi_errno,MPI_ERR_OTHER,\"**envvarparse\",\"**envvarparse %s\",\"$v: bad enum value\");"
         $print "    }"
 
 subcode: parse_yaml_block_in_t
@@ -302,10 +303,12 @@ subcode: dump_cvars_h
                 $print "extern $type $v;"
                 $if $h->{enum}
                     $print "enum $v\_choice {"
-                    my $last = pop @{$h->{enum}}
-                    $foreach $a in @{$h->{enum}}
-                        $print "    $v\_$a,"
-                    $print "    $v\_$last"
+                    my $n = @{$h->{enum}}
+                    $foreach $i,$a in @{$h->{enum}}
+                        $if $i<$n-1
+                            $print "    $v\_$a,"
+                        $else
+                            $print "    $v\_$a"
                     $print "};"
             $print
 

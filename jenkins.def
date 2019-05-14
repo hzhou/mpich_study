@@ -1,13 +1,274 @@
-
 include: macros_mymake/jenkins_old.def
 include: macros_mymake/jenkins_new.def
-include: macros_mymake/test_utils.def
+include: macros_mymake/test_config.def
+include: macros_mymake/test_makelog.def
+include: macros_mymake/test_random.def
 output_dir: ./mymake
 
 macros: 
     # test_worker: sh mymake/test-worker.sh
     test_worker: perl mymake/test_mymake.pl
 
+#---------------------------------------- 
+page: test_mymake
+    module: perl
+
+    $call set_mymake_dir
+    # my $compiler = $ENV{compiler}
+    # my $config = $ENV{config}
+    $call @test_mymake_config
+    $call set_N_MAKE_JOBS
+
+    $call @dump_config
+
+    $print Running $mymake_dir/$test_script.sh...
+    my $time_start=time()
+    my $ret = system "bash -xe $mymake_dir/$test_script.sh"
+    my $time_finish=time()
+    $if $ret
+        $ret = $?>>8
+    $else
+        $call report_make_log
+
+    $call @CollectResults
+
+    exit $ret
+    
+    subcode: dump_config
+        $print test_mymake.pl:
+        $(for:jenkins,mymake_dir,compiler,config,queue,mpich_device,mpich_config,testmpi_config,N_MAKE_JOBS,SLURM_SUBMIT_HOST,SLURM_SUBMIT_DIR,outoftree)
+            $print "    $1: $ENV{$1}"
+        $(for:test_script)
+            $print "    $1: $$1"
+
+    subcode: set_N_MAKE_JOBS
+        $if $ENV{N_MAKE_JOBS} > 0
+            # user knows the best
+        $else
+            my $n = 16
+            my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
+            $if $cpu_count=~/^(\d+)/
+                $n= $1
+            $ENV{N_MAKE_JOBS}=$n
+
+page: test_build.sh
+    module: general
+
+    &call test_frame
+        git submodule update --init --recursive
+        sh autogen.sh
+        if test x$outoftree = xtrue ; then
+            mkdir build
+            cd build
+            ../configure --prefix=$PREFIX $mpich_config $testmpi_config
+        else
+            ./configure --prefix=$PREFIX $mpich_config $testmpi_config
+        fi
+        $call run_make
+        make install
+        $MPIEXEC -n 2 examples/cpi
+
+        &call test_testing
+            cd test/mpi
+            $call run_make_testing
+
+    subcode: run_make_testing
+        if test x$skip_test = xcustom ; then
+            $call copy_custom_testlist
+            make V=1 testing
+        else
+            $call apply_xfail
+            make testing
+        fi
+
+        subcode: copy_custom_testlist
+            # cp -v testlist testlist.orig
+            if test x$outoftree = xtrue ; then
+                cp -v ../../../test/mpi/testlist.custom testlist
+            else
+                cp -v testlist.custom testlist
+            fi
+
+        subcode: apply_xfail
+            perl $mymake_dir/apply_xfail.pl conf=maint/jenkins/xfail.conf netmod=$mpich_device queue=ib64 compiler=gnu config=default
+
+
+page: test_quick.sh
+    module: general
+
+    export LD=ld.gold
+    &call test_frame
+        $call copy_modules
+        perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
+        ls -lt
+        $call run_make
+        make install
+        $call run_make, hydra
+        make hydra-install
+
+        &call test_testing
+            cp -r confdb/ test/mpi/confdb/
+            cp maint/version.m4 test/mpi/
+            cd test/mpi
+            sh autogen.sh
+            autoreconf -ivf
+            ./configure $testmpi_config
+            $call run_make_testing
+
+    subcode: copy_modules
+        export MODDIR=$PWD/modules
+        mkdir -p $MODDIR
+        pushd $MODDIR
+        tar xf $mymake_dir/modules.tar.gz
+        $(if:1)
+            pushd ucx
+            find . -name '*.la' |xargs --verbose sed -i "s,/var/lib/jenkins-slave/workspace/hzhou-modules,$MODDIR,g"
+            popd    
+        popd
+
+    subcode: run_make_testing
+        if test x$skip_test = xcustom ; then
+            perl $mymake_dir/runtests.pl -tests=testlist.custom -junitfile=summary.junit.xml
+        else
+            perl $mymake_dir/runtests.pl -tests=testlist,testlist.dtp -junitfile=summary.junit.xml
+        fi
+
+page: build_modules.sh
+    module: general
+
+    uname -a
+
+    git clone https://github.com/pmodels/hwloc
+    git clone https://github.com/pmodels/izem
+    git clone https://github.com/pmodels/ucx
+    git clone https://github.com/ofiwg/libfabric
+
+    $call config, hwloc, --enable-embedded-mode --enable-visibility
+    $call config, izem, --enable-embedded
+    $call config, ucx, --disable-shared --with-pic
+    $call config, libfabric, --enable-embedded
+
+    tar czf modules.tar.gz hwloc izem ucx libfabric
+
+    subcode: config(dir, option)
+        cd $(dir)
+        $(if:dir=ucx)
+            mkdir -p config/m4 config/aux
+            autoreconf -iv
+        $(else)
+            sh autogen.sh
+        ./configure $(option)
+        make -j 16
+        cd ..
+
+#---------------------------------------- 
+subcode: test_frame
+    set -x
+
+    $call test_prepare
+    set -o pipefail
+    BLOCK
+
+    subcode: run(cmd)
+        $(cmd) 2>&1 || exit 1
+
+    subcode: run_make(@target)
+        make -j$N_MAKE_JOBS $(target) 2>&1 | tee -a make.log
+        if test "$?" != "0"; then
+            exit $?
+        fi
+
+    subcode: mult_call(proc)
+        if test x$jenkins = xold ; then
+            $call $(proc)_old
+        else
+            $call $(proc)
+        fi
+    subcode: test_prepare
+        $call pre_check
+        $call mult_call, PrepareEnv
+        if test -d $HOME/software/autotools/bin; then
+            export PATH=$HOME/software/autotools/bin:$PATH
+        fi
+
+        if test -n $compiler ; then
+            $call mult_call, SetCompiler
+        fi
+        $(for:autoconf,automake,libtool)
+            which $1
+            $1 --version
+        $(for:CC,CXX,F77,FC)
+            export $1
+            which $$1
+            $$1 --version
+        WORKSPACE=$PWD
+        SRC=$PWD
+        # $call prepare_from_tarball
+        PREFIX=$WORKSPACE/_inst
+        MPIEXEC=$PREFIX/bin/mpiexec
+
+        subcode: pre_check
+            hostname
+            date
+            uptime
+            pgrep mpiexec | wc -l
+
+    subcode: test_testing
+        export PATH=$PREFIX/bin:$PATH
+        export CPATH=$PREFIX/include:$CPATH
+        export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
+        # check memory info
+        free
+
+        if test x$skip_test = xtrue ; then 
+            exit 0
+        else
+            BLOCK
+        fi
+
+#---------------------------------------- 
+page: apply_xfail
+    module: perl
+    my %opt
+    $foreach $a in @ARGV
+        $if $a=~/(\w+)=(\S+)/
+            $opt{$1}=$2
+
+    $if !$opt{netmod}
+        $opt{netmod}="ch3:tcp"
+
+    $if !-f $opt{conf}
+        $print No config file exist, exit.
+        exit 0
+
+    my @C=($opt{job}, $opt{compiler}, $opt{config}, $opt{netmod}, $opt{queue})
+    &call open_r, $opt{conf}
+        $if /^\s*([^# ].*\S)\s*(sed .*)/
+            my $cmd = $2
+            my @cond=split /\s+/, $1
+            my $mismatch
+            $for $i=0:5
+                $if $cond[$i] ne '*' && $cond[$i] ne $C[$i]
+                    $mismatch=1
+                    last
+            $if !$mismatch
+                $cmd=~s/ test\/mpi\// /
+                $print " $cmd"
+                system $cmd
+
+#---------------------------------------- 
+subcode: set_mymake_dir
+    my $mymake_dir = $ENV{mymake_dir}
+    $if ! $mymake_dir
+        $if $0=~/^(\/.*)\//
+            $mymake_dir = $1
+        $elif $0=~/^(.*)\//
+            my $pwd=`pwd`
+            chomp $pwd
+            $mymake_dir .= "$pwd/$1"
+        $ENV{mymake_dir}=$mymake_dir
+
+#---------------------------------------- 
 page: jenkins.sh
     module: general
 
@@ -61,278 +322,3 @@ page: run_pr
                     $author = $1
                     $branch = $2
                     last
-#---------------------------------------- 
-page: test_mymake
-    module: perl
-
-    $call set_mymake_dir
-    $global @mpich_config, @testmpi_config
-    # my $compiler = $ENV{compiler}
-    # my $queue = $ENV{queue}
-    # my $config = $ENV{config}
-    $call parse_config
-    $call parse_trigger_phrase
-    $call @set_missing_default
-    $call filter_config
-    $call set_N_MAKE_JOBS
-
-    $call @dump_config
-
-    my $time_start=time()
-    my $ret = system "bash -xe $mymake_dir/$test_script.sh"
-    my $time_finish=time()
-    $if $ret
-        $ret = $?>>8
-    $else
-        $call report_make_log
-
-    $call @CollectResults
-
-    exit $ret
-    
-    subcode: dump_config
-        $print test_mymake.pl:
-        $(for:mymake_dir,compiler,config,queue,mpich_config,testmpi_config,N_MAKE_JOBS,test_script,SLURM_SUBMIT_HOST,SLURM_SUBMIT_DIR)
-            $print "    $1: $ENV{$1}"
-
-    subcode: set_missing_default
-        my $test_script = $ENV{test_script}
-        $if !$test_script
-            $test_script = "test_quick"  # or "test_build"
-
-        $if !$ENV{compiler}
-            $ENV{compiler}='gnu'
-
-        $if !@mpich_config
-            push @mpich_config, "--disable-fortran", "--disable-romio"
-
-    subcode: parse_config
-        my $config = $ENV{config}
-        $config=~s/[\/-]/:/g
-        $if $config=~/^(default|ch3:tcp)/
-            NOOP
-        $elif $config=~/^ch[34]/
-            push @mpich_config, "--with-device=$config"
-        $elif $config eq "stricterror"
-            push @mpich_config, "--enable-strict=error"
-
-    subcode: parse_trigger_phrase
-        my $trigger_phrase = $ENV{ghprbCommentBody} . ' ' . $ENV{configOption}
-        $while $trigger_phrase =~/(--(enable|disable|with|without)-\S+)/g
-            push @mpich_config, $1
-
-
-    subcode: report_make_log
-        my @make_log
-        $call parse_make_log
-        my $n_fails = @make_log
-        my $n_tests = $n_fails+1
-        &call open_W, summary.junit.xml
-            $print <testsuites>
-            $print <testsuite failures="$n_fails" errors="0" skipped="0" tests="$n_tests" name="build">
-            my $dur = $time_finish-$time_start
-            $print <testcase name="1 - build" time="$dur"></testcase>
-            my $i = 1
-            $foreach $t in @make_log
-                $i++
-                $print <testcase name="$i">
-                $print <failure message="$t"></failure>
-                $print </testcase>
-            $print </testsuite>
-            $print </testsuites>
-
-        subcode: parse_make_log
-            &call open_r, make.log
-                $if /^(\S+:\d+:\s*(error|warning):\s*.*)/
-                    push @make_log, $1
-
-    subcode: set_N_MAKE_JOBS
-        my $n = 16
-        $(if:0)
-            my $cpu_count = `grep -c -P '^processor\\s+:' /proc/cpuinfo`
-            $if $cpu_count=~/^(\d+)/
-                $n= $1
-        $ENV{N_MAKE_JOBS}=$n
-
-    subcode: filter_config
-        $if @mpich_config
-            my (%config_hash)
-            $foreach $t in @mpich_config
-                my $k=$t
-                $k=~s/=.*$//
-                $k=~s/^--(disable|enable|with|without)-//
-                $if $config_hash{$k}
-                    $t=''
-                    next
-                $config_hash{$k}=1
-                
-                $if $t=~/--(disable|enable)-(.*-tests)/
-                    push @testmpi_config, $t
-                    $t=''
-                    next
-
-                $if $t=~/ch3:sock/
-                    push @testmpi_config, "--disable-ft-tests"
-                    push @testmpi_config, "--disable-comm-overlap-tests"
-                    next
-
-                $if $t=~/--disable-(romio|fortran)/
-                    push @testmpi_config, $t
-
-            # -----------------------------
-            my $t = join(' ', @mpich_config)
-            $if $t=~/gforker/ 
-                $if $t!~/--with-namepublisher/
-                    $t .= " --with-namepublisher=file"
-                $else
-                    $t=~s/--with-pm=gforker//
-            $ENV{mpich_config}=$t
-
-        push @testmpi_config, "--disable-ft-tests"
-        push @testmpi_config, "--disable-perftest"
-        $if @testmpi_config
-            my $t=join ' ', @testmpi_config
-            $ENV{testmpi_config} = $t
-
-page: test_build.sh
-    module: general
-
-    &call test_frame
-        git submodule update --init --recursive
-        $call run, sh autogen.sh
-        $call run, ./configure --prefix=$PREFIX $mpich_config
-        $call run_make
-        $call run, make install
-        $call run, $MPIEXEC -n 2 examples/cpi
-
-        &call test_testing
-            cd test/mpi
-            # $call run, sh autogen.sh
-            # $call run, ./configure $testmpi_config
-            make testing
-
-page: test_quick.sh
-    module: general
-
-    &call test_frame
-        $call copy_modules
-        $call run, perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
-        $call run_make
-        $call run, make install
-        $call run_make, hydra
-        $call run, make hydra-install
-
-        &call test_testing
-            $call run, make test
-
-    subcode: copy_modules
-        export MODDIR=$PWD/modules
-        mkdir -p $MODDIR
-        pushd $MODDIR
-        tar xf $mymake_dir/modules.tar.gz
-        $(if:1)
-            pushd ucx
-            make clean
-            
-        popd
-
-page: build_modules.sh
-    module: general
-
-    uname -a
-
-    git clone https://github.com/pmodels/hwloc
-    git clone https://github.com/pmodels/izem
-    git clone https://github.com/pmodels/ucx
-    git clone https://github.com/ofiwg/libfabric
-
-    $call config, hwloc, --enable-embedded-mode --enable-visibility
-    $call config, izem, --enable-embedded
-    $call config, ucx, --disable-shared --with-pic
-    $call config, libfabric, --enable-embedded
-
-    tar czf modules.tar.gz hwloc izem ucx libfabric
-
-    subcode: config(dir, option)
-        cd $(dir)
-        $(if:dir=ucx)
-            mkdir -p config/m4 config/aux
-            autoreconf -iv
-        $(else)
-            sh autogen.sh
-        ./configure $(option)
-        make -j 16
-        cd ..
-
-#---------------------------------------- 
-subcode: test_frame
-    $call test_prepare
-    set -o pipefail
-    BLOCK
-
-    subcode: run(cmd)
-        $(cmd) 2>&1 || exit 1
-
-    subcode: run_make(@target)
-        make -j$N_MAKE_JOBS $(target) 2>&1 | tee -a make.log
-        if test "$?" != "0"; then
-            exit $?
-        fi
-
-    subcode: mult_call(proc)
-        if test -n $jenkins_old ; then
-            $call $(proc)_old
-        else
-            $call $(proc)
-        fi
-    subcode: test_prepare
-        $call pre_check
-        $call mult_call, PrepareEnv
-        if test -d $HOME/software/autotools/bin; then
-            export PATH=$HOME/software/autotools/bin:$PATH
-        fi
-
-        if test -n $compiler ; then
-            $call mult_call, SetCompiler
-        fi
-        $(for:autoconf,automake,libtool)
-            which $1
-            $1 --version
-        $(for:CC,CXX,F77,FC)
-            export $1
-            which $$1
-            $$1 --version
-        WORKSPACE=$PWD
-        SRC=$PWD
-        # $call prepare_from_tarball
-        PREFIX=$WORKSPACE/_inst
-        MPIEXEC=$PREFIX/bin/mpiexec
-
-        subcode: pre_check
-            hostname
-            date
-            uptime
-            pgrep mpiexec | wc -l
-
-    subcode: test_testing
-        if test x$skip_test = x1 ; then 
-            exit 0
-        else
-            export PATH=$PREFIX/bin:$PATH
-            export CPATH=$PREFIX/include:$CPATH
-            export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
-            BLOCK
-        fi
-
-#---------------------------------------- 
-subcode: set_mymake_dir
-    my $mymake_dir = $ENV{mymake_dir}
-    $if ! $mymake_dir
-        $if $0=~/^(\/.*)\//
-            $mymake_dir = $1
-        $elif $0=~/^(.*)\//
-            my $pwd=`pwd`
-            chomp $pwd
-            $mymake_dir .= "$pwd/$1"
-        $ENV{mymake_dir}=$mymake_dir
-

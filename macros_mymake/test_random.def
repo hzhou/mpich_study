@@ -1,0 +1,52 @@
+subcode: RandomConfig
+    my @enable_array=(
+        'error-checking;no;runtime;all',
+        'error-messages;all;generic;class;none',
+        'timer-type;linux86_cycle;clock_gettime;gettimeofday',
+        'timing;none;all;runtime;log;log_detailed',
+        'g;none;all;handle;dbg;log;meminit;handlealloc;instr;mem;mutex;mutexnesting',
+        'fast;O0;O1;O2;O3;ndebug;all;yes;none',
+        'fortran',
+        'cxx',
+        'romio',
+        'check-compiler-flags',
+        'strict;c99;posix',
+        'debuginfo',
+        'weak-symbols;no;yes',
+        'threads;single;multiple;runtime',
+        'thread-cs;global',
+        'refcount;lock-free;none',
+        'mutex-timing',
+        'handle-allocation;tls;mutex',
+        'multi-aliases',
+        'predefined-refcount',
+        'alloca',
+        'yield;sched_yield;select',
+        'runtimevalues',
+    )
+    my @with_array=(
+        'logging;none',
+        'pmi;simple',
+        'pm;gforker',
+        'namepublisher;no;file',
+        'device;ch3;ch3:sock',
+        'shared-memory;sysv',
+    )
+    $call rand_array, enable_array, enable, disable
+    $call rand_array, with_array, with, without
+
+    subcode: rand_array(array, opt, neg)
+        $foreach $o in @$(array)
+            $if rand(10)>5
+                next
+            my @parts=split /;/, $o
+            my $n=@parts
+            $if $n==1
+                $if rand(10)>5
+                    push @mpich_config, "--$opt-$o"
+                $else
+                    push @mpich_config, "--$neg-$o"
+            $else
+                my $i = int(rand($n)-1)+1
+                push @mpich_config, "--$opt-$parts[0]=$parts[$i]"
+
