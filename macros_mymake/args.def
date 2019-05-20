@@ -56,6 +56,10 @@ subcode: parse_args
             $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
                 $opts{do}=$1
 
+        $(for:CC,CXX,F77,FC)
+            $if $opts{$1}
+                $ENV{$1}=$opts{$1}
+
 #----------------------
 subcode: load_last_ARGV
     my $need_save_args
