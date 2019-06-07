@@ -50,11 +50,6 @@ subcode: copy_subdir_module(dir)
             $(if:dir=mpl or dir=opa)
                 $call do_cmd, cp -r confdb $(D$(dir))/
 
-subcode: do_cmd(@cmd)
-    my $cmd = "$(cmd)"
-    $print $cmd
-    system $cmd
-
 #---------------------------------------- 
 subcode: need_mpl
     $call copy_subdir_module, mpl 
@@ -96,16 +91,28 @@ subcode: filter_lib_mpl_etc
 
 #---------------------------------------- 
 subcode: need_romio
-    $(if:0)
-        # not ready yet, need test
-        $I_list .= " -I$(Iromio)"
-        $L_list .= " $(Lromio)"
-        push @CONFIGS, "$(Hromio)"
+    system "rsync -r confdb/ $(Dromio)/confdb/" 
+    system "cp maint/version.m4 $(Dromio)/"
+    my @t_env 
+    push @t_env, "FROM_MPICH=yes"
+    push @t_env, "master_top_srcdir=$pwd"
+    push @t_env, "master_top_builddir=$pwd"
+    push @t_env, "CPPFLAGS='-I$(Impl)'"
+    # # mpl
+    # &call modify, configure.ac
+
+    $I_list .= " -I$(Iromio)"
+    $L_list .= " $(Lromio)"
+    push @CONFIGS, "$(Hromio)"
     &call add_subdir_rule_block, $(Dromio), $(Hromio)
         push @t, "\x24(DO_stage) Configure ROMIO"
-        push @t, "sh autogen.sh"
-        push @t, "FROM_MPICH=yes ./configure"
+        # push @t, "sh autogen.sh"
+        push @t, "autoreconf -ivf"
+        push @t, "@t_env ./configure"
     $call add_subdir_make, $(Dromio), $(Lromio), $(Hromio)
+
+    $dst_hash{"$(Dromio)/include/mpio.h"} = "$prefix/include"
+    $dst_hash{"$(Dromio)/include/mpiof.h"} = "$prefix/include"
 
 subcode: filter_var_romio
 subcode: filter_lib_romio
@@ -213,8 +220,6 @@ subcode: filter_lib_ofi
 
 #---- common --------------------------- 
 subcode: chdir_subdir(dir)
-    my $pwd = `pwd`
-    chomp $pwd
     chdir "$(dir)" or die "can't chdir $(dir)\n"
     BLOCK
     chdir $pwd
@@ -229,3 +234,4 @@ subcode: add_subdir_rule_block(subdir, target, @dep)
 subcode: add_subdir_make(subdir, target, @dep)
     &call add_subdir_rule_block, $(subdir), $(target), $(dep)
         push @t, "\x24(MAKE)"
+

@@ -5,12 +5,6 @@ include: macros_mymake/mpich.def
 include: macros_mymake/hydra.def
 include: macros_mymake/testing.def
 
-macros:
-    # SRCDIR: $ENV{HOME}/work/mpich-compile
-    SRCDIR: $ENV{HOME}/work/mpich
-    MODDIR: $ENV{HOME}/work/modules
-    PREFIX: $ENV{HOME}/MPI
-
 output_dir: ./mymake
 
 page: mymake
@@ -183,3 +177,12 @@ subcode: hdr_guard(name)
     $print
     BLOCK
     $print "#endif /* $(name:uc)_H_INCLUDED */"
+
+subcode: do_cmd(@cmd)
+    $(if:cmd~")
+        my $cmd = $(cmd)
+    $(else)
+        my $cmd = "$(cmd)"
+    $print $cmd
+    system $cmd
+

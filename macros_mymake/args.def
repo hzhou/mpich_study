@@ -1,8 +1,9 @@
-#- findout mymake directory
-subcode: set_mymake
+subcode: _autoload
     my $pwd=`pwd`
     chomp $pwd
 
+#- findout mymake directory
+subcode: set_mymake
     my $mymake
     $if $0=~/^(\/.*)\//
         $mymake = $1
@@ -17,19 +18,43 @@ subcode: parse_args
     $call @set_opts_default
     $call @load_last_ARGV
     $call parse_ARGV
-    $if $ENV{MODDIR}
-        $moddir = $ENV{MODDIR}
-    NOOP
-    $call probe_srcdir
     $map opt_set, srcdir, moddir, prefix
+    $call set_moddir
+    $call probe_srcdir
+    $call set_prefix
+
+    subcode: set_moddir
+        my $mod_tarball = "modules.tar.gz"
+        $if $ENV{MODTARBALL}
+            $mod_tarball = $ENV{MODTARBALL}
+
+        $if $ENV{MODDIR}
+            $moddir = $ENV{MODDIR}
+        $elif -d "modules"
+            $moddir = "$pwd/modules"
+        $elif -e $mod_tarball
+            $moddir = "$pwd/modules"
+            $call do_cmd, mkdir $moddir
+            $call do_cmd, tar -C $moddir -xf $mod_tarball
+            $call do_cmd, find $moddir/ucx -name '*.la' | xargs sed -i \"s,MODDIR,$moddir/ucx,g\"
+        $else
+            die "moddir not set\n"
 
     subcode: probe_srcdir
+        NOOP
         $(for:.,..,../..,../../..)
             $case -f "$1/maint/version.m4"
                 $srcdir = "$1"
+        $if !$srcdir
+            die "srcdir not set\n"
+
+    subcode: set_prefix
+        $if !$prefix
+            $prefix="$pwd/_inst"
+            system "mkdir -p $prefix"
 
     subcode: opt_set(name)
-        $global $$(name) = "$($(name:uc))"
+        $global $$(name)
         $if $opts{$(name)}
             $$(name) = $opts{$(name)}
 
@@ -48,7 +73,14 @@ subcode: parse_args
                     push @config_args, $a
                 $elif $a=~/--(dis|en)able-.*tests/
                     push @test_config_args, $a
-                $elif $a=~/--diable-(romio|fortran)/
+                $elif $a=~/--disable-(romio|cxx|fortran)/
+                    $opts{"disable_$1"}=1
+                    $opts{"enable_$1"}=0
+                    push @config_args, $a
+                    push @test_config_args, $a
+                $elif $a=~/--enable-fortran=(\w+)/
+                    $opts{disable_fortran}=0
+                    $opts{enable_fortran}=$1
                     push @config_args, $a
                     push @test_config_args, $a
                 $else
@@ -66,6 +98,7 @@ subcode: load_last_ARGV
     $if !@ARGV && -f "mymake/args"
         $call get_file_in_t, mymake/args
         @ARGV = split /\s+/, $t
+        $print loading last ARGV: @ARGV
     $elif @ARGV
         # has to wait until mymake folder is made
         $need_save_args = 1

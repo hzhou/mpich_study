@@ -14,10 +14,6 @@ subcode: custom_make
     system "ln -s mymake/Makefile.custom Makefile"
 
 #---------------------------------------- 
-macros: 
-    LT: /bin/sh ./libtool --mode=$1 $lt_opt
-
-#---------------------------------------- 
 subcode: temporary_modify
     my @mod_list
     BLOCK
@@ -86,92 +82,153 @@ subcode: dump_custom_make
     $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
     $print
 
-    my $cc = get_object("CC")
-    my $ccld = get_object("CCLD")
-    my $LD="\x24(LINK)"
-
-    $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
-    $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-    $print "LTCC = $(LT:compile) \x24(COMPILE)"
-    $print "LTLD = $(LT:link) \x24(LINK)"
-    $print
+    $call dump_CC
+    $if !$opts{disable_cxx}
+        $call dump_cxx
+    $if !$opts{disable_fortran}
+        $call dump_fortran
 
     $call collect_programs_libs
+    # $call collect_mpi_fc_modules
 
     $print "all: @ltlibs @programs"
     $print
 
     $call dump_rules, ltlibs
     $call dump_rules, programs
-
-    $print "\x23 --------------------\n"
-    $call @custom_make_extra
-    $global @extra_make_rules
-    $foreach $l in @extra_make_rules
-        $call P, $l
-    $print "\x23 --------------------\n"
-    $print "%.o: %.c"
-    $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
-    $print
-    $print "%.lo: %.c"
-    $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
-    $print
-    $foreach %special_targets
-        $print "%.$k.lo: %.c"
-        $call quiet_rule, LTCC, $v -c -o \$\@ \$<
-        $print
-
-    # ----------------------
-    my (%dirs, @install_list, @install_deps, @lns_list)
-    $foreach %dst_hash
-        $if $k=~/^LN_S-(.*)/
-            push @lns_list, "rm -f $1 && ln -s $v $1"
-        $elif $v
-            $if !$dirs{$v}
-                $dirs{$v} = 1
-            $if $v=~/\/lib$/
-                push @install_list, "$(LT:install) install $k $v"
-                push @install_deps, $k
-            $elif $v=~/\/bin$/
-                push @install_list, "$(LT:install) install $k $v"
-                push @install_deps, $k
-
-    my $t1 = get_list("include_HEADERS")
-    my $t2 = get_list("nodist_include_HEADERS")
-    $if @$t1 or @$t2
-        $dirs{"$prefix/include"} = 1
-        my $t = join(' ', @$t1, @$t2)
-        push @install_list, "cp $t $prefix/include"
-
-    my @install_list = sort @install_list
-    $foreach $d in keys %dirs
-        unshift @install_list, "mkdir -p $d"
-    push @install_list, sort @lns_list
-
-    $if @install_list
-        $print "\x23 --------------------\n"
-        $print ".PHONY: install"
-        $print "install: @install_deps"
-        $foreach $l in @install_list
-            $print "\t$l"
-        $print
-    # --------------------
-    $print "\x23 --------------------\n"
-    $print ".PHONY: clean realclean realrealclean"
-    $print "clean:"
-    $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
-    $print
-    $print "realclean: clean"
-    $print "\t\x24(DO_clean)"
-    $print
+    $call dump_extra
+    $call dump_implicit
+    $call dump_install
+    $call dump_clean
 
     # ----------------------------
+    macros: 
+        LT: /bin/sh ./libtool --mode=$1 $lt_opt
+
+    subcode: dump_CC
+        my $cc = get_object("CC")
+        my $ccld = get_object("CCLD")
+
+        $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
+        $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $print "LTCC = $(LT:compile) \x24(COMPILE)"
+        $print "LTLD = $(LT:link) \x24(LINK)"
+        $print
+
+    subcode: dump_cxx
+        my $cxx = get_object("CXX")
+        my $flags = get_object("CXXFLAGS")
+        my $am_flags = get_object("AM_CXXFLAGS")
+        $print "CXXCOMPILE = $cxx \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) $flags $am_flags"
+        $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
+
+        my $cxxld = get_object("CXXLD")
+        $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $print
+
+    # FIXME: add -module src/binding/fortran/use_mpi
+    #    or modify to install modules from srcdir
+    subcode: dump_fortran
+        $(for:F77,FC and F,FC)
+            my $fc = get_object("$1")
+            my $flags = get_object("$2FLAGS")
+            my $am_flags = get_object("AM_$2FLAGS")
+            $flags.=" $am_flags"
+            $if $flags=~/-I(\S+)/ -> $modpath
+                $flags.=" -J$modpath"
+            $print "$1COMPILE = $fc $flags"
+            $print "LT$1 = $(LT:compile) \x24($1COMPILE)"
+
+            my $ld = get_object("$1LD")
+            $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+            $print
+
+    subcode: dump_extra
+        $print "\x23 --------------------\n"
+        $call @custom_make_extra
+        $global @extra_make_rules
+        $foreach $l in @extra_make_rules
+            $call P, $l
+
+    subcode: dump_implicit
+        $print "\x23 --------------------\n"
+        $print "%.o: %.c"
+        $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
+        $print
+        $print "%.lo: %.c"
+        $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
+        $print
+        $if !$opts{disable_cxx}
+            $print "%.lo: %.cxx"
+            $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<
+            $print
+        $if !$opts{disable_fortran}
+            $print "%.lo: %.f"
+            $call quiet_rule, LTF77, \x24(LTF77) -c -o \$\@ \$<
+            $print
+            $print "%.lo: %.f90"
+            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+            $print
+        $foreach %special_targets
+            $print "%.$k.lo: %.c"
+            $call quiet_rule, LTCC, $v -c -o \$\@ \$<
+            $print
+        $print "%.i: %.c"
+        $call quiet_rule, CC -E, \x24(COMPILE) -CC -E -o \$\@ \$<
+        $print
+
+    subcode: dump_install
+        my $t1 = get_list("include_HEADERS")
+        my $t2 = get_list("nodist_include_HEADERS")
+        my $t3 = get_list("modinc_HEADERS")
+        $if @$t1 or @$t2 or @$t3
+            $foreach $t in @$t1, @$t2, @$t3
+                $dst_hash{$t} = "$prefix/include"
+
+        my (%dirs, @install_list, @install_deps, @lns_list)
+        $foreach %dst_hash
+            $if $k=~/^LN_S-(.*)/
+                push @lns_list, "rm -f $1 && ln -s $v $1"
+            $elif $v
+                $if !$dirs{$v}
+                    $dirs{$v} = 1
+                $if $v=~/\/lib$/
+                    push @install_list, "$(LT:install) install $k $v"
+                    push @install_deps, $k
+                $elif $v=~/\/bin$/
+                    push @install_list, "$(LT:install) install $k $v"
+                    push @install_deps, $k
+                $elif $v=~/\/include$/
+                    push @install_list, "cp $k $v"
+
+        my @install_list = sort @install_list
+        $foreach $d in keys %dirs
+            unshift @install_list, "mkdir -p $d"
+        push @install_list, sort @lns_list
+
+        $if @install_list
+            $print "\x23 --------------------\n"
+            $print ".PHONY: install"
+            $print "install: @install_deps"
+            $foreach $l in @install_list
+                $print "\t$l"
+            $print
+
+    subcode: dump_clean
+        $print "\x23 --------------------\n"
+        $print ".PHONY: clean realclean realrealclean"
+        $print "clean:"
+        $print "\t(find . $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
+        $print
+        $print "realclean: clean"
+        $print "\t\x24(DO_clean)"
+        $print
+
     subcode: quiet_rule(cmd, @rule)
         $if $opts{V}==0
             $print \t\@echo $(cmd) \$\@ && $(rule)
         $else
             $print \t$(rule)
-
 
     # ----------------------------
     subcode: P(@line)
@@ -202,6 +259,7 @@ subcode: dump_custom_make
             $dst_hash{$t} = "\x24(PREFIX)/lib"
         my $tlist = get_list("bin_PROGRAMS")
         $foreach $t in @$tlist
+            $call @custom_programs
             $dst_hash{$t} = "\x24(PREFIX)/bin"
         # -------------------
         $global @programs
@@ -217,10 +275,16 @@ subcode: dump_custom_make
             push @ltlibs, $t
 
     subcode: dump_rules(which)
-        my $cmd = "\x24(LTLD)"
-        $if $opts{V}==0
-            $cmd = "\@echo LTLD \$\@ && $cmd"
         $foreach $p in @$(which)
+            my $ld = "LTLD"
+            $if $p=~/libmpifort.la/
+                $ld = "F77LD"
+            $elif $p=~/libmpicxx.la/
+                $ld = "CXXLD"
+            my $cmd = "\x24($ld)"
+            $if $opts{V}==0
+                $cmd = "\@echo $ld \$\@ && $cmd"
+
             my $a = $p
             $a=~s/[\.\/]/_/g
 
@@ -281,6 +345,8 @@ subcode: dump_custom_make
             my @t
             $foreach $t in @$(tlist)
                 $if $t=~/^-l\w+/
+                    $objs.=" $t"
+                $elif $t=~/^-L\S+/
                     $objs.=" $t"
                 $else
                     push @t, $t

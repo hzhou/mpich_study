@@ -1,7 +1,7 @@
 page: pr_signoff
     module: perl
-    arg: 3767 wesley
-    # arg: 3721
+    # arg: 3767 wesley
+    arg: 3792 # just rebase to master
 
     my $ORG="pmodels"
     my $REPO="mpich"
@@ -12,17 +12,19 @@ page: pr_signoff
     $call @usage
     my $pr = $ARGV[0]
     my $by = $ARGV[1]
-    $if !$by
-        $by = $default_signoff
-    $if !$users{$by}
-        die "Signoff user '$by' un-recognized.\n"
+    $if $by
+        $if !$users{$by}
+            die "Signoff user '$by' un-recognized.\n"
+    $else
+        # NO signoff, just rebase master
+        # $by = $default_signoff
 
     # --------------------------
     my $curl = "curl"
     $call @get_oauth_token
     $call get_pr_info
     $print PR $pr - $author : $branch\n--------------\n
-    $if $by eq $author
+    $if $by && $by eq $author
         die "PR cannot be signed-off by author\n"
     # my $remote = "https://github.com/$author/$REPO.git"
     my $remote = "git\@github.com:$author/$REPO.git"
@@ -44,47 +46,19 @@ page: pr_signoff
     my $t = `git fetch gh-$author 2>&1`
     my $t = `git checkout -b $branch gh-$author/$branch 2>&1`
 
-    $print :    git rebase master ...
-    my $t = `git rebase master`
-    $if $?
-        die "Failed rebasing master:\n$t"
+    $call @echo_git, rebase master
+    $call @parse_commits
+    $if $by
+        $call @do_pr_signoff
+    $call @echo_git, push -f gh-$author $branch
 
-    my $t = `git log --oneline master..$branch`
-    my @commits
-    $while $t=~/^([0-9a-f]+)\s+(.+)/mg
-        $print :    commit $1: $2
-        push @commits, $1
-    my $n = @commits
-    $print :    $n commits.
+    #---------------------------------------- 
+    subcode: echo_git(@cmd)
+        $print :    git $(cmd) ...
+        my $t = `git $(cmd)`
+        $if $?
+            die "Failed '$(cmd)':\n$t"
 
-    # --------------------------
-    my $P="$ENV{HOME}/bin"
-    $ENV{GIT_SEQUENCE_EDITOR}="pr_signoff_seq"
-    $ENV{GIT_EDITOR}="pr_signoff_commit"
-    $ENV{signoff}=$users{$by}
-
-    # my $commit_mark = $commits[$n-1] # won't work, one-off
-    my $commit_mark="HEAD~$n"
-    my $t = `git rebase -i $commit_mark 2>&1`
-    $if $t=~/edit (\d+) commits/ && $1 eq $n
-        # OK
-    $else
-        system "git rebase --abort"
-        die "Inconsistent rebase: $t"
-
-    my $t
-    $for $i=0:$n
-        $print :    sign-off commit $commits[$i]
-        $t = `git commit --amend 2>&1`
-        $t = `git rebase --continue 2>&1`
-    $if $t=~/Successfully rebased/
-        $print :    sign-off successful.
-    $else
-        system "git rebase --abort"
-        die "Sign-off unsuccessful."
-        
-    # --------------------------
-    system "git push -f gh-$author $branch"
 
     #---------------------------------------- 
     subcode: usage
@@ -133,6 +107,42 @@ page: pr_signoff
             # $print $1 $2
             $remote_hash{$1} = $2
 
+    subcode: parse_commits
+        my $t = `git log --oneline master..$branch`
+        my @commits
+        $while $t=~/^([0-9a-f]+)\s+(.+)/mg
+            $print :    commit $1: $2
+            push @commits, $1
+        my $n = @commits
+        $print :    $n commits.
+
+    # -----------------------
+    subcode: do_pr_signoff
+        my $P="$ENV{HOME}/bin"
+        $ENV{GIT_SEQUENCE_EDITOR}="pr_signoff_seq"
+        $ENV{GIT_EDITOR}="pr_signoff_commit"
+        $ENV{signoff}=$users{$by}
+
+        # my $commit_mark = $commits[$n-1] # won't work, one-off
+        my $commit_mark="HEAD~$n"
+        my $t = `git rebase -i $commit_mark 2>&1`
+        $if $t=~/edit (\d+) commits/ && $1 eq $n
+            # OK
+        $else
+            system "git rebase --abort"
+            die "Inconsistent rebase: $t"
+
+        my $t
+        $for $i=0:$n
+            $print :    sign-off commit $commits[$i]
+            $t = `git commit --amend 2>&1`
+            $t = `git rebase --continue 2>&1`
+        $if $t=~/Successfully rebased/
+            $print :    sign-off successful.
+        $else
+            system "git rebase --abort"
+            die "Sign-off unsuccessful."
+            
 page: pr_signoff_seq
     module: perl
 

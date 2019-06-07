@@ -25,6 +25,9 @@ subcode: slurm_job_old
     exit 0
 
 subcode: PrepareEnv_old
+    if test -d $HOME/software/autotools/bin; then
+        export PATH=$HOME/software/autotools/bin:$PATH
+    fi
     case "$queue" in
         "ubuntu32")
             source /software/common/adm/etc/softenv-aliases.sh

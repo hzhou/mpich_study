@@ -57,4 +57,5 @@ subcode: grep_l(@pat)
     my @files
     &call open_r, $grep_cmd |
         chomp
+        $call @custom_grep_l
         push @files, $_

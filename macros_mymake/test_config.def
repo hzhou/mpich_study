@@ -21,7 +21,10 @@ subcode: test_mymake_config
 
         $call check_test_script
         $call check_mpich_config
-        $call check_custom_testlist
+        $if $trigger_phrase=~/^\s*skip_test\s*=\s*(1|true)/
+            $ENV{skip_test}="true"
+        $else
+            $call check_custom_testlist
         $call check_compiler
         $call check_other_options
 
@@ -48,7 +51,7 @@ subcode: test_mymake_config
                 $ENV{skip_test}="custom"
 
         subcode: check_compiler
-            $if $trigger_phrase=~/^\s*compiler\s*[:=]\s*(\w+)/m
+            $if $trigger_phrase=~/^\s*compiler\s*[:=]\s*([\w\-\.]+)/m
                 $ENV{compiler}=$1
 
         subcode: check_other_options
@@ -73,7 +76,7 @@ subcode: test_mymake_config
         $if $ENV{test_script} eq "test_quick"
             # push @mpich_config, "--disable-cxx"
             push @mpich_config, "--disable-fortran"
-            push @mpich_config, "--disable-romio"
+            # push @mpich_config, "--disable-romio"
 
         my (%config_hash)
         $if @mpich_config
@@ -115,7 +118,7 @@ subcode: test_mymake_config
                 push @testmpi_config, $t
                 $t=''
                 next
-            $elif $t=~/--disable-(romio|fortran)/
+            $elif $t=~/--disable-(romio|fortran|cxx)/
                 push @testmpi_config, $t
 
         subcode: per_device_config
