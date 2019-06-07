@@ -1,8 +1,0 @@
-page: t
-    module: perl
-
-    opendir DIR, "."
-    for my $file (sort readdir DIR) {
-        $print $file
-    }
-

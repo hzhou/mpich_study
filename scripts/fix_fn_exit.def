@@ -1,0 +1,21 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    # patch: FCNAME
+    patch: fnexit
+
+#---------------------------------------- 
+subcode: grep_fnexit
+    $call grep_l, 'fn_\\(exit\\|fail\\):\\s*\$'
+    $foreach $f in @files
+        $if $f!~/^.\/src\//
+            $f=undef
+        $elif $f=~/^.\/src\/pm/
+            $f=undef
+
+subcode: filter_lines_fnexit
+    $if $(l)=~/^(\s+)fn_(exit|fail):/ -> $sp, $label
+        $(l)=[$(l), $sp."  __attribute__((unused));\n"]
+        $cnt++
+

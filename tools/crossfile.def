@@ -1,0 +1,288 @@
+page: gen_cross
+    module: perl
+    # get_size: direct
+    get_size: hybrid
+
+    my @c_types=("void *", "char", "short", "int", "long", "long long", "size_t", "off_t", "float", "double", "long double")
+    $(if:get_size=direct or get_size=hybrid)
+        $call get_c_sizes_direct
+    $(else)
+        $call get_c_sizes_asm
+
+    my @range_kind_size
+    $call get_f90_kinds_direct
+
+    my @f77_type_names=qw(INTEGER REAL DOUBLE_PRECISION)
+    $foreach $i, $t in @range_kind_size
+        push @f77_type_names, "KIND-$i-$t->[1]"
+
+    $(if:get_size=direct)
+        $call get_f77_sizes_direct
+    $(elif:get_size=hybrid)
+        $call get_f77_sizes_hybrid
+    $(else)
+        $call get_f77_sizes_asm
+
+    $call get_f77_true_false_hybrid
+
+    my @f90_names=qw(ADDRESS_KIND OFFSET_KIND INTEGER_KIND REAL_MODEL DOUBLE_MODEL INTEGER_MODEL)
+    $global %cross_hash
+    $call get_f90_names_direct
+
+    &call open_W, cross_values.txt
+        $foreach $t in @c_types
+            my $name = get_type_name($t)
+            my $val = $cross_hash{$name}
+            my $var = "ac_cv_sizeof_$name"
+            $print $var=$val
+
+        $foreach $T in @f77_type_names
+            my $size = $cross_hash{$T}
+            $if $T=~/KIND-(\d+)-(\d+)/
+                $range_kind_size[$1]->[2]=$size
+            $else
+                $print CROSS_F77_SIZEOF_$T=$size
+
+        $foreach $t in "TRUE_VALUE", "FALSE_VALUE"
+            $print CROSS_F77_$t=$cross_hash{$t}
+
+        $foreach $name in @f90_names
+            $print CROSS_F90_$name=$cross_hash{$name}
+
+        my (@t1, @t2)
+        $foreach $t in @range_kind_size
+            push @t1, "$t->[0], $t->[1]"
+            push @t2, "{ $t->[0] , $t->[1] , $t->[2] }"
+        my $t1 = join(', ', @t1)
+        my $t2 = join(', ', @t2)
+        $print "CROSS_F90_ALL_INTEGER_MODELS=\"$t1\""
+        $print "CROSS_F90_INTEGER_MODEL_MAP=\"$t2\""
+            
+    system "rm -f t.f t.f90 t.s t t.mod t.o tlib.o"
+    system "cat cross_values.txt"
+    $print
+    $print Crossfile generated in cross_values.txt.
+    $print Pass to MPICH configure with --with-cross=path/to/cross_values.txt.
+
+subcode: _autoload
+    my $CC = $ENV{CC}
+    $if !$CC
+        $CC = "gcc"
+
+    my $F77 = $ENV{F77}
+    $if !$F77
+        $F77 = "gfortran"
+
+    my $FC = $ENV{FC}
+    $if !$FC
+        $FC = "gfortran"
+
+    $(for:CC,F77,FC)
+        $print $1: $$1
+
+#---------------------------------------- 
+fncode: get_type_name($type)
+    my $t = $type
+    $t=~s/ /_/g
+    $t=~s/\*/p/g
+    return $t
+
+subcode: get_c_sizes_direct
+    $call create_t_c
+    my $t=`$CC t.c -o t && ./t`
+    $while $t=~/A(\d+):\s+(\d+)/g
+        my $name = get_type_name($c_types[$1])
+        $cross_hash{$name} = $2
+
+    subcode: create_t_c
+        &call open_w, t.c
+            $(set:print_to=Out)
+            $print #include <stdio.h>
+            $print int main(){
+            $foreach $i,$type in @c_types
+                $print "    printf(\"A$i: %lu\\n\", sizeof($type));"
+            $print "    return 0;"
+            $print }
+
+subcode: get_c_sizes_asm
+    $call create_t_c
+    my $t=`$CC -S t.c -o t.s`
+    &call open_r, t.s
+        # .comm   A0,8,8
+        $if /.comm\s+A(\d+),(\d+),(\d+)/
+            my $name = get_type_name($c_types[$1])
+            $cross_hash{$name} = $2
+
+    subcode: create_t_c
+        &call open_w, t.c
+            $(set:print_to=Out)
+            $foreach $i,$type in @c_types
+                $print "$type A$i;"
+
+#---------------------------------------- 
+subcode: get_f77_sizes_direct
+    $call create_t_f
+    my $t=`$F77 t.f -o t && ./t`
+    $while $t=~/A(\d+):\s+(\d+)/g
+        my $name = $f77_type_names[$1]
+        $cross_hash{$name}=$2
+
+    subcode: create_t_f
+        my $sp = ' 'x6
+        &call write_f77
+            $call dump_f77_type_vars
+            $for $i, $T in @f77_type_names
+                $print $sp print *, 'A$i:', sizeof(A$i)
+
+subcode: get_f77_sizes_asm
+    $call create_t_f
+    my $t=`$FC -S t.f90 -o t.s`
+    &call open_r, t.s
+        $if /.size\s+__t_MOD_a(\d+), (\d+)/
+            my $name = $f77_type_names[$1]
+            $cross_hash{$name}=$2
+
+    subcode: create_t_f
+        my $sp
+        &call open_W, t.f90
+            $print MODULE t
+            $call dump_f77_type_vars
+            $print END MODULE t
+
+subcode: get_f77_sizes_hybrid
+    $call create_tlib_o
+    $call create_t_f
+    my $t = `$FC t.f tlib.o -o t && ./t`
+    $while $t=~/A(\d+):\s+(\d+)/g
+        my $name = $f77_type_names[$1]
+        $cross_hash{$name}=$2
+
+    subcode: create_t_f
+        my $sp = ' 'x6
+        &call write_f77
+            $(set:hybrid=1)
+            $print $sp INTEGER cisize
+            $call dump_f77_type_vars
+            $for $i, $T in @f77_type_names
+                $print $sp print *, 'A$i:', cisize(A$i(1), A$i(2))
+
+    subcode: create_tlib_o
+        &call open_w, t.c
+            $(set:print_to=Out)
+            $print "int cisize_(char *, char *);"
+            $print "int cisize_(char *p1, char *p2){return (int)(p2-p1);}"
+        system "$CC -c -o tlib.o t.c"
+
+#---------------------------------------- 
+subcode: get_f77_true_false_hybrid
+    $call create_tlib_o
+    $call create_t_f
+    my $t = `$FC t.f tlib.o -o t && ./t`
+    $if $t=~/T:(-?\d+)\s*F:(-?\d+)/
+        $cross_hash{TRUE_VALUE}=$1
+        $cross_hash{FALSE_VALUE}=$2
+
+    subcode: create_t_f
+        my $sp = ' 'x6
+        &call write_f77
+            $print $sp LOGICAL itrue, ifalse
+            $print $sp itrue = .TRUE.
+            $print $sp ifalse = .FALSE.
+            $print $sp call ftest(itrue, ifalse)
+
+    subcode: create_tlib_o
+        &call open_w, t.c
+            $(set:print_to=Out)
+            $print "#include <stdio.h>"
+            $print "void ftest_(int *, int *);"
+            $print "void ftest_(int * t, int * f){printf(\"T:%d F:%d\\n\", *t, *f);}"
+        system "$CC -c -o tlib.o t.c"
+
+#---------------------------------------- 
+subcode: dump_f77_type_vars
+    $for $i, $T in @f77_type_names
+        $(set:A=A$i)
+        $(if:hybrid)
+            $(set:A=A$i(2))
+        $if $T=~/KIND-(\d+)-(\d+)/
+            $print $sp INTEGER (KIND=$2) :: $(A)
+        $else
+            my $t = $T
+            $t=~s/_/ /g
+            $print $sp $t :: $(A)
+    $print
+
+subcode: write_f77
+    my $sp = ' 'x6
+    &call open_w, t.f
+        $(set:print_to=Out)
+        $print $sp PROGRAM t
+        BLOCK
+        $print $sp END
+
+subcode: write_f90
+    &call open_w, t.f90
+        $(set:print_to=Out)
+        $print PROGRAM t
+        BLOCK
+        $print END 
+
+#---------------------------------------- 
+subcode: get_f90_names_direct
+    $call create_t_f
+    my $t = `$FC t.f90 -o t && ./t`
+    $while $t=~/(\w+):\s*([\d, ]+)/g
+        $cross_hash{$1}=$2
+        $cross_hash{$1}=~s/ +//g
+
+    subcode: create_t_f
+        my %byte_map=("ADDRESS"=>$cross_hash{void_p}, "OFFSET"=>8, "INTEGER"=>$cross_hash{INTEGER})
+        my %size_map=(1=>2, 2=>4, 4=>8, 8=>16, 16=>30)
+        &call write_f90
+            $foreach $name in @f90_names
+                $if $name=~/(\w+)_MODEL/
+                    my $T=$1
+                    $if $T eq "DOUBLE"
+                        $T="DOUBLE PRECISION"
+                    $print $T :: A_$1
+            $print
+
+            $foreach $name in @f90_names
+                $if $name=~/(\w+)_KIND/
+                    my $n = $size_map{$byte_map{$1}}
+                    $print PRINT *, '$name:', SELECTED_INT_KIND($n)
+                $elif $name=~/(REAL|DOUBLE)_MODEL/
+                    $print PRINT *, '$name:', precision(A_$1), ',', range(A_$1)
+                $elif $name=~/(INTEGER)_MODEL/
+                    $print PRINT *, '$name:', range(A_$1)
+
+#---------------------------------------- 
+subcode: get_f90_kinds_direct
+    $call create_t_f
+    my $t=`$FC t.f90 -o t && ./t`
+    $while $t=~/K:\s*(\d+)\s*,\s*(\d+)/g
+        push @range_kind_size, [$1, $2]
+
+    subcode: create_t_f
+        &call write_f90
+            $print INTEGER I, k, lastkind
+            $print
+            $print lastkind=SELECTED_INT_KIND(1)
+            $print DO I=2,30
+            $print     k = SELECTED_INT_KIND(I)
+            $print     IF (k .ne. lastkind) THEN
+            $print         PRINT *, 'K:',I-1, ', ', lastkind
+            $print         lastkind = k
+            $print     ENDIF
+            $print     IF (k .le. 0) THEN
+            $print         exit
+            $print     ENDIF
+            $print ENDDO
+            $print IF (k .ne. lastkind) THEN
+            $print     PRINT *, 31, ', ', k
+            $print ENDIF
+
+#---------------------------------------- 
+subcode: get_f77_name_mangle
+    $call create_t_f
+    my $t = `$F77 -S t.f -o t.s`
