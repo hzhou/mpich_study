@@ -24,9 +24,13 @@ subcode: parse_args
     $call set_prefix
 
     subcode: set_moddir
-        my $mod_tarball = "modules.tar.gz"
+        my $mod_tarball
         $if $ENV{MODTARBALL}
             $mod_tarball = $ENV{MODTARBALL}
+        $elif -e "modules.tar.gz"
+            $mod_tarball = "modules.tar.gz"
+        $elif -e "mymake/modules.tar.gz"
+            $mod_tarball = "mymake/modules.tar.gz"
 
         $if $ENV{MODDIR}
             $moddir = $ENV{MODDIR}

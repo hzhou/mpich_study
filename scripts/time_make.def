@@ -1,0 +1,25 @@
+page: t
+    $use Time::HiRes
+    $(if:1)
+        my $dir = "$ENV{HOME}/work/pull_requests/mpich-pmix"
+    $(else)
+        my $dir = "$ENV{HOME}/work/pull_requests/mpich-aint"
+    chdir $dir or die "Can't chdir $dir\n"
+
+    # my @all=glob("src/mpi/request/*.c")
+    my @all = "src/mpi/request/t.c"
+    my %H
+    $foreach $f in @all
+        $if $f=~/^(src\/.*)\/(\w+)\.c/
+            my $tgt = "$1/$2.lo"
+            unlink $tgt
+            my $_start = Time::HiRes::time()
+            system "make $tgt"
+            my $_end = Time::HiRes::time()
+            my $dur = $_end - $_start
+            $H{$2}=$dur
+
+    my @sorted = sort {$H{$a} <=> $H{$b}} keys %H
+    $foreach $k in @sorted
+        $print $k: \t $H{$k}
+

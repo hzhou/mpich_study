@@ -18,10 +18,11 @@ subcode: p2p_frame
 
 #----------------------------------------         
 perlcode: create_type_struct
+    $call load_sz_hash
     my @plist = split /,\s*/, $param
     my $var = shift @plist
     my (@types, @cnts, @disps)
-    my ($off=0, $align=1)
+    $my $off=0, $align=1
     $foreach $t in @plist
         $if $t=~/(\w+):(\d+)/
             $if $align < $sz_hash{$1}
@@ -31,6 +32,7 @@ perlcode: create_type_struct
             push @types, $1
             push @cnts, $2
             push @disps, $off
+            $print $1: $sz_hash{$1} * $2
             $off += $sz_hash{$1} * $2
             $if $off % $align > 0
                 $off += $align - $off % $align
@@ -38,5 +40,10 @@ perlcode: create_type_struct
     my $n = @plist
     $(for:cnts,types,disps)
         my $t_$1 = join(', ', @$1)
-    push @$out, "MPI_Datatype $var;"
     push @$out, "MPI_Type_struct($n, (int []){$t_cnts}, (MPI_Aint []){$t_disps}, (MPI_Datatype []){$t_types}, &$var);"
+
+    subcode: load_sz_hash
+        my %sz_hash=(
+            MPI_INT=>4,
+            MPI_CHAR=>1,
+        )
