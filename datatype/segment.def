@@ -1,0 +1,75 @@
+subcode: _autoload
+    #- el_size vs dloop_sz?
+    $struct(MPII_Dataloop) union { c_t, v_t, bi_t, i_t, s_t, cm_t }, el_size, el_extent, el_type, dloop_sz 
+    $struct(MPII_Dataloop_stackelm) curcount, curoffset, curblock, orig_count, orig_offset, orig_block, loop_p
+    $struct MPIR_Segment
+        void *ptr, MPI_Datatype handle
+        stream_off 
+        stackelm[MPII_DATALOOP_MAX_DATATYPE_DEPTH], cur_sp, valid_sp
+        MPII_Dataloop builtin_loop
+
+    $register_name(loop_p) struct MPII_Dataloop *
+    $register_name(segp) struct MPIR_Segment *
+    $typedef MPI_Aint (* sizefn)(MPI_Datatype el_type)
+
+#- cur_elmp ---> stackelm[cur_sp]
+fncode: segment_seek(segp, MPI_Aint position, sizefn)
+    $call segment_reset
+    $switch cur_elmp->loop_p->kind
+        $of $(CONTIG)
+            $call @calc_num_elems
+            segp->stream_off += $(num_elems) * $(el_size)
+            cur_elmp->cur_block = $(blocksize) - $(num_elems)
+            cur_elmp->cur_count = $(0_or_1)
+            cur_elmp->cur_offset = $(orig_offset) + $(num_elems) * $(el_extent)
+        $of $(INDEX)
+            &call foreach_block
+                $(set:block_size_in_bytes=$(el_size)*$(this_blocksize))
+                $if $(remain) < $(block_size_in_bytes)
+                    break
+                segp->stream_off += $(block_size_in_bytes)
+
+    macros:
+        el_size: cur_elmp->loop_p->el_size
+        remain: position-segp->stream_off
+
+#---------------------------------------- 
+#- ..X..XX..X.. :
+#-      ^       : offset (in bytes)
+#-      `---'   : count
+#-      2       : block (size)
+subcode: segment_reset
+    $call _zero, stream_off, cur_sp, orig_offset
+    cur_elmp = &segp->stackelm[0]
+    $call set_blocksize, cur_elmp->orig_block, cur_elmp->loop_p
+
+    macros:
+        idx_blk: $(orig_count) - $(cur_count)
+    subcode: set_blocksize(blocksize, dlp) # count in the unit of base type
+        $case $(CONTIG)
+            $(blocksize) = $(dlp)->loop_params.c_t.count
+        $case $(VECTOR)
+            $(blocksize) = $(dlp)->loop_params.v_t.blocksize
+        $case $(BLKIDX)
+            $(blocksize) = $(dlp)->loop_params.bi_t.blocksize
+        $case $(INDEX)
+            $(blocksize) = $(dlp)->loop_params.i_t.blocksize_array[$(idx_blk)]
+        $case $(STRUCT)
+            $(blocksize) = $(dlp)->loop_params.s_t.blocksize_array[$(idx_blk)]
+
+#---------------------------------------- 
+macros:
+    CONTIG: MPII_DATALOOP_KIND_CONTIG
+    VECTOR: MPII_DATALOOP_KIND_VECTOR
+    BLKIDX: MPII_DATALOOP_KIND_BLOCKINDEXED
+    INDEX:  MPII_DATALOOP_KIND_INDEXED
+    STRUCT: MPII_DATALOOP_KIND_STRUCT
+#---------------------------------------- 
+subcode: create_indexed
+    $for i=0:count
+        old_type_count += blocklength_array[i]
+
+    $(set:P=new_dlp->loop_params.i_t.$1)
+    $(P:count) = contig_count
+    $(P:total_blocks) = old_type_count
+    $call @indexed_array_copy

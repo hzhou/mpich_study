@@ -1,0 +1,64 @@
+fncode: MPIDI_NM_progress(int vci, int blocking)
+    $local struct fi_cq_tagged_entry wc[MPIDI_OFI_NUM_CQ_ENTRIES]
+
+    $if MPIDI_OFI_get_buffered(wc, 1)
+        $call @handle_cq, wc, 1
+    $else
+        $(set:cq=MPIDI_OFI_global.ctx[vci])
+        tn_ret = fi_cq_read($(cq), wc, MPIDI_OFI_NUM_CQ_ENTRIES)
+        $if tn_ret > 0
+            $call @handle_cq, wc, tn_ret
+        $elif tn_ret == -FI_EAGAIN
+            return MPI_SUCCESS
+        $else
+            $call handle_cq_error
+
+subcode: handle_cq(wc, n)
+    $for i=0:$(n)
+        $call get_req
+        MPIDI_OFI_dispatch_function(&$(wc)[i], req)
+
+subcode: MPIDI_OFI_dispatch_function(wc, req)
+    $(set:REQ=MPIDI_OFI_REQUEST(req, event_id)==MPIDI_OFI_EVENT_$1)
+    $(for:a in send, recv, rma_done, am_send, am_recv, am_read, peek, recv_huge, recv_pack, recv_nopack, send_huge, send_pack, send_nopack, ssend_ack, get_huge, chunk_done, inject_emu, dynproc_done, accept_probe, abort)
+        $case $(REQ:$(uc:a))
+            $call OFI_$(a)_event
+
+#---------------------------------------- 
+subcode: _autoload
+    $register_name(wc) struct fi_cq_tagged_entry *
+
+subcode: OFI_send_event
+
+
+fncode: OFI_recv_event(wc, request_ptr, event_id)
+    $call @set_request_status, wc
+    $if MPIDI_REQUEST_ANYSOURCE_PARTNER(request_ptr)
+        # only ifndef MPIDI_CH4_DIRECT_NETMOD
+        ...
+        MPIR_Request_free(request_ptr)
+
+    $(set:E=MPIDI_OFI_EVENT_$1)
+    $if (event_id == $(E:RECV_PACK) || event_id == $(E:GET_HUGE)) && ...noncontig.pack
+        MPIR_Typerep_unpack(...)
+        MPL_free(...noncontig.pack)
+    $elif MPIDI_OFI_ENABLE_PT2PT_NOPACK && event_id==$(E:RECV_NOPACK) && ...noncontig.nopack
+        ...check_elements
+        MPL_free(...noncontig.nopack)
+
+    MPIR_Datatype_release_if_not_builtin(...datatype)
+
+    $if MPIDI_OFI_is_tag_sync(wc->tag)
+        MPIDI_OFI_init_sendtag(..., MPIDI_OFI_SYNC_SEND_ACK)
+        MPIDI_OFI_REQUEST(request_ptr, util_comm)
+        MPIDI_OFI_send_handler(...)
+
+    MPIDIU_request_complete(request_ptr)
+
+    subcode: set_request_status(wc)
+        $(set:this=request_ptr->status.)
+        $.MPI_ERROR  = MPI_SUCCESS
+        $.MPI_SOURCE = MPIDI_OFI_cqe_get_source(wc)
+        $.MPI_TAG    = MPIDI_OFI_init_get_tag(wc->tag)
+        $call @MPIR_STATUS_SET_COUNT
+
