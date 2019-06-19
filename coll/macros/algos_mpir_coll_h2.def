@@ -1,0 +1,114 @@
+macros:
+    algos_barrier:: intra_auto, intra_dissemination, intra_smp
+    algos_barrier:: inter_auto, inter_bcast
+    algos_barrier:: allcomm_nb
+    algos_ibarrier:: intra_recexch
+    algos_ibarrier_sched:: intra_auto, intra_recursive_doubling
+    algos_ibarrier_sched:: inter_auto, inter_bcast
+
+    algos_bcast:: intra_auto, intra_binomial, intra_scatter_recursive_doubling_allgather, intra_scatter_ring_allgather, intra_smp
+    algos_bcast:: inter_auto, inter_remote_send_local_bcast
+    algos_bcast:: allcomm_nb
+    algos_ibcast:: intra_tree, intra_scatter_recexch_allgather, intra_ring
+    algos_ibcast_sched:: intra_auto, intra_binomial, intra_scatter_recursive_doubling_allgather, intra_scatter_ring_allgather, intra_smp
+    algos_ibcast_sched:: inter_auto, inter_flat
+
+    algos_gather:: intra_auto, intra_binomial
+    algos_gather:: inter_auto, inter_linear, inter_local_gather_remote_send
+    algos_gather:: allcomm_nb
+    algos_igather:: intra_tree
+    algos_igather_sched:: intra_auto, intra_binomial
+    algos_igather_sched:: inter_auto, inter_long, inter_short
+
+    algos_gatherv:: intra_auto
+    algos_gatherv:: inter_auto
+    algos_gatherv:: allcomm_linear, allcomm_nb
+    algos_igatherv_sched:: intra_auto
+    algos_igatherv_sched:: inter_auto
+    algos_igatherv_sched:: allcomm_linear
+
+    algos_scatter:: intra_auto, intra_binomial
+    algos_scatter:: inter_auto, inter_linear, inter_remote_send_local_scatter
+    algos_scatter:: allcomm_nb
+    algos_iscatter:: intra_tree
+    algos_iscatter_sched:: intra_auto, intra_binomial
+    algos_iscatter_sched:: inter_auto, inter_linear, inter_remote_send_local_scatter
+
+    algos_scatterv:: intra_auto
+    algos_scatterv:: inter_auto
+    algos_scatterv:: allcomm_linear, allcomm_nb
+    algos_iscatterv_sched:: intra_auto
+    algos_iscatterv_sched:: inter_auto
+    algos_iscatterv_sched:: allcomm_linear
+
+    algos_allgather:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_allgather:: inter_auto, inter_local_gather_remote_bcast
+    algos_allgather:: allcomm_nb
+    algos_iallgather:: intra_gentran_brucks, intra_recexch_distance_doubling, intra_recexch_distance_halving, intra_gentran_ring
+    algos_iallgather_sched:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_iallgather_sched:: inter_auto, inter_local_gather_remote_bcast
+
+    algos_allgatherv:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_allgatherv:: inter_auto, inter_remote_gather_local_bcast
+    algos_allgatherv:: allcomm_nb
+    algos_iallgatherv:: intra_gentran_brucks, intra_recexch_distance_doubling, intra_recexch_distance_halving, intra_gentran_ring
+    algos_iallgatherv_sched:: intra_auto, intra_brucks, intra_recursive_doubling, intra_ring
+    algos_iallgatherv_sched:: inter_auto, inter_remote_gather_local_bcast
+
+    algos_alltoall:: intra_auto, intra_brucks, intra_pairwise, intra_pairwise_sendrecv_replace, intra_scattered
+    algos_alltoall:: inter_auto, inter_pairwise_exchange
+    algos_alltoall:: allcomm_nb
+    algos_ialltoall:: intra_gentran_ring, intra_gentran_brucks
+    algos_ialltoall_sched:: intra_auto, intra_brucks, intra_inplace, intra_pairwise, intra_permuted_sendrecv
+    algos_ialltoall_sched:: inter_auto, inter_pairwise_exchange
+
+    algos_alltoallv:: intra_auto, intra_pairwise_sendrecv_replace, intra_scattered
+    algos_alltoallv:: inter_auto, inter_pairwise_exchange
+    algos_alltoallv:: allcomm_nb
+    algos_ialltoallv:: intra_gentran_scattered
+    algos_ialltoallv_sched:: intra_auto, intra_blocked, intra_inplace
+    algos_ialltoallv_sched:: inter_auto, inter_pairwise_exchange
+
+    algos_alltoallw:: intra_auto, intra_pairwise_sendrecv_replace, intra_scattered
+    algos_alltoallw:: inter_auto, inter_pairwise_exchange
+    algos_alltoallw:: allcomm_nb
+    algos_ialltoallw_sched:: intra_auto, intra_blocked, intra_inplace
+    algos_ialltoallw_sched:: inter_auto, inter_pairwise_exchange
+
+    algos_reduce:: intra_auto, intra_binomial, intra_reduce_scatter_gather, intra_smp
+    algos_reduce:: inter_auto, inter_local_reduce_remote_send
+    algos_reduce:: allcomm_nb
+    algos_ireduce:: intra_tree, intra_ring
+    algos_ireduce_sched:: intra_auto, intra_binomial, intra_reduce_scatter_gather, intra_smp
+    algos_ireduce_sched:: inter_auto, inter_local_reduce_remote_send
+
+    algos_allreduce:: intra_auto, intra_recursive_doubling, intra_reduce_scatter_allgather, intra_smp
+    algos_allreduce:: inter_auto, inter_reduce_exchange_bcast
+    algos_allreduce:: allcomm_nb
+    algos_iallreduce:: intra_recexch_single_buffer, intra_recexch_multiple_buffer, intra_tree, intra_ring
+    algos_iallreduce_sched:: intra_auto, intra_naive, intra_recursive_doubling, intra_reduce_scatter_allgather, intra_smp
+    algos_iallreduce_sched:: inter_auto, inter_remote_reduce_local_bcast
+
+    algos_reduce_scatter:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_reduce_scatter:: inter_auto, inter_remote_reduce_local_scatter
+    algos_reduce_scatter:: allcomm_nb
+    algos_ireduce_scatter:: intra_recexch
+    algos_ireduce_scatter_sched:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_ireduce_scatter_sched:: inter_auto, inter_remote_reduce_local_scatterv
+
+    algos_reduce_scatter_block:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_reduce_scatter_block:: inter_auto, inter_remote_reduce_local_scatter
+    algos_reduce_scatter_block:: allcomm_nb
+    algos_ireduce_scatter_block:: intra_recexch
+    algos_ireduce_scatter_block_sched:: intra_auto, intra_noncommutative, intra_pairwise, intra_recursive_doubling, intra_recursive_halving
+    algos_ireduce_scatter_block_sched:: inter_auto, inter_remote_reduce_local_scatterv
+
+    algos_scan:: intra_auto, intra_recursive_doubling, intra_smp
+    algos_scan:: allcomm_nb
+    algos_iscan:: intra_gentran_recursive_doubling
+    algos_iscan_sched:: intra_auto, intra_recursive_doubling, intra_smp
+
+    algos_exscan:: intra_auto, intra_recursive_doubling
+    algos_exscan:: allcomm_nb
+    algos_iexscan_sched:: intra_auto, intra_recursive_doubling
+
