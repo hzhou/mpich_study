@@ -146,27 +146,31 @@ page: build_modules.sh
     git clone https://github.com/pmodels/ucx
     # git clone https://github.com/ofiwg/libfabric
     git clone https://github.com/pmodels/libfabric
-
-    pushd libfabric
-    git checkout -b mpich origin/v1.7.1-mpich
-    git log --oneline -n 5
-    popd
+    git clone https://github.com/json-c/json-c jsonc
 
     $call config, hwloc, --enable-embedded-mode --enable-visibility
     $call config, izem, --enable-embedded
     $call config, ucx, --disable-shared --with-pic
     $call config, libfabric, --enable-embedded --disable-verbs
+    $call config, jsonc 
 
+    rm -rf */.git
+    find . -name '*.o' |xargs rm -f
     tar czf modules.tar.gz hwloc izem ucx libfabric
 
-    subcode: config(dir, option)
+    subcode: config(dir, @option)
         cd $(dir)
+        $call @pre_$(dir)
         # ucx will need pkg-config macro: ~share/aclocal/pkg.m4
         sh autogen.sh
         ./configure $(option)
         make -j 16
         $call @post_$(dir)
         cd ..
+
+    subcode: pre_libfabric
+        git checkout -b mpich origin/v1.7.1-mpich
+        git log --oneline -n 5
 
     subcode: post_ucx
         find . -name '*.la' |xargs --verbose sed -i "s,$PWD,MODDIR,g"
@@ -181,6 +185,10 @@ page: apply_xfail
 
     $if !$opt{netmod}
         $opt{netmod}="ch3:tcp"
+
+    $if !$opt{job}
+        $if $opt{netmod}=~/(ch\d)/
+            $opt{job}=$1
 
     $if !-f $opt{conf}
         $print No config file exist, exit.

@@ -50,9 +50,11 @@ subcode: filters
 fncode: add_prefix($name, $prefix)
     $if $name=~/^(inline|const|restrict)/
         $: \x23 leave c99 keywords alone
+    $elif $name=~/^_/
+        $: \x23 leave underscore keywords alone, e.g _MINIX
     $elif $name=~/^$prefix\_/i
         $: \x23 avoid double prefix
-    $elif $name=~/^[A-Z_]+$/
+    $elif $name=~/^[A-Z0-9_]+$/
         $name = uc($prefix)."_$name"
     $else
         $name = "_".lc($prefix)."_$name"

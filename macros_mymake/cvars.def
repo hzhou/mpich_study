@@ -29,7 +29,7 @@ subcode: get_cvars(f)
             undef $cat
         $elif /^\s*-\s*name\s*:\s*(MPIR_CVAR_\w+)/ -> $name
             push @cvars, $name
-            $cvar={file=>$(f)}
+            $cvar={file=>$(f), name=>$name}
             $cvars{$name} = $cvar
         $elif /^\s*-\s*name\s*:\s*(\w+)/ -> $name
             push @cats, $name
@@ -46,8 +46,15 @@ subcode: get_cvars(f)
                 $if $cvar->{type} eq "enum"
                     my @enum
                     $while $t=~/^\s*(\w+)\s+-\s/mg
-                        push @enum, $1
+                        push @enum, "$cvar->{name}\_$1"
                     $cvar->{enum}=\@enum
+
+                    $if $cvar->{group}
+                        $global %enum_groups
+                        $(set:g=$enum_groups{$cvar->{group}})
+                        $if !$(g)
+                            $(g) = []
+                        push @{$(g)}, @enum
 
 #---------------------------------------- 
 subcode: dump_cvar_globals
@@ -215,7 +222,7 @@ subcode: each_cvar
         my $c = "if"
         $foreach $t in @{$h->{enum}}
             $print "        $c (0 == strcmp(tmp_str, \"$t\"))"
-            $print "            $v = $v\_$t;"
+            $print "            $v = $t;"
             $c = "else if"
         $(if:0)
             $print "        else"
@@ -250,12 +257,20 @@ subcode: dump_cvars_c
         $print #include "mpiimpl.h"
         $print 
         $call dump_cvar_globals
-        $print "#define FCNAME __func__"
         &call dump_fn_init
             $call dump_cat_add_desc
             $call dump_cvar_register_static
         &call dump_fn_finalize
             $call dump_cvar_finalize
+
+        $foreach $k in sort keys %enum_groups
+            $print "int MPIR_$k\_from_str(const char *s) {"
+            my $t_if = "if"
+            $foreach $a in @{$enum_groups{$k}}
+                $print "    $t_if (strcmp(s, \"$a\")==0) return $a;"
+                $t_if = "else if"
+            $print "    else return -1;"
+            $print "}"
     # ----------------------
     subcode: dump_fn_init
         $print int $(fn_ns)_init(void)
@@ -291,6 +306,16 @@ subcode: dump_cvars_c
 
 #--------------------------
 subcode: dump_cvars_h
+    subcode: dump_enum(k, v)
+        $print "enum $(k) {"
+        my $n = @{$(v)}
+        $foreach $i,$a in @{$(v)}
+            $if $i<$n-1
+                $print "    $a,"
+            $else
+                $print "    $a"
+        $print "};"
+
     &call open_W, src/include/mpir_cvars.h
         &call hdr_guard, mpir_cvars
             $print #include "mpitimpl.h" /* for MPIR_T_cvar_range_value_t */
@@ -301,16 +326,14 @@ subcode: dump_cvars_h
             &call each_cvar
                 $print "/* $h->{file} */"
                 $print "extern $type $v;"
-                $if $h->{enum}
-                    $print "enum $v\_choice {"
-                    my $n = @{$h->{enum}}
-                    $foreach $i,$a in @{$h->{enum}}
-                        $if $i<$n-1
-                            $print "    $v\_$a,"
-                        $else
-                            $print "    $v\_$a"
-                    $print "};"
+                $if $h->{enum} and !$h->{group}
+                    $call dump_enum, $v\_choice, $h->{enum}
             $print
+
+            $foreach $k in sort keys %enum_groups
+                my $v = $enum_groups{$k}
+                $print "int MPIR_$k\_from_str(const char *s);"
+                $call dump_enum, $k\_t, $v
 
             $print "/* TODO: this should be defined elsewhere */"
             $print "#define MPIR_CVAR_assert MPIR_Assert"
@@ -318,4 +341,6 @@ subcode: dump_cvars_h
             $print "/* Arbitrary, simplifies interaction with external interfaces like MPI_T_ */"
             $print "#define MPIR_CVAR_MAX_STRLEN (384)"
             $print
-
+            my $t = join(" ## ", qw(MPIR_CVAR_ A _ a))
+            $print "#define MPIR_CVAR_ENUM_IS(A, a) ($t)"
+            $print

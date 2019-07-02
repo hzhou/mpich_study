@@ -1,5 +1,5 @@
 macros:
-    subdir_list: mpl, opa, hwloc, izem, ucx, ofi
+    subdir_list: mpl, opa, hwloc, izem, ucx, ofi, romio, jsonc
 
     embed_mpl: src/mpl
     Dmpl: $moddir/mpl
@@ -42,6 +42,12 @@ macros:
     Iromio: $(Dromio)/include
     Lromio: $(Dromio)/libromio.la
     Hromio: $(Dromio)/adio/include/romioconf.h
+
+    embed_jsonc: modules/jsonc
+    Djsonc: modules/jsonc
+    Ijsonc: $(Djsonc)
+    Ljsonc: $(Djsonc)/libjson-c.la
+    Hjsonc: 
 
 subcode: copy_subdir_module(dir)
     $(if:embed_$(dir))
@@ -150,6 +156,7 @@ subcode: need_izem
 #---------------------------------------- 
 subcode: need_ucx
     $call copy_subdir_module, ucx
+    $call patch_ucx_for_pgi
     $I_list .= " -I$(Iucx)"
     $L_list .= " $(Lucx)"
     push @CONFIGS, "$(Hucx)"
@@ -161,6 +168,12 @@ subcode: need_ucx
         # push @t, "./configure --disable-static --enable-embedded --with-prefix=NONE"
         push @t, "./configure --disable-shared --with-pic"
     $call add_subdir_make, $(Ducx), $(Lucx), $(Hucx)
+
+    subcode: patch_ucx_for_pgi
+        $if $ENV{compiler} =~ /pgi/
+            &call just_modify, $(Ducx)/src/ucs/type/status.h
+                s/UCS_S_PACKED\s*ucs_status_t/ucs_status_t/
+
 
 subcode: patch_configure_ucx
     my $flag
@@ -182,6 +195,8 @@ subcode: filter_lib_ucx
     $t=~s/\@ucxlib\@\s*//g
 
 #---------------------------------------- 
+macros:
+    # patch_ofi_inline: 1
 subcode: need_ofi
     $call copy_subdir_module, ofi
     $I_list .= " -I$(Iofi)"
@@ -193,9 +208,49 @@ subcode: need_ofi
         $(set:C=$(join:--enable-$1=no: :psm,psm2,verbs,usnic,mlx,gni,ugni,rxm,mrail,rxd,bgq,rstream,udp,perf))
         push @t, "./configure --enable-embedded --enable-sockets=yes $(C)"
     $call add_subdir_make, $(Dofi), $(Lofi), $(Hofi)
+    $(if:patch_ofi_inline)
+        $call patch_inline
+
+    subcode: patch_inline
+        my $ofi="src/mpid/ch4/netmod/ofi"
+        $if !-f "$ofi/ofi_noinline.c" and !-f "mymake/ofi_events.h.orig"
+            system "mv $ofi/ofi_events.h mymake/ofi_events.h.orig" 
+            my (@lines, @lines_2, $flag)
+            &call open_r, mymake/ofi_events.h.orig
+                $if /^MPL_STATIC_INLINE_PREFIX (int MPIDI_OFI_dispatch_function.*)/
+                    $flag = 1
+                    push @lines_2, "$2\n"
+                    push @lines, "$2\n"
+                $elif $flag
+                    $if /^{/
+                        chomp $lines[-1]
+                        $lines[-1].=";\n"
+                        push @lines_2, "{"
+                        $flag=2
+                    $elif /^}/
+                        push @lines_2, "}\n"
+                        $flag=0
+                    $elif $flag>1
+                        push @lines_2, $_
+                    $else
+                        push @lines, $_
+                $else
+                    push @lines, $_
+            &call open_w, $ofi/ofi_events.h
+                $foreach $l in @lines
+                    print Out $l
+            &call open_w, $ofi/ofi_noinline.c
+                $foreach $l in @lines_2
+                    print Out $l
+        # still need add to Makefile
 
 # assuming using sockets provider
 subcode: patch_configure_ofi
+    $(if:patch_ofi_inline)
+        &call modify, src/mpid/ch4/netmod/ofi/Makefile.mk
+            $if $l=~/^(\s*)src.mpid.ch4.netmod.ofi.ofi_init.c/
+                print Out $1, "src/mpid/ch4/netmod/ofi/ofi_noinline.c \\\n"
+
     my $flag
     &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
         $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/
@@ -206,8 +261,13 @@ subcode: patch_configure_ofi
                 $flag = 0
                 $call @print_Out_defines
                 next
+            $elif $l=~/AC_ARG_ENABLE.*legacy-ofi/
+                $flag=2
+            $elif $flag==2
+                # pass thru
             $else
                 next
+
     subcode: print_Out_defines
         $(if:1)
             print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_RUNTIME], [1], [Define to use runtime capability set])\n"

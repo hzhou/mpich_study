@@ -1,0 +1,32 @@
+subcode: _autoload
+    $register_name(am_hdr) const void *
+    $register_name(sreq) MPIR_Request *
+
+macros: 
+    g: MPIDI_OFI_global.$1
+
+fncode: MPIDI_OFI_am_init_request(am_hdr, size_t am_hdr_sz, sreq)
+    $(set:get=MPIDI_OFI_AMREQUEST(sreq, $1))
+    $call get_req_hdr
+
+    $if am_hdr_sz > req_hdr->am_hdr_sz
+        $call @grow # registers the mem
+
+    $if am_hdr
+        $call @copy
+
+    sbucode: get_req_hdr
+        $if $(get:req_hdr) == NULL
+            req_hdr = MPIDIU_get_buf($(g:am_buf_pool))
+            $(get:req_hdr) = req_hdr
+            req_hdr->am_hdr = &req_hdr->am_hdr_buf[0]
+            req_hdr->am_hdr_sz = MPIDI_OFI_MAX_AM_HDR_SIZE
+        $else
+            req_hdr = $(get:req_hdr)
+
+fncode: MPIDI_OFI_am_clear_request(sreq)
+    $if req_hdr->am_hdr != &req_hdr->am_hdr_buf[0]
+        MPL_free
+
+    MPIDIU_release_buf(req_hdr)
+    $(get:req_hdr) = NULL

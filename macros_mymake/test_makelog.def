@@ -56,6 +56,7 @@ subcode: report_make_log
         &call open_r, make.log
             # PGC-W-0114-More than one type specified (/var/lib/jenkins-slave/workspace/hzhou-warnings-more/compiler/pgi/config/ch3-tcp/label/centos64/modules/mpl/include/uthash.h: 90)
             $if /^(PGC-W-\d+-.*)/ -> $t
+                $t=~s/\(\/.*(centos64)\//\(/
                 push @make_log, $t
 
 fncode: parse_warning($t)

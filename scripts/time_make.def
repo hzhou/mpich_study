@@ -6,8 +6,12 @@ page: t
         my $dir = "$ENV{HOME}/work/pull_requests/mpich-aint"
     chdir $dir or die "Can't chdir $dir\n"
 
-    # my @all=glob("src/mpi/request/*.c")
-    my @all = "src/mpi/request/t.c"
+    $(if:0)
+        my @all=glob("src/mpi/request/*.c")
+    $(elif:1)
+        my @all=glob("src/mpi/rma/*.c")
+    $(else)
+        my @all = "src/mpi/request/t.c"
     my %H
     $foreach $f in @all
         $if $f=~/^(src\/.*)\/(\w+)\.c/

@@ -77,12 +77,13 @@ subcode: test_mymake_config
             # push @mpich_config, "--disable-fortran"
             # push @mpich_config, "--disable-romio"
 
+        my @config_devices
         $if @mpich_config
             $foreach $t in @mpich_config
+                $if $t=~/--with-device=(.*)/
+                    push @config_devices, $1
                 $call filter_config_hash # remove duplicate
                 $call filter_test_config
-        $if !$config_hash{device}
-            $config_hash{device}="ch3:tcp" # default
 
         $call @post_filters
 
@@ -92,11 +93,13 @@ subcode: test_mymake_config
             $ENV{testmpi_config} = join(' ', @testmpi_config)
 
         $if $config_hash{device}=~/^(ch\d:\w+)/
+            # for xfail filters
             $ENV{mpich_device}=$1
 
         $if $config=~/(ch\d+:\w+)/ -> $t
-            $if $config_hash{device} !~ /$t/
-                $config_hash{conflict} = "config: $config and option: --with-device=$config_hash{device} are in conflict"
+            $foreach $dev in @config_devices
+                $if $dev !~ /$t/
+                    $config_hash{conflict} = "config: $config and option: --with-device=$dev are in conflict"
 
         $if $config=~/(ch3:\w+)/ -> $t
             $if $config_hash{pmix}
