@@ -230,7 +230,7 @@ subcode: dump_custom_make
         $print "\x23 --------------------\n"
         $print ".PHONY: clean realclean realrealclean"
         $print "clean:"
-        $print "\t(find . -not \\( -path ./modules -prune \\) -a \\( $(join:-name '*.$1': -o :o,lo,a,la) \\) |xargs rm -f)"
+        $print "\t(find . -not \\( -path $moddir -prune \\) -a \\( $(join:-name '*.$1': -o :o,lo,a,la) \\) |xargs rm -f)"
         $print
         $print "realclean: clean"
         $print "\t\x24(DO_clean)"

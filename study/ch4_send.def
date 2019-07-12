@@ -3,16 +3,23 @@
 include: macros/ch4_frame.def
 
 subcode: mpidi_func(fn, @params)
-    MPL_STATIC_INLINE_PREFIX int MPIDI_$(fn)($(params)) {
+    NEWLINE?
+    $:: MPL_STATIC_INLINE_PREFIX int MPIDI_$(fn)($(params))
+    {
         int mpi_errno = MPI_SUCCESS;
         MPIR_FUNC_VERBOSE_STATE_DECL(MPID_STATE_$(fn:uc));
         MPIR_FUNC_VERBOSE_ENTER(MPID_STATE_$(fn:uc));
+        $(if:safe)
+            int cs_acq = 0;
+            MPID_THREAD_SAFE_BEGIN(VCI, MPIDI_global.vci_lock, cs_acq)
 
         NEWLINE
         BLOCK
         NEWLINE
 
         fn_exit:
+        $(if:safe)
+            MPID_THREAD_SAFE_END(VCI, MPIDI_global.vci_lock, cs_acq)
         MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_$(fn:uc));
         return mpi_errno;
 
@@ -21,172 +28,131 @@ subcode: mpidi_func(fn, @params)
         goto fn_exit;
     }
 
-subcode: netmod_call(fn, @args))
+subcode: unsafe_call(fn, @args))
+    $(if:fn~[isrb]*send$)
+        $(set:fn=mpi_$(fn))
     #ifdef MPIDI_CH4_DIRECT_NETMOD
     mpi_errno = MPIDI_NM_$(fn)($(args));
     #else
     int r;
-    if ((r = MPIDI_av_is_local(av))){
+    $if r = MPIDI_av_is_local(av)
         mpi_errno = MPIDI_SHM_$(fn)($(args));
-
-macros:
-    param_send:: const void *buf, int count, MPI_Datatype datatype
-    param_send:: int rank, int tag, MPIR_Comm *comm
-    param_send:: int context_offset, MPIDI_av_entry_t *av
-    param_send:: MPIR_Request ** request
-
-    arg_send:: buf, count, datatype, rank, tag, comm
-    arg_send:: context_offset, av, request
-
-    fn_list: send_unsafe
-
-page: ch4_send.h, ch4_h_frame
-    $(for:fn in $(fn_list))
-        &call mpidi_func, $(fn), $(param_send)
-            TEST
-
-
-subcode: temp
-    $list(skip_declare) MPID_Send, MPID_Isend, MPID_Rsend, MPID_Irsend, MPID_Ssend, MPID_Issend
-    $list(skip_declare) MPID_Send_init, MPID_Ssend_init, MPID_Bsend_init, MPID_Rsend_init
-    $list(skip_declare) MPID_Cancel_send
-
-#------------------------------------------
-fncode: MPID_Send
-    $call mpid_send, send
-fncode: MPID_Isend
-    $call mpid_send, isend
-fncode: MPID_Rsend
-    $call mpid_send, send
-fncode: MPID_Irsend
-    $call mpid_send, isend
-fncode: MPID_Ssend
-    $call mpid_send, ssend
-fncode: MPID_Issend
-    $call mpid_send, issend
-
-# -----------------------
-subcode: mpid_send(send)
-    $parameter $(send_param_1)
-    $return_type $(ret_type)
-    &call MPIR_enter
-        $call @check_rank_null
-        $call SHM_or_NM, send
-
-    subcode: send(NM_or_SHM)
-        mpi_errno = MPIDI_$(NM_or_SHM)_mpi_$(send)($(send_arg2));
-
-    subcode: update_request(r)
-        $if mpi_errno == MPI_SUCCESS && *pp_req
-            MPIDI_CH4I_REQUEST(*pp_req, is_local) = $(r)
-
-subcode: MPIDI_send_unsafe
-    $parameter $(send_param_2)
-    $(if:MPIDI_CH4_DIRECT_NETMOD)
-        $fcall MPIDI_NM_mpi_send($(send_arg2))
-    $(else)
-        $if MPIDI_av_is_local(av)
-            $fcall MPIDI_SHM_mpi_send($(send_arg2))
-        $else
-            $fcall MPIDI_NM_mpi_send($(send_arg2))
-        $call @set_request
-
-subcode: MPIDI_send_safe
-    &call MPID_THREAD_SAFE_BEGIN, VNI, MPIDI_CH4_Global.vni_lock, cs_acq
-        $if !cs_acq
-            *req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND)
-            MPIDI_workq_pt2pt_enqueue(SEND, buf, NULL, ...)
-        $else
-            *req = NULL
-            MPIDI_workq_vni_progress_unsafe()
-            $fcall MPIDI_send_unsafe($(send_arg2))
-
-#------------------------------------------
-fncode: MPID_Send_init
-    $call mpid_send_init, send
-fncode: MPID_Ssend_init
-    $call mpid_send_init, ssend
-fncode: MPID_Bsend_init
-    $call mpid_send_init, bsend
-fncode: MPID_Rsend_init
-    $call mpid_send_init, rsend
-# --------------------------
-subcode: mpid_send_init(send)
-    $parameter $(send_param_1)
-    $return_type $(ret_type)
-    &call MPIR_enter
-        $call SHM_or_NM, send_init
-
-    subcode: send_init(SHM_or_NM)
-        mpi_errno = MPIDI_$(SHM_or_NM)_mpi_$(send)_init($(send_arg2));
-
-    subcode: update_request(r)
-        $if mpi_errno == MPI_SUCCESS && *pp_req
-            MPIDI_CH4I_REQUEST(*pp_req, is_local) = $(r)
-            MPIDI_CH4I_REQUEST_ANYSOURCE_PARTNER(*pp_req) = NULL
-
-#------------------------------------------
-fncode: MPID_Cancel_send(MPIR_Request * sreq)
-    &call MPIR_enter
-        $call SHM_or_NM, cancel
-
-    subcode: cancel(SHM_or_NM)
-        mpi_errno = MPIDI_$(SHM_or_NM)_mpi_cancel_send(sreq);
-
-    subcode: update_request
-        # NOOP
-
-#-------------------------------------- 
-subcode: SHM_or_NM(action)
-    $(if:action!=cancel)
-        $local MPIDI_av_entry_t *av = NULL
-        av = MPIDIU_comm_rank_to_av(comm, rank);
-        $local int r
-        $(set:is_local=r=MPIDI_av_is_local(av))
-    $(else)
-        $(set:is_local=MPIDI_CH4I_REQUEST(sreq, is_local))
-    #ifndef MPIDI_CH4_EXCLUSIVE_SHM
-    $call $(action), NM
-    #else
-    $if $(is_local)
-        $call $(action), SHM
     $else
-        $call $(action), NM
-    $call @update_request, r
+        mpi_errno = MPIDI_NM_$(fn)($(args));
     #endif
-    $if mpi_errno != MPI_SUCCESS
-        MPIR_ERR_POP(mpi_errno);
 
-# -----------------------------------
-subcode: check_rank_null
+    NEWLINE
+    $if mpi_errno != MPI_SUCCESS
+        MPIR_ERR_POP(mpi_errno)
+
+subcode: safe_call(fn, @args)
+    $if !cs_acq
+        *(req) = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
+        MPIR_ERR_CHKANDSTMT((*req) == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
+        MPIR_Datatype_add_ref_if_not_builtin(datatype);
+        $(if:fn~.*_coll)
+            $(if:fn~send)
+                $(set:SEND=CSEND)
+            $(else)
+                $(set:SEND=ICSEND)
+            MPIDI_workq_csend_enqueue($(SEND), $(arg_csend));
+        $(else)
+            MPIDI_workq_pt2pt_enqueue($(fn:uc), $(arg_p2p));
+    $else
+        (*req) = NULL
+        MPIDI_workq_vci_progress_unsafe()
+        mpi_errno = MPIDI_$(fn)_unsafe($(args));
+
+subcode: mpid_call(fn, @args)
     $if unlikely(rank == MPI_PROC_NULL)
-        MPIR_Request *p_req = MPIR_Request_create(MPIR_REQUEST_KIND__SEND);
-        MPIR_ERR_CHKANDSTMT((p_req) == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
-        MPIR_Request_add_ref(p_req);
-        *pp_req = p_req;
-        MPIDI_CH4U_request_complete(p_req);
-        mpi_errno = MPI_SUCCESS;
+        *request = MPIR_Request_create_complete(MPIR_REQUEST_KIND__SEND)
+        MPIR_ERR_CHKANDSTMT(*request==NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
         goto fn_exit;
 
-macros: 
-    ret_type: MPL_STATIC_INLINE_PREFIX int
+    $my MPIDI_av_entry_t *av = NULL
+    av = MPIDIU_comm_rank_to_av(comm, rank)
+    mpi_errno = MPIDI_$(fn)_safe($(args), av, request);
 
+    if mpi_errno != MPI_SUCCESS
+        MPIR_ERR_POP(mpi_errno)
+
+macros:
+    arg_send:: buf, count, datatype, rank, tag, comm, context_offset, av
+    arg_p2p:: buf, NULL, count, datatype, rank, tag, comm, context_offset, av, NULL, *req, NULL, NULL, NULL
+    arg_csend: buf, count, datatype, rank, tag, comm, context_offset, av, *req, errflag
+
+    unsafe_list:: send, send_coll
+    unsafe_list:: isend, isend_coll
+    unsafe_list:: ssend, issend
+
+    mpid_list: send, send_coll, isend, isend_coll, rsend, irsend, ssend, issend
+
+    preq_list: send, ssend, bsend, rsend
+
+perlcode: set_netmod_fn
+    $(set:get=MyDef::compileutil::get_macro_word)
+    $(set:set=MyDef::compileutil::set_current_macro)
+
+    my $is_safe=$(get)("safe")
+    my $fn = $(get)("fn")
+    my $netmod_fn = $fn
+    $(set)("netmod_fn", $netmod_fn)
+
+    my $args = $(get)("arg_send")
+    $if $is_safe
+        $args .= ", req"
+    $else
+        $args .= ", request"
+    $if $fn=~/send_coll/
+        $args .=", errflag"
+
+    my %types=(
+        rank=> "const void *",
+        count=> "MPI_Aint",
+        datatype=>"MPI_Datatype",
+        rank=>"int",
+        tag=>"int",
+        comm=>"MPIR_Comm *",
+        context_offset=>"int",
+        av=>"MPIDI_av_entry_t *",
+        request=>"MPIR_Request **",
+        req    =>"MPIR_Request **",
+        errflag=>"MPIR_Errflag_t *",
+    );
+
+    my @params
+    $foreach $a in split /,\s*/, $args
+        $if $types{$a}
+            push @params, $types{$a}." $a"
+        $else
+            push @params, $a
+
+    $(set)("args", $args)
+    $(set)("params", join(', ', @params))
+
+    $if $fn=~/_coll/
+
+    
 #---------------------------------------- 
-fncode: MPIDI_NM_mpi_send
-    $call NM_send, 0, 0, send
-fncode: MPIDI_NM_mpi_ssend
-    $call NM_send, 0, 1, ssend
-fncode: MPIDI_NM_mpi_isend
-    $call NM_send, 1, 0, isend
-fncode: MPIDI_NM_mpi_issend
-    $call NM_send, 1, 1, issend
+page: ch4_send.h, ch4_h_frame
+    $(for:fn in $(unsafe_list))
+        $call set_netmod_fn
+        &call mpidi_func, $(fn), $(params)
+            $call unsafe_call, $(fn), $(args)
+    $(for:fn in $(unsafe_list))
+        $(set:safe=1)
+        $call set_netmod_fn
+        &call mpidi_func, $(fn), $(params)
+            $call safe_call, $(fn), $(args)
+    $(for:fn in $(mpid_list))
+        $call set_netmod_fn
+        &call mpidi_func, $(fn), $(params)
+            $call mpid_call, $(fn), $(args)
+    $(for:fn in $(preq_list))
+        $call set_netmod_fn
+        &call mpidi_func, $(fn), $(params)
+            $call pinit_call, $(fn), $(args)
 
-fncode: MPIDI_NM_mpi_send_init
-    $call NM_send_init, send
-fncode: MPIDI_NM_mpi_ssend_init
-    $call NM_send_init, ssend
-fncode: MPIDI_NM_mpi_bsend_init
-    $call NM_send_init, bsend
-fncode: MPIDI_NM_mpi_rsend_init
-    $call NM_send_init, rsend
+    &call mpidi_func, cancel, $(params)
+        $call cancel_call
 

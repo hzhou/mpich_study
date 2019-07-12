@@ -43,7 +43,6 @@ page: build_gcc.sh
     module: general
 
     VER=$1
-    PREFIX=$(OPT)/gcc-$VER
 
     if test x$1 = x4.6 ; then
         URL=$(url_gcc4_6)
@@ -55,18 +54,15 @@ page: build_gcc.sh
         URL=$(url_gcc9)
     fi
 
-    rm -rf $PREFIX
-    $(set:addpath=0)
-    $call setup, $(addpath)
+    $call setup, gcc-$VER, 1
 
-    $(if:addpath=1)
-        $(for:gmp,mpfr,mpc)
-            $call wget, $(url_$1)
-            tar xf $1-*
-            cd $1-*
-            ./configure --prefix=$PREFIX --disable-shared
-            make -j$NJOB install
-            cd ..
+    $(for:gmp,mpfr,mpc)
+        $call wget, $(url_$1)
+        tar xf $1-*
+        cd $1-*
+        ./configure --prefix=$PREFIX --disable-shared
+        make -j$NJOB install
+        cd ..
 
     $call wget, $URL
     tar xf gcc-*
@@ -85,25 +81,27 @@ macros:
     url_clang: http://releases.llvm.org/8.0.0/cfe-8.0.0.src.tar.xz
     url_rt:    http://releases.llvm.org/8.0.0/compiler-rt-8.0.0.src.tar.xz
 
+page: build_cmake.sh
+    module: general
+
+    $call setup, cmake
+
+    $call wget, $(url_cmake)
+    tar xf cmake-*
+    cd cmake-*
+    ./configure --prefix=$PREFIX --parallel=$NJOB
+    make -j$NJOB
+    make install
+
 page: build_clang.sh
     module: general
 
-    PREFIX=$(OPT)/clang-8
-    rm -rf $PREFIX
-    $call setup, 0
+    $call setup, clang-8
 
+    $call prepend_path, cmake
     $call prepend_path, gcc-8
     export CC=gcc-8
     export CXX=g++-8
-
-    $(if:1)
-        $call wget, $(url_cmake)
-        tar xf cmake-*
-        cd cmake-*
-        ./configure --prefix=$PREFIX --parallel=$NJOB
-        make -j$NJOB
-        make install
-        cd ..
 
     $(if:1)
         $call wget, $(url_llvm)
@@ -121,8 +119,35 @@ page: build_clang.sh
     make -j$NJOB
     make install
 
+page: build_lld.sh
+    module: general
+
+    $call setup, lld
+
+    $call prepend_path, cmake
+    $call prepend_path, gcc-8
+    export CC=gcc-8
+    export CXX=g++-8
+
+    if test -d llvm-project ; then 
+        cd llvm-project
+        if test -d build; then
+            rm -rf build
+        fi
+        git pull
+    else
+        git clone https://github.com/llvm/llvm-project llvm-project
+        cd llvm-project
+    fi
+
+    mkdir -p build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=lld -DCMAKE_INSTALL_PREFIX=$PREFIX ../llvm
+    make -j$NJOB
+    make install
+
 #---------------------------------------- 
-subcode: setup(addpath)
+subcode: setup(prefix, @addpath)
     set -e
     if test -z $NJOB ; then
         NJOB=$(NJOB)
@@ -130,7 +155,13 @@ subcode: setup(addpath)
     PATH=$(OPT)/bin:/usr/bin:/bin
     CPATH=$(OPT)/include
     LIBRARY_PATH=$(OPT)/lib
-    $(if:addpath=1)
+
+    $(if:prefix=-)
+        PREFIX=$(OPT)
+    $(else)
+        PREFIX=$(OPT)/$(prefix)
+        rm -rf $PREFIX
+    $(if:addpath)
         PATH=$PREFIX/bin:$PATH
         CPATH=$PREFIX/include
         LIBRARY_PATH=$PREFIX/lib
