@@ -1,0 +1,80 @@
+fncode: MPIDI_NM_am_isendv(rank, comm, handler_id, struct iovec *am_hdr, iov_len, $(data), req)
+    $for i=0:iov_len
+        am_hdr_sz += am_hdr[i].iov_len
+
+    $call alloc, am_hdr_buf
+    $call copy_iov
+
+    MPIDI_NM_am_isend(...)
+
+    $call dealloc, am_hdr_buf
+
+fncode: MPIDI_NM_am_isend(rank, comm, handler_id, am_hdr_buf, am_hdr_sz, $(data), req)
+    $if count>0
+        MPIDI_OFI_do_am_isend(...)
+    $else
+        MPIDI_OFI_do_am_isend_header(...)
+
+fncode: MPIDI_OFI_do_am_isend(rank,comm, handler_id, am_hdr, am_hdr_sz, $(data), req)
+    $if handler_id == MPIDIG_SEND
+        $if $(LONG_MSG)
+            $my MPIDIG_send_long_req_mst_t lreq_hdr
+            ...
+            MPIDI_NM_am_send_hdr(rank,comm, MPIDIG_SEND_LONG_REQ, $(long_req))
+        $else
+            $.req_hdr = NULL
+            MPIDI_OFI_am_init_request(am_hdr, am_hdr_sz, req)
+
+            $if !dt_contig
+                $allocate(data_sz) send_buf
+                MPIR_Typerep_pack($(data), 0, send_buf, data_sz, &last)
+                $.pack_buffer = send_buf
+            $else
+                $.pack_buffer = NULL
+
+            $if $(LONG_MSG)
+                MPIDI_OFI_am_isend_long(...)
+            $else
+                MPIDI_OFI_am_isend_short(...)
+
+fncode: MPIDI_OFI_am_isend_short(rank,comm,handler_id, $(am_hdr), $(data), req, need_lock)
+    $my MPIDI_OFI_am_header_t * msg_hdr
+    $call get_msg_hdr
+    $call make_iov # msg_hdr, am_hdr, data
+    $.event_id = MPIDI_OFI_EVENT_AM_SEND
+    $fcall fi_sendv
+
+fncode: MPIDI_OFI_am_isend_long(rank, comm, handler_id, $(am_hdr), $(data), req, need_lock)
+    $call get_msg_hdr
+    $call get_lmt_info
+    $fcall fi_mr_reg
+    $call make_iov # msg_hdr, am_hdr, lmt_info
+    $.event_id = MPIDI_OFI_EVENT_AM_SEND
+    $fcall fi_sendv
+
+#---------------------------------------- 
+fncode: MPIDI_OFI_handle_long_am(msg_hdr)
+    lmt_msg = msg_hdr->payload + msg_hdr->am_hdr_sz
+    MPIDI_OFI_do_handle_long_am(msg_hdr, lmt_msg, msg_hdr->payload)
+
+fncode: MPIDI_OFI_do_handle_long_am(msg_hdr, lmt_msg, payload)
+    msg_hdr->data_sz
+    $call do_callback
+#---------------------------------------- 
+subcode: _autoload
+    $struct MPIDI_OFI_am_request_t
+        struct fi_context context[2] # or 1
+        int event_id
+        MPIDI_OFI_am_request_header_t *req_hdr
+
+    $struct MPIDI_OFI_am_request_header_t
+        lmt_info, lmt_cntr, lmt_mr
+        pack_buffer, rreq_ptr, am_hdr, am_hdr_sz
+        target_cmpl_cb
+        pad[6]
+        msg_hdr
+        am_hdr_buf[MPIDI_OFI_MAX_AM_HDR_SIZE] # 128
+        iovec iov[3]
+
+subcode: macros
+    OFI_AM: $1->dev.ch4.am.netmod_am.ofi.$2

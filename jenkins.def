@@ -1,5 +1,6 @@
 include: macros_mymake/jenkins_old.def
 include: macros_mymake/jenkins_new.def
+include: macros_mymake/test_frame.def
 include: macros_mymake/test_config.def
 include: macros_mymake/test_makelog.def
 include: macros_mymake/test_random.def
@@ -13,13 +14,19 @@ macros:
 page: test_mymake
     module: perl
 
+    $global $compiler
+
     $call set_mymake_dir
-    # my $compiler = $ENV{compiler}
     # my $config = $ENV{config}
     $call @test_mymake_config
+    $if $config_hash{conflict}
+        $call dump_skip_log
+        exit 0
+
     $call set_N_MAKE_JOBS
 
     $call @dump_config
+    $compiler = $ENV{compiler}
 
     $print Running $mymake_dir/$test_script.sh...
     my $time_start=time()
@@ -30,13 +37,11 @@ page: test_mymake
     $else
         $call report_make_log
 
-    $call @CollectResults
-
     exit $ret
     
     subcode: dump_config
         $print test_mymake.pl:
-        $(for:jenkins,mymake_dir,compiler,config,queue,mpich_device,mpich_config,testmpi_config,N_MAKE_JOBS,SLURM_SUBMIT_HOST,SLURM_SUBMIT_DIR,outoftree)
+        $(for:jenkins,mymake_dir,compiler,config,queue,mpich_device,mpich_config,testmpi_config,N_MAKE_JOBS,out_of_tree)
             $print "    $1: $ENV{$1}"
         $(for:test_script)
             $print "    $1: $$1"
@@ -51,13 +56,23 @@ page: test_mymake
                 $n= $1
             $ENV{N_MAKE_JOBS}=$n
 
+    subcode: dump_skip_log
+        &call open_W, summary.junit.xml
+            $print <testsuites>
+            $print <testsuite failures="0" errors="0" skipped="1" tests="1" name="skip">
+            $print <testcase name="1 - skip">
+            $print <skipped type="conflict" message="$config_hash{conflict}" />
+            $print </testcase>
+            $print </testsuite>
+            $print </testsuites>
+
 page: test_build.sh
     module: general
 
     &call test_frame
         git submodule update --init --recursive
         sh autogen.sh
-        if test x$outoftree = xtrue ; then
+        if test x$out_of_tree = xtrue ; then
             mkdir build
             cd build
             ../configure --prefix=$PREFIX $mpich_config $testmpi_config
@@ -83,7 +98,7 @@ page: test_build.sh
 
         subcode: copy_custom_testlist
             # cp -v testlist testlist.orig
-            if test x$outoftree = xtrue ; then
+            if test x$out_of_tree = xtrue ; then
                 cp -v ../../../test/mpi/testlist.custom testlist
             else
                 cp -v testlist.custom testlist
@@ -98,7 +113,6 @@ page: test_quick.sh
 
     export LD=ld.gold
     &call test_frame
-        $call copy_modules
         perl $mymake_dir/mymake.pl --prefix=$PREFIX $mpich_config
         ls -lt
         $call run_make
@@ -112,19 +126,8 @@ page: test_quick.sh
             cd test/mpi
             sh autogen.sh
             autoreconf -ivf
-            ./configure $testmpi_config
+            ./configure $testmpi_config --disable-romio # disable io until they can run parallel
             $call run_make_testing
-
-    subcode: copy_modules
-        export MODDIR=$PWD/modules
-        mkdir -p $MODDIR
-        pushd $MODDIR
-        tar xf $mymake_dir/modules.tar.gz
-        $(if:1)
-            pushd ucx
-            find . -name '*.la' |xargs --verbose sed -i "s,/var/lib/jenkins-slave/workspace/hzhou-modules,$MODDIR,g"
-            popd    
-        popd
 
     subcode: run_make_testing
         if test x$skip_test = xcustom ; then
@@ -141,90 +144,36 @@ page: build_modules.sh
     git clone https://github.com/pmodels/hwloc
     git clone https://github.com/pmodels/izem
     git clone https://github.com/pmodels/ucx
-    git clone https://github.com/ofiwg/libfabric
+    # git clone https://github.com/ofiwg/libfabric
+    git clone https://github.com/pmodels/libfabric
+    git clone https://github.com/json-c/json-c jsonc
 
     $call config, hwloc, --enable-embedded-mode --enable-visibility
     $call config, izem, --enable-embedded
     $call config, ucx, --disable-shared --with-pic
-    $call config, libfabric, --enable-embedded
+    $call config, libfabric, --enable-embedded --disable-verbs
+    $call config, jsonc 
 
+    rm -rf */.git
+    find . -name '*.o' |xargs rm -f
     tar czf modules.tar.gz hwloc izem ucx libfabric
 
-    subcode: config(dir, option)
+    subcode: config(dir, @option)
         cd $(dir)
-        $(if:dir=ucx)
-            mkdir -p config/m4 config/aux
-            autoreconf -iv
-        $(else)
-            sh autogen.sh
+        $call @pre_$(dir)
+        # ucx will need pkg-config macro: ~share/aclocal/pkg.m4
+        sh autogen.sh
         ./configure $(option)
         make -j 16
+        $call @post_$(dir)
         cd ..
 
-#---------------------------------------- 
-subcode: test_frame
-    set -x
+    subcode: pre_libfabric
+        git checkout -b mpich origin/v1.7.1-mpich
+        git log --oneline -n 5
 
-    $call test_prepare
-    set -o pipefail
-    BLOCK
-
-    subcode: run(cmd)
-        $(cmd) 2>&1 || exit 1
-
-    subcode: run_make(@target)
-        make -j$N_MAKE_JOBS $(target) 2>&1 | tee -a make.log
-        if test "$?" != "0"; then
-            exit $?
-        fi
-
-    subcode: mult_call(proc)
-        if test x$jenkins = xold ; then
-            $call $(proc)_old
-        else
-            $call $(proc)
-        fi
-    subcode: test_prepare
-        $call pre_check
-        $call mult_call, PrepareEnv
-        if test -d $HOME/software/autotools/bin; then
-            export PATH=$HOME/software/autotools/bin:$PATH
-        fi
-
-        if test -n $compiler ; then
-            $call mult_call, SetCompiler
-        fi
-        $(for:autoconf,automake,libtool)
-            which $1
-            $1 --version
-        $(for:CC,CXX,F77,FC)
-            export $1
-            which $$1
-            $$1 --version
-        WORKSPACE=$PWD
-        SRC=$PWD
-        # $call prepare_from_tarball
-        PREFIX=$WORKSPACE/_inst
-        MPIEXEC=$PREFIX/bin/mpiexec
-
-        subcode: pre_check
-            hostname
-            date
-            uptime
-            pgrep mpiexec | wc -l
-
-    subcode: test_testing
-        export PATH=$PREFIX/bin:$PATH
-        export CPATH=$PREFIX/include:$CPATH
-        export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
-        # check memory info
-        free
-
-        if test x$skip_test = xtrue ; then 
-            exit 0
-        else
-            BLOCK
-        fi
+    subcode: post_ucx
+        find . -name '*.la' |xargs --verbose sed -i "s,$PWD,MODDIR,g"
 
 #---------------------------------------- 
 page: apply_xfail
@@ -236,6 +185,10 @@ page: apply_xfail
 
     $if !$opt{netmod}
         $opt{netmod}="ch3:tcp"
+
+    $if !$opt{job}
+        $if $opt{netmod}=~/(ch\d)/
+            $opt{job}=$1
 
     $if !-f $opt{conf}
         $print No config file exist, exit.
@@ -278,47 +231,3 @@ page: slurm_job.sh
     module: general
     $call @slurm_job_old
 
-#---------------------------------------- 
-# For manual run from a scratch disk
-page: run_pr
-    module: perl
-
-    $call set_mymake_dir
-    $call checkout_pr
-    $ENV{compiler}="gnu"
-    $ENV{test_script}="test_quick"
-    $ENV{skip_test}=1
-    $ENV{config}="default"
-    $if !$ENV{configOption}
-        $ENV{configOption}="--enable-strict --disable-romio --disable-fortran"
-    $ENV{SLURM_SUBMIT_HOST}=""
-    $ENV{SLURM_SUBMIT_DIR}=""
-    system "perl $mymake_dir/test_mymake.pl"
-
-    subcode: checkout_pr
-        my $pr=$ARGV[0]
-        $if ! $pr > 0
-            die "Usage: $0 pr-number\n"
-        $call get_pr_info
-        $if !$author
-            die "Failed to fetch PR information\n"
-
-        $if !-d "mpich-$pr"
-            $call run, git clone https://github.com/pmodels/mpich mpich-$pr
-            chdir "mpich-$pr" or die "Can't chdir mpich-$pr\n"
-            $call run, git checkout -b $branch master
-            $call run, git pull https://github.com/$author/mpich.git $branch
-        $else
-            chdir "mpich-$pr" or die "Can't chdir mpich-$pr\n"
-
-    subcode: run(cmd)
-        system("$(cmd)") == 0 or die "Error: $(cmd)\n"
-
-    subcode: get_pr_info
-        my ($author, $branch)
-        &call open_r, curl https://api.github.com/repos/pmodels/mpich/pulls/$pr |
-            $if /^\s*"label":\s*"(\w+):(\S+)",/
-                $if $1 ne "pmodels"
-                    $author = $1
-                    $branch = $2
-                    last

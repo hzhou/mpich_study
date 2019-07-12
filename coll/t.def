@@ -1,0 +1,39 @@
+page: t
+    module: perl
+    
+    chdir "$ENV{HOME}/work/mpich-github" or die
+    $(if:0)
+        update("iallgather", "intra_recexch_distance_doubling", "intra_gentran_recexch_doubling")
+        update("iallgather", "intra_recexch_distance_halving", "intra_gentran_recexch_halving")
+        update("iallgatherv", "intra_recexch_distance_doubling", "intra_gentran_recexch_doubling")
+        update("iallgatherv", "intra_recexch_distance_halving", "intra_gentran_recexch_halving")
+    $(if:1)
+        update("iallreduce", "intra_recexch_multiple_buffer", "intra_gentran_recexch_multiple_buffer")
+    $(if:0)
+        update("iallreduce", "intra_recexch_single_buffer", "intra_gentran_recexch_single_buffer")
+        update("iallreduce", "intra_recexch_double_buffer", "intra_gentran_recexch_double_buffer")
+        update("iallreduce", "intra_tree", "intra_gentran_tree")
+        update("iallreduce", "intra_ring", "intra_gentran_ring")
+        update("ibarrier", "intra_recexch", "intra_gentran_recexch")
+        update("ibcast", "intra_tree", "intra_gentran_tree")
+        update("ibcast", "intra_scatter_recexch_allgather", "intra_gentran_scatter_recexch_allgather")
+        update("ibcast", "intra_ring", "intra_gentran_ring")
+        update("igather", "intra_tree", "intra_gentran_tree")
+        update("ireduce", "intra_tree", "intra_gentran_tree")
+        update("ireduce", "intra_ring", "intra_gentran_ring")
+        update("ireduce_scatter", "intra_recexch", "intra_gentran_recexch")
+        update("ireduce_scatter_block", "intra_recexch", "intra_gentran_recexch")
+        update("iscatter", "intra_tree", "intra_gentran_tree")
+
+fncode: update($coll, $a, $b)
+    my $d = "src/mpi/coll"
+    system "git mv $d/$coll/$coll\_$a.c $d/$coll/$coll\_$b.c"
+    patch("$d/$coll/$coll\_$b.c", $a, $b)
+    patch("$d/$coll/Makefile.mk", $a, $b)
+
+fncode: patch($f, $a, $b)
+    system "mv $f /tmp/t.txt"
+    &call open_W, $f
+        &call open_r, /tmp/t.txt
+            s/$a/$b/
+            print Out $_

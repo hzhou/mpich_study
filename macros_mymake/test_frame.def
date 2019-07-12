@@ -1,0 +1,60 @@
+subcode: test_frame
+    set -x
+    printenv
+    $call test_prepare
+    set -o pipefail
+    BLOCK
+
+    subcode: run(cmd)
+        $(cmd) 2>&1 || exit 1
+
+    subcode: run_make(@target)
+        make -j$N_MAKE_JOBS $(target) 2>&1 | tee -a make.log
+        if test "$?" != "0"; then
+            exit $?
+        fi
+
+    subcode: mult_call(proc)
+        if test x$jenkins = xold ; then
+            $call $(proc)_old
+        else
+            $call $(proc)
+        fi
+    subcode: test_prepare
+        $call pre_check
+        $call mult_call, PrepareEnv
+        if test -n $compiler ; then
+            $call mult_call, SetCompiler
+        fi
+        $(for:autoconf,automake,libtool)
+            which $1
+            $1 --version
+        $(for:CC,CXX,F77,FC)
+            export $1
+            which $$1
+            $$1 --version
+        WORKSPACE=$PWD
+        SRC=$PWD
+        # $call prepare_from_tarball
+        PREFIX=$WORKSPACE/_inst
+        if test -z "$MPIEXEC" ; then
+            MPIEXEC=$PREFIX/bin/mpiexec
+        fi
+
+        subcode: pre_check
+            hostname
+            date
+            uptime
+            pgrep mpiexec | wc -l
+
+    subcode: test_testing
+        export PATH=$PREFIX/bin:$PATH
+        export CPATH=$PREFIX/include:$CPATH
+        export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
+
+        if test x$skip_test = xtrue ; then 
+            exit 0
+        else
+            BLOCK
+        fi
+

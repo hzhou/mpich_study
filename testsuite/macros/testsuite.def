@@ -1,0 +1,49 @@
+include: mpich_frame.def
+
+subcode: p2p_frame
+    $include stdio, stdlib, mpi, "mpitest.h"
+    $function main
+        $local rank, size: int
+        MTest_Init(&argc, &argv);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+        $if size<2
+            fprintf(stderr, "Must run with at least 2 processes\n");
+            MPI_Abort(MPI_COMM_WORLD, 1);
+
+        $call main
+
+        $local int errs=0
+        MTest_Finalize(errs);
+
+#----------------------------------------         
+perlcode: create_type_struct
+    $call load_sz_hash
+    my @plist = split /,\s*/, $param
+    my $var = shift @plist
+    my (@types, @cnts, @disps)
+    $my $off=0, $align=1
+    $foreach $t in @plist
+        $if $t=~/(\w+):(\d+)/
+            $if $align < $sz_hash{$1}
+                $align = $sz_hash{$1}
+    $foreach $t in @plist
+        $if $t=~/(\w+):(\d+)/
+            push @types, $1
+            push @cnts, $2
+            push @disps, $off
+            $print $1: $sz_hash{$1} * $2
+            $off += $sz_hash{$1} * $2
+            $if $off % $align > 0
+                $off += $align - $off % $align
+
+    my $n = @plist
+    $(for:cnts,types,disps)
+        my $t_$1 = join(', ', @$1)
+    push @$out, "MPI_Type_struct($n, (int []){$t_cnts}, (MPI_Aint []){$t_disps}, (MPI_Datatype []){$t_types}, &$var);"
+
+    subcode: load_sz_hash
+        my %sz_hash=(
+            MPI_INT=>4,
+            MPI_CHAR=>1,
+        )

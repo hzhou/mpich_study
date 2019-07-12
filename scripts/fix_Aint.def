@@ -1,0 +1,42 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    patch: size_t
+
+#---------------------------------------- 
+subcode: grep_size_t
+    $call grep_l, '\\<size_t\\>'
+
+    subcode: custom_grep_l
+        $if !/src\/(mpi|mpid)/
+            next
+
+subcode: filter_lines_size_t
+    $if $(l)=~/^\s*\*\s+/
+        # assume to be part of comment
+    $elif $(l)=~/(^\s*\/\*)/
+        # assume the entire line is part of comment
+    $elif $(l)=~/size_t/
+        $(l)=~s/\bsize_t\b/MPI_Aint/g
+        $cnt++
+
+#---------------------------------------- 
+subcode: grep_Aint
+    $call grep_l, '\\<MPI_Aint\\>'
+    my $n = @files
+    $print $n files
+
+    subcode: custom_grep_l
+        $if /^\.\/(test|doc|src\/binding|src\/mpi\/romio)\//
+            next
+        $elif /aint_(add|diff)/
+            next
+
+subcode: filter_lines_Aint
+    $if $(l)=~/(^\s*\/\*|\*\/\s*$|^\s*\*)/
+        NOOP
+    $elif $(l)!~/^\w+\s+MPI_\w+\(/
+        $(l)=~s/\bMPI_Aint\b/size_t/g
+        $cnt++
+

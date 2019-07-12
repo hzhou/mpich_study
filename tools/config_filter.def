@@ -1,0 +1,363 @@
+bypasscode: doc
+    NEWLINE
+    \x23 This script is to be run by AC_CONFIG_COMMANDS in mpich's configure.ac,
+    \x23 after all the AC_OUTPUT files are generated -- in particular, mpi.h and 
+    \x23 mpichconf.h.
+    \x23 Configure script's function is to gather user options and do system feature
+    \x23 detections. That includes checking the sizes of language datatypes. This
+    \x23 script does further processing based on the results in mpichconf.h. It does 
+    \x23 following tasks:
+    \x23 * Putting in the size into MPI datatype handles in mpi.h.
+    \x23 * typedef MPI_Aint, MPI_Offset, MPI_Count in mpi.h.
+    \x23 * Putting in handle decimal values in mpif.h.
+    \x23 * Define HAVE_datatype macros for all types that have non-zero sizes.
+    \x23 * Define MPIR_xxx_CTYPE for FORTRAN and CXX datatypes.
+    \x23 * Define MPIR_xxx_FMT_[dx] and MPIR_xxx_MAX for MPI_Aint, MPI_Offset, and MPI_Count.
+    NEWLINE
+
+subcode: section(title)
+    NEWLINE
+    $:: \x23 ---- $(title) ----
+
+page: config_filter
+    module: perl
+    dstinc: src/include
+    dstmpifh: src/binding/fortran/mpif_h
+    dstf08: src/binding/fortran/use_mpi_f08
+    # dstinc: templates
+    # DATATYPE_NULL: "0x0c000000"
+
+    NEWLINE
+    my $srcdir="."
+    $if $0=~/(.*)\/maint\/.*/
+        $srcdir = $1
+
+    $(block:frame_init)
+        $call doc
+        $(for:BYTE,PACKED,LB,UB and 1,1,"-","-")
+            $size_hash{$1}=$2
+
+        $map assert, CHAR, SHORT, INT, LONG, FLOAT, DOUBLE
+        $size_hash{"UNSIGNED"}=$size_hash{INT}
+        $size_hash{"WCHAR"}=$size_hash{WCHAR_T}
+
+        $size_hash{"C_BOOL"}=$size_hash{_BOOL}
+        $size_hash{"C_FLOAT16"}=$size_hash{_FLOAT16}
+
+        $size_hash{"C_FLOAT_COMPLEX"}=$size_hash{FLOAT__COMPLEX}
+        $size_hash{"C_DOUBLE_COMPLEX"}=$size_hash{DOUBLE__COMPLEX}
+        $size_hash{"C_LONG_DOUBLE_COMPLEX"}=$size_hash{LONG_DOUBLE__COMPLEX}
+
+        $if $have_hash{FORTRAN_BINDING}
+            $(for:INTEGER,REAL,DOUBLE_PRECISION)
+                $size_hash{"$1"} = $size_hash{F77_$1}
+            $map assert, INTEGER, REAL, DOUBLE_PRECISION
+
+            $size_hash{CHARACTER}=1
+            $size_hash{LOGICAL}=$size_hash{INTEGER}
+            $size_hash{COMPLEX} = $size_hash{REAL}*2
+            $size_hash{DOUBLE_COMPLEX} = $size_hash{DOUBLE_PRECISION}*2
+            $foreach $i in 1,2,4,8,16
+                $if $have_hash{"F77_INTEGER_$i"}
+                    $size_hash{"INTEGER$i"}=$i
+            $foreach $i in 2,4,8,16
+                $if $have_hash{"F77_REAL_$i"}
+                    $size_hash{"REAL$i"}=$i
+                    my $i2 = $i*2
+                    $size_hash{"COMPLEX$i2"}=$i2
+
+        $if $have_hash{CXX_BINDING}
+            $size_hash{"CXX_BOOL"} = $size_hash{BOOL}
+            $size_hash{"CXX_FLOAT_COMPLEX"} = $size_hash{FLOATCOMPLEX}
+            $size_hash{"CXX_DOUBLE_COMPLEX"} = $size_hash{DOUBLECOMPLEX}
+            $size_hash{"CXX_LONG_DOUBLE_COMPLEX"} = $size_hash{LONGDOUBLECOMPLEX}
+
+        $if $size_hash{LONG_DOUBLE}==0
+            $size_hash{LONG_DOUBLE_INT}=0
+            $size_hash{LONG_DOUBLE__COMPLEX}=0
+            $size_hash{C_LONG_DOUBLE_COMPLEX}=0
+            $size_hash{CXX_LONG_DOUBLE_COMPLEX} = 0
+
+        subcode: assert(type)
+            $if ! $size_hash{$(type)} > 0
+                warn "ASSERTION FAIL: size of $(type) not found\n"
+
+    subcode: get_sized_types
+        $global %sized_types
+        $foreach $t in qw(char int short long long_long)
+            my $size = $size_hash{uc($t)}
+            $if !$sized_types{"i$size"}
+                $sized_types{"i$size"}=$t
+                $if $t=~/\w+_\w+/
+                    $sized_types{"i$size"}=~s/_/ /g
+
+        $foreach $t in qw(_Float16 float double long_double)
+            my $size = $size_hash{uc($t)}
+            $if !$sized_types{"r$size"}
+                $sized_types{"r$size"}=$t
+                $if $t=~/\w+_\w+/
+                    $sized_types{"r$size"}=~s/_/ /g
+
+    subcode: match_type_fint_etc
+        $(for:FINT,AINT,OFFSET,COUNT)
+            $ctype_hash{$1} = $sized_types{"i".$size_hash{$1}}
+        $if $size_hash{INTEGER}
+            $ctype_hash{FINT} = $sized_types{"i".$size_hash{INTEGER}}
+
+        $call @sanity_check
+
+        subcode: sanity_check
+            my $has_error
+            $foreach $t in "FINT", "AINT", "OFFSET", "COUNT"
+                $if !$ctype_hash{$t}
+                    warn "Couldn't find c type for MPI_$t\n"
+                    $has_error++
+
+            $if $has_error
+                die 
+
+    subcode: match_binding_types
+        $if $have_hash{FORTRAN_BINDING}
+            $foreach $t in qw(CHARACTER INTEGER INTEGER1 INTEGER2 INTEGER4 INTEGER8 INTEGER16)
+                $ctype_hash{$t} = $sized_types{"i".$size_hash{$t}}
+
+            $foreach $t in qw(REAL DOUBLE_PRECISION REAL2 REAL4 REAL8 REAL16)
+                $ctype_hash{$t} = $sized_types{"r".$size_hash{$t}}
+
+            $ctype_hash{LOGICAL} = "MPI_Fint"
+
+            $ctype_hash{COMPLEX} = "float _Complex"
+            $ctype_hash{COMPLEX16} = "double _Complex"
+            $ctype_hash{COMPLEX32} = "long double _Complex"
+
+        $if $have_hash{CXX_BINDING}
+            $if $size_hash{C_BOOL}>0
+                $if $size_hash{CXX_BOOL}==$size_hash{C_BOOL}
+                    $ctype_hash{CXX_BOOL}="_Bool"
+                $else
+                    $ctype_hash{CXX_BOOL} = "unsigned ".$sized_types{"i".$size_hash{CXX_BOOL}}
+
+            $(for:a in FLOAT,DOUBLE,LONG_DOUBLE)
+                $(set:T=$size_hash{$1_$(a)_COMPLEX})
+                $if $(T:C)>0 && $(T:C)==$(T:CXX)
+                    $(if:a=LONG_DOUBLE)
+                        $ctype_hash{CXX_$(a)_COMPLEX} = "long double _Complex"
+                    $(else)
+                        $ctype_hash{CXX_$(a)_COMPLEX} = "$(a:lc) _Complex"
+
+    #---------------------------------------- 
+    subcode: load_mpichconf
+        my @mpichconf_lines
+        &call open_r, $(dstinc)/mpichconf.h
+            push @mpichconf_lines, $_
+
+            $if /^#define SIZEOF_(\w+)\s+(\d+)/ -> $name, $size
+                $size_hash{$name} = $size
+                $if $name=~/^INT\d+_T/
+                    $size_hash{"U$name"}=$size
+                $elif $name=~/^(char|short|int|long)/i
+                    $size_hash{"UNSIGNED_$name"}=$size
+                    $size_hash{"SIGNED_$name"}=$size
+            $elif /^#define MPIR_(\w+)_CTYPE /
+                $ctype_hash{$1} = 1
+                $if /^#define MPIR_INTEGER(\d+)_CTYPE /
+                    $size_hash{"INTEGER$1"} = $1
+                $elif /^#define MPIR_REAL(\d+)_CTYPE /
+                    $size_hash{"REAL$1"} = $1
+                    $size_hash{"COMPLEX".($1*2)} = $1*2
+            $elif /^#define HAVE_(\w+) (\w+)/
+                $have_hash{$1}=$2
+
+    #---------------------------------------- 
+    subcode: load_mpi_h
+        $global %MPI_hash, @MPI_list
+        my @lines
+        &call open_r, $(dstinc)/mpi.h
+            $(set:pat=0x[0-9a-f]+)
+            $if /^#define\s+(MPIX?)_(\w+)\s*\(\(MPI_Datatype\)($(pat))\)/ -> $prefix, $name, $id
+                $if $name ne "DATATYPE_NULL"
+                    $call load_datatype
+                    $MPI_hash{$prefix.'_'.$name} = $id
+                    push @MPI_list, $name
+                # $print $name: $size : $_-
+            $elif /^#define\s+(MPIX?)_(\w+)\s+(MPIX?)_(\w+)/ -> $prefix1, $name1, $prefix2, $name2
+                $MPI_hash{$prefix1.'_'.$name1} = $MPI_hash{$prefix2.'_'.$name2}
+                $size_hash{$name1} = $size_hash{$name2}
+            $elif /PLACEHOLDER FOR config_filter/
+                $call add_Fint_etc
+                next
+            $elif /^#ifdef\s+(HAVE_MPIX?_(\w+))/ -> $have, $name
+                my $t = 0
+                $if $size_hash{$name}
+                    $t = 1
+                $_="#if $t /\x2a $have \x2a/\n"
+
+            push @lines, $_
+
+        # ------------------------
+        subcode: load_datatype
+            $call retrieve_size
+
+            $if $id=~/0x8c/ and $size ne "0" # $size maybe undef
+                # direct type
+                $size_hash{$name} = "-"
+            $elif $size eq "-"
+                # keep as is
+            $elif !$size # 0 or undef
+                # s/$(pat)/MPI_DATATYPE_NULL/
+                # only this case $size_hash{$name} is false
+            $else
+                # 0x23456789
+                substr($id,6,2)=sprintf("%02x", $size) 
+                s/$(pat)/$id/
+
+        subcode: add_Fint_etc
+            $(for:a in Fint,Aint,Offset,Count)
+                my $type = $ctype_hash{$(a:uc)}
+                push @lines, "typedef ".$ctype_hash{$(a:uc)}." MPI_$(a);\n"
+            push @lines, "\n"
+
+        subcode: retrieve_size
+            my $t_name=$name
+            $t_name=~s/(UNSIGNED|SIGNED)_//
+            my $size = $size_hash{$t_name}
+            $if !$size and $name=~/^2(\w+)/
+                $size = 2 * $size_hash{$1}
+                $size_hash{$name}=$size
+
+    #---------------------------------------- 
+    subcode: dump_mpi_h
+        &call open_w, $(dstinc)/mpi.h
+            print Out @lines
+
+    #---------------------------------------- 
+    subcode: dump_mpir_ext_h
+        my @lines
+        &call open_r, $(dstinc)/mpir_ext.h
+            push @lines, $_
+        &call open_w, $(dstinc)/mpir_ext.h
+            $foreach $l in @lines
+                $if $l=~/PLACEHOLDER for config_filter/
+                    $call dump_HAVE_macros
+                    $call dump_mpir_ctypes
+                    $call dump_mpir_ucount
+                    $call dump_fmt_macros
+                    # $call dump_HAVE_ERROR_CHECKING
+                $else
+                    print Out $l
+
+        subcode: dump_HAVE_macros
+            $foreach $a in sort keys %MPI_hash
+                $if $a =~/MPI\w?_(\w+)/
+                    $if !$size_hash{$1}
+                        print Out "/* #define HAVE_$1 1 */\n"
+                    $else
+                        print Out "#define HAVE_$1 1\n"
+            print Out "\n"
+
+        subcode: dump_mpir_ctypes
+            my (@klist, $maxlen)
+            $foreach $k in sort keys %ctype_hash
+                $if $ctype_hash{$k}
+                    $if $maxlen < length($k)
+                        $maxlen = length($k)
+                    push @klist, $k
+            $foreach $k in @klist
+                my $sp = ' ' x ($maxlen - length($k))
+                print Out "#define MPIR_$k\_CTYPE $sp$ctype_hash{$k}\n"
+            print Out "\n"
+
+        subcode: dump_mpir_ucount
+            print Out "\x2f* MPIR_Ucount is needed in mpir_status.h *\x2f\n"
+            print Out "#define MPIR_Ucount  unsigned $ctype_hash{COUNT}\n"
+            print Out "\n"
+
+        subcode: dump_fmt_macros
+            $(for:AINT,OFFSET,COUNT)
+                $if $size_hash{$1}==4
+                    print Out "#define MPIR_$1_FMT_d \"%\" PRId32\n"
+                    print Out "#define MPIR_$1_FMT_x \"%\" PRIx32\n"
+                    print Out "#define MPIR_$1_MAX 2147483647\n"
+                $elif $size_hash{$1}==8
+                    print Out "#define MPIR_$1_FMT_d \"%\" PRId64\n"
+                    print Out "#define MPIR_$1_FMT_x \"%\" PRIx64\n"
+                    print Out "#define MPIR_$1_MAX 9223372036854775807\n"
+                $else
+                    die "sizeof MPI_$1 is neither 4 or 8 bytes\n"
+            print Out "\n"
+            print Out "#define MPI_AINT_FMT_DEC_SPEC MPIR_AINT_FMT_d\n"
+            print Out "#define MPI_AINT_FMT_HEX_SPEC MPIR_AINT_FMT_x\n"
+
+        subcode: dump_HAVE_ERROR_CHECKING
+            $if $have_hash{ERROR_CHECKING}
+            print Out "\n"
+            print Out "#ifndef HAVE_ERROR_CHECKING\n"
+            print Out "#define HAVE_ERROR_CHECKING $have_hash{ERROR_CHECKING}\n"
+            print Out "#endif"
+
+    #---------------------------------------- 
+    subcode: load_mpif_h
+        my ($has_exclaim, $has_real8)
+        $if $ENV{has_exclaim} eq "yes"
+            $has_exclaim = 1
+        $if $ENV{has_real8} eq "yes"
+            $has_real8 = 1
+
+        my @lines
+        &call open_r, $(dstmpifh)/mpif.h
+            $if $has_exclaim
+                s/^C/!/
+            $if $has_real8
+                s/DOUBLE PRECISION/REAL*8/g
+            $if /PARAMETER\s*\((MPIX?_\w+)=-\)/
+                $if $MPI_hash{$1}
+                    $call decimal_in_t, $MPI_hash{$1}
+                    s/-/$t/
+            push @lines, $_
+
+    subcode: dump_mpif_h
+        &call open_w, $(dstmpifh)/mpif.h
+            print Out @lines
+        &call open_w, $(dstinc)/mpif.h
+            print Out @lines
+
+    subcode: decimal_in_t(value)
+        my $t = hex($(value))
+        $if $(value)=~/0x[89a-f]/
+            $t -= 0x100000000
+
+    #---------------------------------------- 
+    subcode: load_dump_f08
+        my @lines
+        &call open_r, $(dstf08)/mpi_f08_compile_constants.f90
+            $if /Datatypes PLACEHOLDER for config_filter/
+                push @lines, "! Datatypes\n"
+                $call dump_f08_datatypes
+                next
+            push @lines, $_
+
+        &call open_w, $(dstf08)/mpi_f08_compile_constants.f90
+            print Out @lines
+
+        # -------------------------
+        my @lines
+        &call open_r, $(dstf08)/mpi_c_interface_types.f90
+            $if /c_Aint.* PLACEHOLDER for config_filter/
+                $foreach $a in qw(Aint Offset Count)
+                    my $t = "c_".$ctype_hash{uc($a)}
+                    $t=~s/ /_/g
+                    push @lines, "integer,parameter :: c_$a = $t\n"
+                next
+            push @lines, $_
+
+        &call open_w, $(dstf08)/mpi_c_interface_types.f90
+            print Out @lines
+
+        # -------------------------
+        subcode: dump_f08_datatypes
+            $foreach $name in sort keys %MPI_hash
+                $call decimal_in_t, $MPI_hash{$name}
+                my $s = sprintf("%-25s", $name)
+                push @lines, "type(MPI_Datatype), parameter  :: $s = MPI_Datatype($t)\n"
+
+

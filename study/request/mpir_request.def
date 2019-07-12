@@ -1,0 +1,42 @@
+page: mpir_request
+    $include "mpiimpl.h"
+    $global MPIR_Request MPIR_Request_direct[MPIR_REQUEST_PREALLOC]
+    # objmem_ptr
+    $(set:direct=MPIR_Request_direct, MPIR_REQUEST_PREALLOC)
+    $global MPIR_Object_alloc_t MPIR_Request_mem = {0, 0, 0, 0, MPIR_REQUEST, sizeof(MPIR_Request), $(direct)}
+
+subcode: _autoload
+    $register_name(request_ptr) MPIR_Request *
+    $register_name(status) MPI_Status *
+macros:
+    REQ: MPIR_REQUEST_KIND__$1
+
+fncode: MPIR_Request_completion_processing(request_ptr, status)
+    $switch request_ptr->kind
+        $of $(REQ:SEND)
+            $call status_set_cancel, request_ptr
+            $call MPII_SENDQ_FORGET, request_ptr
+        $of $(REQ:RECV), $(REQ:COLL), $(REQ:RMA)
+            $call status_extract, request_ptr
+        $call @other_cases
+
+fncode: MPIR_Request_handle_proc_failed(request_ptr)
+    $if request_ptr->kind == $(REQ:RECV)
+        MPID_Cancel_recv(request_ptr)
+        MPIR_Status_set_cancel_bit(status, FALSE)
+    $call @set_status
+
+fncode: MPIR_Request_get_error(request_ptr)
+    # getting the error code without modifying request
+
+#---------------------------------------- 
+subcode: status_set_cancel(ptr)
+    MPIR_Status_set_cancel_bit(status, MPIR_STATUS_GET_CANCEL_BIT($(ptr)->status))
+    mpi_errno = $(ptr)->status.MPI_ERROR
+
+subcode: status_extract(ptr)
+    MPIR_Request_extract_status($(ptr), status)
+    mpi_errno = $(ptr)->status.MPI_ERROR
+
+
+

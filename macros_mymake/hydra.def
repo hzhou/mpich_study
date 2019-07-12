@@ -65,12 +65,12 @@ subcode: hydra_config
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
         &call modify, tools/topo/Makefile.mk
-            $if $l=~/if\s+hydra_have_hwloc/
+            $if $l=~/if\s+HYDRA_HAVE_HWLOC/i
                 next
             $elif $l=~/endif/
                 next
         &call modify, tools/topo/hwloc/Makefile.mk
-            $if $l=~/if\s+hydra_use_embedded_hwloc/
+            $if $l=~/if\s+HYDRA_USE_EMBEDDED_HWLOC/i
                 $flag_skip=1
                 next
             $elif $l=~/endif/

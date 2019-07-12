@@ -1,0 +1,148 @@
+output_dir: ./mymake
+
+macros:
+    NJOB: 16
+    OPT: /nfs/gce/projects/login-pmrs/opt
+
+#---------------------------------------- 
+macros:
+    url_autoconf: https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz
+    # automake 1.16 need List::Util 'none' (perl > 5.18)
+    url_automake: https://ftp.gnu.org/gnu/automake/automake-1.15.tar.xz
+    url_libtool:  https://ftp.gnu.org/gnu/libtool/libtool-2.4.6.tar.xz
+
+    url_gmp: https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz
+    url_mpfr: https://www.mpfr.org/mpfr-current/mpfr-4.0.2.tar.xz
+    url_mpc: https://ftp.gnu.org/gnu/mpc/mpc-1.1.0.tar.gz
+
+    gcc_mirror: https://bigsearcher.com/mirrors/gcc/releases
+    url_gcc4_6: $(gcc_mirror)/gcc-4.6.3/gcc-4.6.3.tar.bz2
+    url_gcc7: $(gcc_mirror)/gcc-7.4.0/gcc-7.4.0.tar.xz
+    url_gcc8: $(gcc_mirror)/gcc-8.3.0/gcc-8.3.0.tar.xz
+    url_gcc9: $(gcc_mirror)/gcc-9.1.0/gcc-9.1.0.tar.xz
+
+page: build_autotool.sh
+    module: general
+
+    PREFIX=$(OPT)
+    $(for:a in autoconf,automake,libtool)
+        $call wget, $(url_$(a))
+        tar xf $(a)-*
+        cd $(a)-*
+        ./configure --prefix=$PREFIX
+        $(if:a=automake)
+            # missing prerequisite `help2man`
+            sed -i 's/ .(MANS) / /' Makefile
+            sed -i 's/\<install-man //' Makefile
+        make -j$(NJOB) install
+        cd ..
+    # ucx will need pkg.m4 from pkg-config
+    # ln -s /usr/share/aclocal/pkg.m4 $PREFIX/share/aclocal/
+
+page: build_gcc.sh
+    module: general
+
+    VER=$1
+    PREFIX=$(OPT)/gcc-$VER
+
+    if test x$1 = x4.6 ; then
+        URL=$(url_gcc4_6)
+    elif test x$1 = x7 ; then
+        URL=$(url_gcc7)
+    elif test x$1 = x8 ; then
+        URL=$(url_gcc8)
+    else
+        URL=$(url_gcc9)
+    fi
+
+    rm -rf $PREFIX
+    $(set:addpath=0)
+    $call setup, $(addpath)
+
+    $(if:addpath=1)
+        $(for:gmp,mpfr,mpc)
+            $call wget, $(url_$1)
+            tar xf $1-*
+            cd $1-*
+            ./configure --prefix=$PREFIX --disable-shared
+            make -j$NJOB install
+            cd ..
+
+    $call wget, $URL
+    tar xf gcc-*
+    cd gcc-*
+    mkdir build
+    cd build
+    ../configure --prefix=$PREFIX --program-suffix=-$VER --disable-multilib --enable-languages=c,c++,fortran
+    make -j$NJOB
+    make install
+
+#---------------------------------------- 
+macros: 
+    # cmake_static: -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_FIND_LIBRARY_SUFFIXES='.a'
+    url_cmake: https://github.com/Kitware/CMake/releases/download/v3.14.3/cmake-3.14.3.tar.gz
+    url_llvm:  http://releases.llvm.org/8.0.0/llvm-8.0.0.src.tar.xz
+    url_clang: http://releases.llvm.org/8.0.0/cfe-8.0.0.src.tar.xz
+    url_rt:    http://releases.llvm.org/8.0.0/compiler-rt-8.0.0.src.tar.xz
+
+page: build_clang.sh
+    module: general
+
+    PREFIX=$(OPT)/clang-8
+    rm -rf $PREFIX
+    $call setup, 0
+
+    $call prepend_path, gcc-8
+    export CC=gcc-8
+    export CXX=g++-8
+
+    $(if:1)
+        $call wget, $(url_cmake)
+        tar xf cmake-*
+        cd cmake-*
+        ./configure --prefix=$PREFIX --parallel=$NJOB
+        make -j$NJOB
+        make install
+        cd ..
+
+    $(if:1)
+        $call wget, $(url_llvm)
+        tar xf llvm-*
+    cd llvm-*
+    $(if:1)
+        $call wget, $(url_clang)
+        tar xf cfe-* -C tools
+    $(if:0)
+        $call wget, $(url_rt)
+        tar xf compiler-rt-* -C projects
+    mkdir -p build
+    cd build
+    cmake -G 'Unix Makefiles' -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release ..
+    make -j$NJOB
+    make install
+
+#---------------------------------------- 
+subcode: setup(addpath)
+    set -e
+    if test -z $NJOB ; then
+        NJOB=$(NJOB)
+    fi
+    PATH=$(OPT)/bin:/usr/bin:/bin
+    CPATH=$(OPT)/include
+    LIBRARY_PATH=$(OPT)/lib
+    $(if:addpath=1)
+        PATH=$PREFIX/bin:$PATH
+        CPATH=$PREFIX/include
+        LIBRARY_PATH=$PREFIX/lib
+        export LD_LIBRARY_PATH=$PREFIX/lib
+    export PATH CPATH LIBRARY_PATH
+
+subcode: prepend_path(name)
+    $(set:A=$(OPT)/$(name))
+    export PATH=$(A)/bin:$PATH
+    export CPATH=$(A)/include:$CPATH
+    export LIBRARY_PATH=$(A)/lib:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(A)/lib:$(A)/lib64:$LD_LIBRARY_PATH
+
+subcode: wget(url)
+    wget --no-verbose $(url)

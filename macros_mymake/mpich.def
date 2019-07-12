@@ -1,18 +1,31 @@
+
 subcode: compile_mpich
+    $call @preproc_bindings
     $call mpich_configure
     $call @post_mpich_configure
 
     $call add_rule_cpi
 
     $call need_mpich_preproc
-    $(for:mpl,opa,hwloc,romio)
+    $(for:mpl,opa,hwloc)
         $call need_$1
+
+    $if !$opts{disable_romio}
+        $call need_romio
+
     $if $opts{device}=~/ucx/
         $call need_ucx
     $if $opts{device}=~/ofi/
         $call need_ofi
     $call custom_make
 
+    # ---------------------------
+    subcode: custom_programs
+        $if $t=~/mpichversion/
+            # mpichversion include mpiimpl.h
+            # pgcc won't ignore static inline functions
+            # causing undefined reference to `fi_strerror` etc.
+            next
     # ---------------------------
     subcode: dump_variable_custom
         $call filter_var_hwloc
@@ -22,10 +35,11 @@ subcode: compile_mpich
 
     subcode: set_libs_custom
         $(if:which=ltlibs)
-            $call filter_lib_mpl_etc
-            $call filter_lib_ucx
-            $call filter_lib_ofi
-            $t.= $L_list
+            $if $add!~/mpi(fort|cxx)/
+                $call filter_lib_mpl_etc
+                $call filter_lib_ucx
+                $call filter_lib_ofi
+                $t.= $L_list
     # ---------------------------
     subcode: post_mpich_configure
         &call open_r, src/include/mpichconf.h
@@ -41,6 +55,7 @@ subcode: compile_mpich
         $if !$opts{have_weak}
             $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
 
+        # install mpicc etc.
         my $bin="\x24(PREFIX)/bin"
         $(for:p in mpicc,mpicxx,mpif77,mpifort)
             $if -f "src/env/$(p).bash"
@@ -93,13 +108,8 @@ subcode: mpich_configure
                 next
             $elif $l=~/^\s*HWLOC_/
                 next
-            $elif $l=~/^\s*src\/binding\//
-                next
             $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
                 $l = "$1: \x23 $2\n"
-        &call modify, src/Makefile.mk
-            $if $l=~/^include .*\/binding\//
-                next
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
@@ -120,21 +130,11 @@ subcode: need_mpich_preproc
     $(set:errhan=src/mpi/errhan/$1)
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
     $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
+    push @CONFIGS, "src/include/mpichconf.h"
     push @CONFIGS, "src/include/mpir_cvars.h"
     $call push_autogen_rule, cvars, src/include/mpir_cvars.h
     # $call push_autogen_rule, logs, src/include/mpiallstates.h
 
     &call add_subdir_rule_block, src/glue/romio, src/glue/romio/all_romio_symbols.c
         push @t, "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
-
-#-------------------------
-subcode: fortran_buildiface
-    chdir "src/binding/fortran/mpif_h"
-    system "perl buildiface"
-    chdir $srcdir
-
-subcode: romio_glue_code
-    chdir "src/glue/romio"
-    system "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
-    chdir "../../.."
 

@@ -1,0 +1,221 @@
+macros:
+    decl_barrier_intra: dissemination, smp
+    decl_barrier_inter: bcast
+    decl_barrier_allcomm: nb
+    decl_ibarrier_intra: gentran_recexch
+    decl_ibarrier_inter:
+    decl_ibarrier_allcomm:
+    decl_ibarrier_sched_intra: recursive_doubling
+    decl_ibarrier_sched_inter: bcast
+    decl_ibarrier_sched_allcomm:
+
+    decl_bcast_intra: binomial, scatter_recursive_doubling_allgather, scatter_ring_allgather, smp
+    decl_bcast_inter: remote_send_local_bcast
+    decl_bcast_allcomm: nb
+    decl_ibcast_intra: gentran_ring, gentran_tree, gentran_scatter_recexch_allgather
+    decl_ibcast_inter:
+    decl_ibcast_allcomm:
+    decl_ibcast_sched_intra: binomial, scatter_recursive_doubling_allgather, scatter_ring_allgather, smp
+    decl_ibcast_sched_inter: flat
+    decl_ibcast_sched_allcomm:
+
+    decl_gather_intra: binomial
+    decl_gather_inter: linear, local_gather_remote_send
+    decl_gather_allcomm: nb
+    decl_igather_intra: gentran_tree
+    decl_igather_inter:
+    decl_igather_allcomm:
+    decl_igather_sched_intra: binomial
+    decl_igather_sched_inter: long, short
+    decl_igather_sched_allcomm:
+
+    decl_gatherv_intra:
+    decl_gatherv_inter:
+    decl_gatherv_allcomm: linear, nb
+    decl_igatherv_intra:
+    decl_igatherv_inter:
+    decl_igatherv_allcomm:
+    decl_igatherv_sched_intra:
+    decl_igatherv_sched_inter:
+    decl_igatherv_sched_allcomm: linear
+
+    decl_scatter_intra: binomial
+    decl_scatter_inter: linear, remote_send_local_scatter
+    decl_scatter_allcomm: nb
+    decl_iscatter_intra: gentran_tree
+    decl_iscatter_inter:
+    decl_iscatter_allcomm:
+    decl_iscatter_sched_intra: binomial
+    decl_iscatter_sched_inter: linear, remote_send_local_scatter
+    decl_iscatter_sched_allcomm:
+
+    decl_scatterv_intra:
+    decl_scatterv_inter:
+    decl_scatterv_allcomm: linear, nb
+    decl_iscatterv_intra:
+    decl_iscatterv_inter:
+    decl_iscatterv_allcomm:
+    decl_iscatterv_sched_intra:
+    decl_iscatterv_sched_inter:
+    decl_iscatterv_sched_allcomm: linear
+
+    decl_allgather_intra: brucks, recursive_doubling, ring
+    decl_allgather_inter: local_gather_remote_bcast
+    decl_allgather_allcomm: nb
+    decl_iallgather_intra: gentran_ring, gentran_brucks, gentran_recexch_doubling, gentran_recexch_halving
+    decl_iallgather_inter:
+    decl_iallgather_allcomm:
+    decl_iallgather_sched_intra: ring, brucks, recursive_doubling
+    decl_iallgather_sched_inter: local_gather_remote_bcast
+    decl_iallgather_sched_allcomm:
+
+    decl_allgatherv_intra: brucks, recursive_doubling, ring
+    decl_allgatherv_inter: remote_gather_local_bcast
+    decl_allgatherv_allcomm: nb
+    decl_iallgatherv_intra: gentran_brucks, gentran_ring, gentran_recexch_doubling, gentran_recexch_halving
+    decl_iallgatherv_inter:
+    decl_iallgatherv_allcomm:
+    decl_iallgatherv_sched_intra: brucks, recursive_doubling, ring
+    decl_iallgatherv_sched_inter: remote_gather_local_bcast
+    decl_iallgatherv_sched_allcomm:
+
+    decl_alltoall_intra: brucks, pairwise, pairwise_sendrecv_replace, scattered
+    decl_alltoall_inter: pairwise_exchange
+    decl_alltoall_allcomm: nb
+    decl_ialltoall_intra: gentran_ring, gentran_brucks
+    decl_ialltoall_inter:
+    decl_ialltoall_allcomm:
+    decl_ialltoall_sched_intra: brucks, inplace, pairwise, permuted_sendrecv
+    decl_ialltoall_sched_inter: pairwise_exchange
+    decl_ialltoall_sched_allcomm:
+
+    decl_alltoallv_intra: pairwise_sendrecv_replace, scattered
+    decl_alltoallv_inter: pairwise_exchange
+    decl_alltoallv_allcomm: nb
+    decl_ialltoallv_intra: gentran_scattered
+    decl_ialltoallv_inter:
+    decl_ialltoallv_allcomm:
+    decl_ialltoallv_sched_intra: blocked, inplace
+    decl_ialltoallv_sched_inter: pairwise_exchange
+    decl_ialltoallv_sched_allcomm:
+
+    decl_alltoallw_intra: pairwise_sendrecv_replace, scattered
+    decl_alltoallw_inter: pairwise_exchange
+    decl_alltoallw_allcomm: nb
+    decl_ialltoallw_intra:
+    decl_ialltoallw_inter:
+    decl_ialltoallw_allcomm:
+    decl_ialltoallw_sched_intra: blocked, inplace
+    decl_ialltoallw_sched_inter: pairwise_exchange
+    decl_ialltoallw_sched_allcomm:
+
+    decl_reduce_intra: binomial, reduce_scatter_gather, smp
+    decl_reduce_inter: local_reduce_remote_send
+    decl_reduce_allcomm: nb
+    decl_ireduce_intra: gentran_tree, gentran_ring
+    decl_ireduce_inter:
+    decl_ireduce_allcomm:
+    decl_ireduce_sched_intra: binomial, reduce_scatter_gather, smp
+    decl_ireduce_sched_inter: local_reduce_remote_send
+    decl_ireduce_sched_allcomm:
+
+    decl_allreduce_intra: recursive_doubling, reduce_scatter_allgather, smp
+    decl_allreduce_inter: reduce_exchange_bcast
+    decl_allreduce_allcomm: nb
+    decl_iallreduce_intra: gentran_recexch_single_buffer, gentran_recexch_multiple_buffer, gentran_tree, gentran_ring
+    decl_iallreduce_inter:
+    decl_iallreduce_allcomm:
+    decl_iallreduce_sched_intra: naive, recursive_doubling, reduce_scatter_allgather, smp
+    decl_iallreduce_sched_inter: remote_reduce_local_bcast
+    decl_iallreduce_sched_allcomm:
+
+    decl_reduce_scatter_intra: noncommutative, pairwise, recursive_doubling, recursive_halving
+    decl_reduce_scatter_inter: remote_reduce_local_scatter
+    decl_reduce_scatter_allcomm: nb
+    decl_ireduce_scatter_intra: gentran_recexch
+    decl_ireduce_scatter_inter:
+    decl_ireduce_scatter_allcomm:
+    decl_ireduce_scatter_sched_intra: noncommutative, pairwise, recursive_doubling, recursive_halving
+    decl_ireduce_scatter_sched_inter: remote_reduce_local_scatterv
+    decl_ireduce_scatter_sched_allcomm:
+
+    decl_reduce_scatter_block_intra: noncommutative, pairwise, recursive_doubling, recursive_halving
+    decl_reduce_scatter_block_inter: remote_reduce_local_scatter
+    decl_reduce_scatter_block_allcomm: nb
+    decl_ireduce_scatter_block_intra: gentran_recexch
+    decl_ireduce_scatter_block_inter:
+    decl_ireduce_scatter_block_allcomm:
+    decl_ireduce_scatter_block_sched_intra: noncommutative, pairwise, recursive_doubling, recursive_halving
+    decl_ireduce_scatter_block_sched_inter: remote_reduce_local_scatterv
+    decl_ireduce_scatter_block_sched_allcomm:
+
+    decl_scan_intra: recursive_doubling, smp
+    decl_scan_inter:
+    decl_scan_allcomm: nb
+    decl_iscan_intra: gentran_recursive_doubling
+    decl_iscan_inter:
+    decl_iscan_allcomm:
+    decl_iscan_sched_intra: recursive_doubling, smp
+    decl_iscan_sched_inter:
+    decl_iscan_sched_allcomm:
+
+    decl_exscan_intra: recursive_doubling
+    decl_exscan_inter:
+    decl_exscan_allcomm: nb
+    decl_iexscan_intra:
+    decl_iexscan_inter:
+    decl_iexscan_allcomm:
+    decl_iexscan_sched_intra: recursive_doubling
+    decl_iexscan_sched_inter:
+    decl_iexscan_sched_allcomm:
+
+    decl_neighbor_allgather_intra:
+    decl_neighbor_allgather_inter:
+    decl_neighbor_allgather_allcomm: nb
+    decl_ineighbor_allgather_intra:
+    decl_ineighbor_allgather_inter:
+    decl_ineighbor_allgather_allcomm: gentran_linear
+    decl_ineighbor_allgather_sched_intra:
+    decl_ineighbor_allgather_sched_inter:
+    decl_ineighbor_allgather_sched_allcomm: linear
+
+    decl_neighbor_allgatherv_intra:
+    decl_neighbor_allgatherv_inter:
+    decl_neighbor_allgatherv_allcomm: nb
+    decl_ineighbor_allgatherv_intra:
+    decl_ineighbor_allgatherv_inter:
+    decl_ineighbor_allgatherv_allcomm: gentran_linear
+    decl_ineighbor_allgatherv_sched_intra:
+    decl_ineighbor_allgatherv_sched_inter:
+    decl_ineighbor_allgatherv_sched_allcomm: linear
+
+    decl_neighbor_alltoall_intra:
+    decl_neighbor_alltoall_inter:
+    decl_neighbor_alltoall_allcomm: nb
+    decl_ineighbor_alltoall_intra:
+    decl_ineighbor_alltoall_inter:
+    decl_ineighbor_alltoall_allcomm: gentran_linear
+    decl_ineighbor_alltoall_sched_intra:
+    decl_ineighbor_alltoall_sched_inter:
+    decl_ineighbor_alltoall_sched_allcomm: linear
+
+    decl_neighbor_alltoallv_intra:
+    decl_neighbor_alltoallv_inter:
+    decl_neighbor_alltoallv_allcomm: nb
+    decl_ineighbor_alltoallv_intra:
+    decl_ineighbor_alltoallv_inter:
+    decl_ineighbor_alltoallv_allcomm: gentran_linear
+    decl_ineighbor_alltoallv_sched_intra:
+    decl_ineighbor_alltoallv_sched_inter:
+    decl_ineighbor_alltoallv_sched_allcomm: linear
+
+    decl_neighbor_alltoallw_intra:
+    decl_neighbor_alltoallw_inter:
+    decl_neighbor_alltoallw_allcomm: nb
+    decl_ineighbor_alltoallw_intra:
+    decl_ineighbor_alltoallw_inter:
+    decl_ineighbor_alltoallw_allcomm: gentran_linear
+    decl_ineighbor_alltoallw_sched_intra:
+    decl_ineighbor_alltoallw_sched_inter:
+    decl_ineighbor_alltoallw_sched_allcomm: linear
+
