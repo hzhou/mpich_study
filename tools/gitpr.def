@@ -27,6 +27,10 @@ page: gitpr
         $else
             $if /^\*\s*(\w+)\s+(.*)/
                 $call do_print, "* $1 $2"
+    $global %opt
+    $opt{n}=50
+    $if $ARGV[0]>0
+        $opt{n} = $ARGV[0]
     $call show
 
 macros:
@@ -57,5 +61,5 @@ subcode: do_print(@t)
     push @lines, $(t)
 
 subcode: show
-    $for $i=0:50
+    $for $i=0:$opt{n}
         $print $lines[$i]

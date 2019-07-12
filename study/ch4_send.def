@@ -1,9 +1,52 @@
-include: common.def
-include: macros/sendrecv.def
+# include: ../common.def
+# include: macros/sendrecv.def
+include: macros/ch4_frame.def
 
-page: ch4_send.h, from templates/mpid/ch4/src/ch4_send.h
-    module: c
+subcode: mpidi_func(fn, @params)
+    MPL_STATIC_INLINE_PREFIX int MPIDI_$(fn)($(params)) {
+        int mpi_errno = MPI_SUCCESS;
+        MPIR_FUNC_VERBOSE_STATE_DECL(MPID_STATE_$(fn:uc));
+        MPIR_FUNC_VERBOSE_ENTER(MPID_STATE_$(fn:uc));
 
+        NEWLINE
+        BLOCK
+        NEWLINE
+
+        fn_exit:
+        MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_$(fn:uc));
+        return mpi_errno;
+
+        NEWLINE
+        fn_fail:
+        goto fn_exit;
+    }
+
+subcode: netmod_call(fn, @args))
+    #ifdef MPIDI_CH4_DIRECT_NETMOD
+    mpi_errno = MPIDI_NM_$(fn)($(args));
+    #else
+    int r;
+    if ((r = MPIDI_av_is_local(av))){
+        mpi_errno = MPIDI_SHM_$(fn)($(args));
+
+macros:
+    param_send:: const void *buf, int count, MPI_Datatype datatype
+    param_send:: int rank, int tag, MPIR_Comm *comm
+    param_send:: int context_offset, MPIDI_av_entry_t *av
+    param_send:: MPIR_Request ** request
+
+    arg_send:: buf, count, datatype, rank, tag, comm
+    arg_send:: context_offset, av, request
+
+    fn_list: send_unsafe
+
+page: ch4_send.h, ch4_h_frame
+    $(for:fn in $(fn_list))
+        &call mpidi_func, $(fn), $(param_send)
+            TEST
+
+
+subcode: temp
     $list(skip_declare) MPID_Send, MPID_Isend, MPID_Rsend, MPID_Irsend, MPID_Ssend, MPID_Issend
     $list(skip_declare) MPID_Send_init, MPID_Ssend_init, MPID_Bsend_init, MPID_Rsend_init
     $list(skip_declare) MPID_Cancel_send
@@ -26,7 +69,7 @@ fncode: MPID_Issend
 subcode: mpid_send(send)
     $parameter $(send_param_1)
     $return_type $(ret_type)
-    &call MPIR_enter, VERBOSE
+    &call MPIR_enter
         $call @check_rank_null
         $call SHM_or_NM, send
 
@@ -71,7 +114,7 @@ fncode: MPID_Rsend_init
 subcode: mpid_send_init(send)
     $parameter $(send_param_1)
     $return_type $(ret_type)
-    &call MPIR_enter, VERBOSE
+    &call MPIR_enter
         $call SHM_or_NM, send_init
 
     subcode: send_init(SHM_or_NM)
@@ -84,7 +127,7 @@ subcode: mpid_send_init(send)
 
 #------------------------------------------
 fncode: MPID_Cancel_send(MPIR_Request * sreq)
-    &call MPIR_enter, VERBOSE
+    &call MPIR_enter
         $call SHM_or_NM, cancel
 
     subcode: cancel(SHM_or_NM)

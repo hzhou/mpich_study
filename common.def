@@ -71,7 +71,6 @@ perlcode: _FUNC_HOOK
     my $name = $func->{name}
 
     $if $name =~ /^MPI[A-Z]*_/
-        $call @decl_FUNCNAME
         $call @add_man_docs
 
     $if $name =~/^MPI_/
@@ -80,9 +79,6 @@ perlcode: _FUNC_HOOK
         $func->{declare_block}=\@t
 
     # -------------------------------
-    subcode: decl_FUNCNAME
-        unshift @$open, "#undef FUNCNAME", "#define FUNCNAME $name", "#undef FCNAME", "#define FCNAME MPL_QUOTE(FUNCNAME)"
-
     subcode: add_man_docs
         $if -f "docs/$name.txt" # these are direct manpages from man/man3/
             $print "      found docs/$name.txt"
