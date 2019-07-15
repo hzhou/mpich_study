@@ -5,12 +5,21 @@ subcode: ch4_h_frame
     #ifndef $(_PAGE)_INCLUDED
     #define $(_PAGE)_INCLUDED
     NEWLINE
-    #include "ch4_impl.h"
-    #include "ch4r_proc.h"
-    NEWLINE
+    $call @ch4_includes
     $call main
     NEWLINE
     #endif /* $(_PAGE)_INCLUDED */
+
+subcode: ch4_includes
+    $(if:_pagename~ch4_)
+        #include "ch4_impl.h"
+    $(elif:_pagename~ofi_)
+        #include "ofi_impl.h"
+
+    $(if:_pagename=ch4_send.h)
+        #include "ch4r_proc.h"
+    $(elif:_pagename=ofi_send.h)
+        #include <../mpi/pt2pt/bsendutil.h>
 
 template: copyright
     \x2f* -*- Mode: C; c-basic-offset:4 ; indent-tabs-mode:nil ; -*- */
@@ -22,4 +31,82 @@ template: copyright
     *  Copyright (C) 2011-2016 Intel Corporation.  Intel provides this material
     *  to Argonne National Laboratory subject to Software Grant and Corporate
     *  Contributor License Agreement dated February 8, 2012.
+    */
+
+#---------------------------------------- 
+perlcode: args_to_params
+    $(set:get=MyDef::compileutil::get_macro_word)
+    $(set:set=MyDef::compileutil::set_current_macro)
+    my $args = $(get)("args")
+    my %types=(
+        $call @arg_types
+    );
+
+    my @params
+    $foreach $a in split /,\s*/, $args
+        $if $types{$a}=~/(void|int|char) \*$/
+            push @params, $types{$a}."$a"
+        $elif $types{$a}
+            push @params, $types{$a}." $a"
+        $else
+            push @params, $a
+
+    $(set)("params", join(', ', @params))
+
+subcode: mpich_func(MPIDI, _fn)
+    $call set_fn_args
+    $call args_to_params
+    NEWLINE?
+    $(if:MPIDI=MPID)
+        $(set:FUNC=$(MPIDI)_$(_fn:ucfirst))
+    $(else)
+        $(set:FUNC=$(MPIDI)_$(_fn))
+    $:: MPL_STATIC_INLINE_PREFIX int $(FUNC)($(params))
+    {
+        $(if:_fn~i?rsend and !init)
+            $call comment_$(_fn)_fixme
+        $(if:safe)
+            int mpi_errno = MPI_SUCCESS, cs_acq = 0;
+        $(else)
+            int mpi_errno = MPI_SUCCESS;
+        $(if:mpid)
+            MPIDI_av_entry_t *av = NULL;
+        $(elif:_fn=psend_init)
+            MPIR_Request *sreq;
+        $(set:STATE=MPID_STATE_$(MPIDI)_$(_fn:uc))
+        MPIR_FUNC_VERBOSE_STATE_DECL($(STATE));
+        MPIR_FUNC_VERBOSE_ENTER($(STATE));
+        $(if:safe)
+            MPID_THREAD_SAFE_BEGIN(VCI, MPIDI_global.vci_lock, cs_acq)
+
+        NEWLINE
+        BLOCK
+        NEWLINE
+
+        fn_exit:
+        $(if:safe)
+            MPID_THREAD_SAFE_END(VCI, MPIDI_global.vci_lock, cs_acq)
+        MPIR_FUNC_VERBOSE_EXIT($(STATE));
+        return mpi_errno;
+
+        NEWLINE
+        fn_fail:
+        goto fn_exit;
+    }
+
+subcode: errpop
+    $if mpi_errno
+        MPIR_ERR_POP(mpi_errno)
+
+template: comment_rsend_fixme
+    \x2f*
+    * FIXME: this implementation of MPID_Rsend is identical to that of MPID_Send.
+    * Need to support rsend protocol, i.e., check if receive is posted on the
+    * reveiver side before the send is posted.
+    */
+template: comment_irsend_fixme
+    \x2f*
+    * FIXME: this implementation of MPID_Irsend is identical to that of MPID_Isend.
+    * Need to support irsend protocol, i.e., check if receive is posted on the
+    * reveiver side before the send is posted.
     */

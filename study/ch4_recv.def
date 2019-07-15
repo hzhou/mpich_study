@@ -1,0 +1,55 @@
+include: macros/ch4_frame.def
+
+subcode: recv_unsafe
+    $(set:req=*request)
+    $(set:fn=mpi_recv)
+
+    #ifdef MPIDI_CH4_DIRECT_NETMOD
+    mpi_errno = MPIDI_NM_$(fn)($(args));
+    #else
+    $if unlikely(rank==MPI_ANY_SOURCE)
+        $call @recv_any_source
+    $else
+        int r;
+        $if r = MPIDI_av_is_local(av)
+            mpi_errno = MPIDI_SHM_$(fn)($(args));
+        $else
+            mpi_errno = MPIDI_NM_$(fn)($(args));
+        $if mpi_errno==MPI_SUCCESS && $(req)
+            MPIDI_REQUEST($(req), is_local) = r
+            MPIDI_REQUEST_ANYSOURCE_PARTNER($(req)) = NULL
+    #endif
+    $call @errpop
+
+    subcode: recv_any_source
+        $call @try_SHM
+        $if !MPIR_Request_is_complete($(req)) && !MPIDIG_REQUEST_IN_PROGRESS($(req))
+            $(set:req=MPIDI_REQUEST_ANYSOURCE_PARTNER($(req)))
+            $call @try_NM
+            $if MPIR_Request_is_complete($(req))
+                $call @cancel_SHM
+                $call @copy_status
+                $call @free_SHM
+            $call @set_partner
+
+#---------------------------------------- 
+page: ch4_recv.h, ch4_h_frame
+
+#---------------------------------------- 
+macros:
+    arg_common: buf, count, datatype, rank, tag, comm, context_offset, av
+    arg_recv: status, request
+
+subcode: arg_types
+    buf=> "void *",
+    count=> "MPI_Aint",
+    datatype=>"MPI_Datatype",
+    rank=>"int",
+    tag=>"int",
+    comm=>"MPIR_Comm *",
+    context_offset=>"int",
+    av=>"MPIDI_av_entry_t *",
+    request=>"MPIR_Request **",
+    req    =>"MPIR_Request **",
+    status =>"MPI_Status *",
+

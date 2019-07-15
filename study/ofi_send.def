@@ -1,0 +1,45 @@
+include: macros/ch4_frame.def
+
+page: ofi_send.h, ch4_h_frame
+    $(if:1)
+        $(set:args=buf,data_sz,src_rank,dst_rank,tag,comm,context_offset,addr)
+        &call mpich_func, MPIDI_OFI, send_lightweight
+            $call ofi_send
+
+        $(set:args=$(args), request)
+        &call mpich_func, MPIDI_OFI, send_lightweight_request
+            &call lightweight_request
+                $call ofi_send
+
+    # send_iov, send_normal, send
+    # send_coll
+    # MPIDI_NM_mpi_send, MPIDI_NM_send_coll, MPIDI_NM_mpi_ssend
+    # MPIDI_NM_mpi_isend,  MPIDI_NM_isend_coll
+    # MPIDI_NM_mpi_issend
+    # MPIDI_NM_mpi_cancel_send
+
+    # -----------------
+    subcode: ofi_send
+        match_bits = MPIDI_OFI_init_sendtag(comm->context_id + context_offset, tag, 0)
+        mpi_errno = MPIDI_OFI_send_handler(...)
+        $call errpop
+
+    subcode: lightweight_request
+        MPIDI_OFI_SEND_REQUEST_CREATE_LW_CONDITIONAL(*request)
+        BLOCK
+        MPIDI_OFI_SEND_REQUEST_COMPLETE_LW_CONDITIONAL(*request)
+
+#---------------------------------------- 
+subcode: arg_types
+    buf=> "const void *",
+    data_sz=> "size_t",
+    src_rank=>"int",
+    dst_rank=>"int",
+    tag=>"int",
+    comm=>"MPIR_Comm *",
+    context_offset=>"int",
+    addr=>"MPIDI_av_entry_t *", # TODO: rename
+    request=>"MPIR_Request **",
+    req    =>"MPIR_Request **",
+    sreq    =>"MPIR_Request *",
+

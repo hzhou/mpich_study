@@ -1,36 +1,23 @@
-# include: ../common.def
-# include: macros/sendrecv.def
 include: macros/ch4_frame.def
 
-subcode: mpidi_func(fn, @params)
-    NEWLINE?
-    $:: MPL_STATIC_INLINE_PREFIX int MPIDI_$(fn)($(params))
-    {
-        int mpi_errno = MPI_SUCCESS;
-        MPIR_FUNC_VERBOSE_STATE_DECL(MPID_STATE_$(fn:uc));
-        MPIR_FUNC_VERBOSE_ENTER(MPID_STATE_$(fn:uc));
-        $(if:safe)
-            int cs_acq = 0;
-            MPID_THREAD_SAFE_BEGIN(VCI, MPIDI_global.vci_lock, cs_acq)
-
-        NEWLINE
-        BLOCK
-        NEWLINE
-
-        fn_exit:
-        $(if:safe)
-            MPID_THREAD_SAFE_END(VCI, MPIDI_global.vci_lock, cs_acq)
-        MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_$(fn:uc));
-        return mpi_errno;
-
-        NEWLINE
-        fn_fail:
-        goto fn_exit;
-    }
-
+# TODO: normalize request/req
 subcode: unsafe_call(fn, @args))
+    $(if:args~.*request)
+        $(set:req=request)
+    $(else)
+        $(set:req=req)
+
+    $(if:fn~is?send)
+        $(set:cond=mpi_errno==MPI_SUCCESS)
+    $(elif:fn=ssend)
+        av = MPIDIU_comm_rank_to_av(comm, rank);
+        $(set:cond=mpi_errno==MPI_SUCCESS && *$(req))
+    $(else)
+        $(set:cond=mpi_errno==MPI_SUCCESS && *$(req))
+
     $(if:fn~[isrb]*send$)
         $(set:fn=mpi_$(fn))
+
     #ifdef MPIDI_CH4_DIRECT_NETMOD
     mpi_errno = MPIDI_NM_$(fn)($(args));
     #else
@@ -39,11 +26,23 @@ subcode: unsafe_call(fn, @args))
         mpi_errno = MPIDI_SHM_$(fn)($(args));
     $else
         mpi_errno = MPIDI_NM_$(fn)($(args));
+    $if $(cond)
+        MPIDI_REQUEST(*$(req), is_local) = r
     #endif
 
     NEWLINE
-    $if mpi_errno != MPI_SUCCESS
-        MPIR_ERR_POP(mpi_errno)
+    $call @errpop
+
+subcode: cancel_call(fn, args)
+    #ifdef MPIDI_CH4_DIRECT_NETMOD
+    mpi_errno = MPIDI_NM_$(fn)($(args));
+    #else
+    $if MPIDI_REQUEST(sreq, is_local)
+        mpi_errno = MPIDI_SHM_$(fn)($(args));
+    $else
+        mpi_errno = MPIDI_NM_$(fn)($(args));
+    #endif
+    $call @errpop
 
 subcode: safe_call(fn, @args)
     $if !cs_acq
@@ -57,102 +56,127 @@ subcode: safe_call(fn, @args)
                 $(set:SEND=ICSEND)
             MPIDI_workq_csend_enqueue($(SEND), $(arg_csend));
         $(else)
-            MPIDI_workq_pt2pt_enqueue($(fn:uc), $(arg_p2p));
+            $(if:fn~issend)
+                $(set:SEND=SSEND)
+            $(else)
+                $(set:SEND=$(fn:uc))
+            MPIDI_workq_pt2pt_enqueue($(SEND), $(arg_p2p));
     $else
-        (*req) = NULL
+        *(req) = NULL
         MPIDI_workq_vci_progress_unsafe()
         mpi_errno = MPIDI_$(fn)_unsafe($(args));
 
 subcode: mpid_call(fn, @args)
     $if unlikely(rank == MPI_PROC_NULL)
         *request = MPIR_Request_create_complete(MPIR_REQUEST_KIND__SEND)
-        MPIR_ERR_CHKANDSTMT(*request==NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
+        MPIR_ERR_CHKANDSTMT(*request==NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq")
         goto fn_exit;
 
-    $my MPIDI_av_entry_t *av = NULL
+    # $my MPIDI_av_entry_t *av = NULL
     av = MPIDIU_comm_rank_to_av(comm, rank)
-    mpi_errno = MPIDI_$(fn)_safe($(args), av, request);
+    $(if:fn~rsend)
+        $(set:fn=send)
+    $(elif:fn~irsend)
+        $(set:fn=isend)
+    mpi_errno = MPIDI_$(fn)_safe($(subst:args:request:av, request));
+    $call @errpop
 
-    if mpi_errno != MPI_SUCCESS
-        MPIR_ERR_POP(mpi_errno)
 
-macros:
-    arg_send:: buf, count, datatype, rank, tag, comm, context_offset, av
-    arg_p2p:: buf, NULL, count, datatype, rank, tag, comm, context_offset, av, NULL, *req, NULL, NULL, NULL
-    arg_csend: buf, count, datatype, rank, tag, comm, context_offset, av, *req, errflag
+subcode: pinit_call(fn, @args)
+    $(if:fn=rsend)
+        $:: \x2f* TODO: Currently we don't distinguish SEND and RSEND */
+        $(set:fn=send)
+    mpi_errno = MPIDI_psend_init(MPIDI_PTYPE_$(fn:uc), $(args));
+    $call @errpop
 
-    unsafe_list:: send, send_coll
-    unsafe_list:: isend, isend_coll
-    unsafe_list:: ssend, issend
-
-    mpid_list: send, send_coll, isend, isend_coll, rsend, irsend, ssend, issend
-
-    preq_list: send, ssend, bsend, rsend
-
-perlcode: set_netmod_fn
-    $(set:get=MyDef::compileutil::get_macro_word)
-    $(set:set=MyDef::compileutil::set_current_macro)
-
-    my $is_safe=$(get)("safe")
-    my $fn = $(get)("fn")
-    my $netmod_fn = $fn
-    $(set)("netmod_fn", $netmod_fn)
-
-    my $args = $(get)("arg_send")
-    $if $is_safe
-        $args .= ", req"
-    $else
-        $args .= ", request"
-    $if $fn=~/send_coll/
-        $args .=", errflag"
-
-    my %types=(
-        rank=> "const void *",
-        count=> "MPI_Aint",
-        datatype=>"MPI_Datatype",
-        rank=>"int",
-        tag=>"int",
-        comm=>"MPIR_Comm *",
-        context_offset=>"int",
-        av=>"MPIDI_av_entry_t *",
-        request=>"MPIR_Request **",
-        req    =>"MPIR_Request **",
-        errflag=>"MPIR_Errflag_t *",
-    );
-
-    my @params
-    $foreach $a in split /,\s*/, $args
-        $if $types{$a}
-            push @params, $types{$a}." $a"
-        $else
-            push @params, $a
-
-    $(set)("args", $args)
-    $(set)("params", join(', ', @params))
-
-    $if $fn=~/_coll/
-
-    
 #---------------------------------------- 
 page: ch4_send.h, ch4_h_frame
-    $(for:fn in $(unsafe_list))
-        $call set_netmod_fn
-        &call mpidi_func, $(fn), $(params)
+    $(set:req=request)
+
+    $(set:fn_list=send,send_coll,isend,isend_coll,ssend,issend)
+    $(for:fn in $(fn_list))
+        $(set:unsafe=1)
+        $(if:fn~i?ssend)
+            $(set:req=req)
+        &call mpich_func, MPIDI, $(fn)_unsafe
             $call unsafe_call, $(fn), $(args)
-    $(for:fn in $(unsafe_list))
+    $(for:fn in $(fn_list))
         $(set:safe=1)
-        $call set_netmod_fn
-        &call mpidi_func, $(fn), $(params)
+        $(set:req=req)
+        &call mpich_func, MPIDI, $(fn)_safe
             $call safe_call, $(fn), $(args)
-    $(for:fn in $(mpid_list))
-        $call set_netmod_fn
-        &call mpidi_func, $(fn), $(params)
+
+    $(set:fn_list=send, send_coll, isend, isend_coll, rsend, irsend, ssend, issend)
+    $(for:fn in $(fn_list))
+        $(set:mpid=1)
+        &call mpich_func, MPID, $(fn)
             $call mpid_call, $(fn), $(args)
-    $(for:fn in $(preq_list))
-        $call set_netmod_fn
-        &call mpidi_func, $(fn), $(params)
+
+    NEWLINE?
+    $(for:fn in psend_init)
+        $: \x2f* Common internal rountine for send_init family */
+        $(set:args=ptype, $(subst:arg_send:av:request))
+        &call mpich_func, MPIDI, psend_init
+            $call psend_init
+
+    $(for:fn in send,ssend,bsend,rsend)
+        $(set:init=1)
+        &call mpich_func, MPID, $(fn)_init
             $call pinit_call, $(fn), $(args)
 
-    &call mpidi_func, cancel, $(params)
-        $call cancel_call
+    $(for:fn in cancel)
+        $(set:args=sreq)
+        &call mpich_func, MPID, cancel_send
+            $call cancel_call, mpi_cancel_send, $(args)
+
+    # --------------------------------------
+    subcode: set_fn_args
+        $(if:fn~.*_coll)
+            $(set1:args=$(arg_send), $(req), errflag)
+        $(else)
+            $(set1:args=$(arg_send), $(req))
+
+        $(if:MPIDI=MPID)
+            $(set1:args=$(subst:args:av, :))
+
+    # --------------------------------------
+    subcode: psend_init
+        sreq = MPIR_Request_create(MPIR_REQUEST_KIND__PREQUEST_SEND);
+        MPIR_ERR_CHKANDSTMT(sreq == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, "**nomemreq");
+        *request = sreq;
+
+        MPIR_Comm_add_ref(comm);
+        sreq->comm = comm;
+
+        MPIDI_PREQUEST(sreq, p_type) = ptype;
+        MPIDI_PREQUEST(sreq, buffer) = (void *) buf;
+        $(for:count, datatype, rank, tag)
+            MPIDI_PREQUEST(sreq, $1) = $1;
+        MPIDI_PREQUEST(sreq, context_id) = comm->context_id + context_offset;
+        sreq->u.persist.real_request = NULL;
+        MPIR_cc_set(sreq->cc_ptr, 0);
+
+        MPIR_Datatype_add_ref_if_not_builtin(datatype);
+
+#---------------------------------------- 
+macros:
+    arg_common: count, datatype, rank, tag, comm, context_offset, av
+    arg_send:: buf, $(arg_common)
+    arg_p2p:: buf, NULL /*recv_buf */ , $(arg_common), NULL /*status */ , *req, NULL /*flag */ , NULL /*message */ , NULL /*processed */
+    arg_csend: $(arg_send), *req, errflag
+
+subcode: arg_types
+    buf=> "const void *",
+    count=> "MPI_Aint",
+    datatype=>"MPI_Datatype",
+    rank=>"int",
+    tag=>"int",
+    comm=>"MPIR_Comm *",
+    context_offset=>"int",
+    av=>"MPIDI_av_entry_t *",
+    request=>"MPIR_Request **",
+    req    =>"MPIR_Request **",
+    sreq    =>"MPIR_Request *",
+    errflag=>"MPIR_Errflag_t *",
+    ptype=> "MPIDI_ptype",
 
