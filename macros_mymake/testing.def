@@ -20,6 +20,7 @@ subcode: run_tests_custom
 # --------------------------------
 subcode: testing_config
     $call echo_system "rsync -r $srcdir/confdb/ confdb/"
+    $call echo_system "rsync -r $srcdir/confdb/ dtpools/confdb/"
     $call echo_system "cp $srcdir/maint/version.m4 ."
     $call echo_system "sh autogen.sh"
     $call echo_system "autoreconf -ivf"

@@ -131,7 +131,11 @@ subcode: dump_custom_make
         $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
 
         my $cxxld = get_object("CXXLD")
-        $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $if $cxxld
+            $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $else
+            # mac os
+            $print "CXXLD = $(LT:link) --tag=CC $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $print
 
     # FIXME: add -module src/binding/fortran/use_mpi
