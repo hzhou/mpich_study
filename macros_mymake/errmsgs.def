@@ -13,6 +13,8 @@ subcode: defmsg_h
         # src/util/cvar/mpir_cvars.c
         $generics{"**envvarparse"}++
         $specifics{"**envvarparse %s"}++
+        $generics{"**cvar_val"}++
+        $specifics{"**cvar_val %s %s"}++
         # src/binding/fortran/mpif_h/addressf.c
         $generics{"**inttoosmall"}++
         $generics{"**notcstatignore"}++
@@ -36,6 +38,7 @@ subcode: defmsg_h
         $global %errnames, %generics, %specifics
         &call open_r, $(f)
             $if /^(\*\*[^:]+):(.*)/ -> $name, $repl
+                # $print $(f): $name - $repl
                 $while $repl=~/\s*\\\s*$/
                     $repl=$`;
                     $_=<In>

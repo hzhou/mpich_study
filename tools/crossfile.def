@@ -3,31 +3,32 @@ page: gen_cross
     # get_size: direct
     get_size: hybrid
 
+    $: \x23 global hash to store crossfile values
+    our %cross_hash;
+
     my @c_types=("void *", "char", "short", "int", "long", "long long", "size_t", "off_t", "float", "double", "long double")
     $(if:get_size=direct or get_size=hybrid)
-        $call get_c_sizes_direct
+        get_c_sizes_direct(\@c_types)
     $(else)
-        $call get_c_sizes_asm
+        get_c_sizes_asm(\@c_types)
 
-    my @range_kind_size
-    $call get_f90_kinds_direct
-
-    my @f77_type_names=qw(INTEGER REAL DOUBLE_PRECISION)
-    $foreach $i, $t in @range_kind_size
-        push @f77_type_names, "KIND-$i-$t->[1]"
+    $: \x23 tuple list of [ range, kind, size ]
+    my $range_kind_list = get_f90_kinds_direct()
+    my @f77_types=qw(INTEGER REAL DOUBLE_PRECISION)
+    $foreach $i, $t in @$range_kind_list
+        push @f77_types, "KIND-$i-$t->[1]"
 
     $(if:get_size=direct)
-        $call get_f77_sizes_direct
+        get_f77_sizes_direct(\@f77_types)
     $(elif:get_size=hybrid)
-        $call get_f77_sizes_hybrid
+        get_f77_sizes_hybrid(\@f77_types)
     $(else)
-        $call get_f77_sizes_asm
+        get_f77_sizes_asm(\@f77_types)
 
-    $call get_f77_true_false_hybrid
+    get_f77_true_false_hybrid()
 
     my @f90_names=qw(ADDRESS_KIND OFFSET_KIND INTEGER_KIND REAL_MODEL DOUBLE_MODEL INTEGER_MODEL)
-    $global %cross_hash
-    $call get_f90_names_direct
+    get_f90_names_direct(\@f90_names)
 
     &call open_W, cross_values.txt
         $foreach $t in @c_types
@@ -36,10 +37,10 @@ page: gen_cross
             my $var = "ac_cv_sizeof_$name"
             $print $var=$val
 
-        $foreach $T in @f77_type_names
+        $foreach $T in @f77_types
             my $size = $cross_hash{$T}
             $if $T=~/KIND-(\d+)-(\d+)/
-                $range_kind_size[$1]->[2]=$size
+                $range_kind_list->[$1]->[2]=$size
             $else
                 $print CROSS_F77_SIZEOF_$T=$size
 
@@ -50,7 +51,7 @@ page: gen_cross
             $print CROSS_F90_$name=$cross_hash{$name}
 
         my (@t1, @t2)
-        $foreach $t in @range_kind_size
+        $foreach $t in @$range_kind_list
             push @t1, "$t->[0], $t->[1]"
             push @t2, "{ $t->[0] , $t->[1] , $t->[2] }"
         my $t1 = join(', ', @t1)
@@ -80,6 +81,11 @@ subcode: _autoload
     $(for:CC,F77,FC)
         $print $1: $$1
 
+subcode: _autoload
+    $list get_c_sizes_direct, get_c_sizes_asm
+    $list get_f77_sizes_direct, get_f77_sizes_asm, get_f77_sizes_hybrid
+    $list get_f77_true_false_hybrid
+    $list get_f90_kinds_direct, get_f90_names_direct
 #---------------------------------------- 
 fncode: get_type_name($type)
     my $t = $type
@@ -87,11 +93,11 @@ fncode: get_type_name($type)
     $t=~s/\*/p/g
     return $t
 
-subcode: get_c_sizes_direct
+fncode: get_c_sizes_direct($typelist)
     $call create_t_c
     my $t=`$CC t.c -o t && ./t`
     $while $t=~/A(\d+):\s+(\d+)/g
-        my $name = get_type_name($c_types[$1])
+        my $name = get_type_name($typelist->[$1])
         $cross_hash{$name} = $2
 
     subcode: create_t_c
@@ -99,62 +105,62 @@ subcode: get_c_sizes_direct
             $(set:print_to=Out)
             $print #include <stdio.h>
             $print int main(){
-            $foreach $i,$type in @c_types
+            $foreach $i,$type in @$typelist
                 $print "    printf(\"A$i: %lu\\n\", sizeof($type));"
             $print "    return 0;"
             $print }
 
-subcode: get_c_sizes_asm
+fncode: get_c_sizes_asm($typelist)
     $call create_t_c
     my $t=`$CC -S t.c -o t.s`
     &call open_r, t.s
         # .comm   A0,8,8
         $if /.comm\s+A(\d+),(\d+),(\d+)/
-            my $name = get_type_name($c_types[$1])
+            my $name = get_type_name($typelist->[$1])
             $cross_hash{$name} = $2
 
     subcode: create_t_c
         &call open_w, t.c
             $(set:print_to=Out)
-            $foreach $i,$type in @c_types
+            $foreach $i,$type in @$typelist
                 $print "$type A$i;"
 
 #---------------------------------------- 
-subcode: get_f77_sizes_direct
+fncode: get_f77_sizes_direct($typelist)
     $call create_t_f
     my $t=`$F77 t.f -o t && ./t`
     $while $t=~/A(\d+):\s+(\d+)/g
-        my $name = $f77_type_names[$1]
+        my $name = $typelist->[$1]
         $cross_hash{$name}=$2
 
     subcode: create_t_f
         my $sp = ' 'x6
         &call write_f77
-            $call dump_f77_type_vars
-            $for $i, $T in @f77_type_names
+            $call dump_f77_type_vars, $typelist
+            $for $i, $T in @$typelist
                 $print $sp print *, 'A$i:', sizeof(A$i)
 
-subcode: get_f77_sizes_asm
+fncode: get_f77_sizes_asm($typelist)
     $call create_t_f
     my $t=`$FC -S t.f90 -o t.s`
     &call open_r, t.s
         $if /.size\s+__t_MOD_a(\d+), (\d+)/
-            my $name = $f77_type_names[$1]
+            my $name = $typelist->[$1]
             $cross_hash{$name}=$2
 
     subcode: create_t_f
         my $sp
         &call open_W, t.f90
             $print MODULE t
-            $call dump_f77_type_vars
+            $call dump_f77_type_vars, $typelist
             $print END MODULE t
 
-subcode: get_f77_sizes_hybrid
+fncode: get_f77_sizes_hybrid($typelist)
     $call create_tlib_o
     $call create_t_f
     my $t = `$FC t.f tlib.o -o t && ./t`
     $while $t=~/A(\d+):\s+(\d+)/g
-        my $name = $f77_type_names[$1]
+        my $name = $typelist->[$1]
         $cross_hash{$name}=$2
 
     subcode: create_t_f
@@ -162,8 +168,8 @@ subcode: get_f77_sizes_hybrid
         &call write_f77
             $(set:hybrid=1)
             $print $sp INTEGER cisize
-            $call dump_f77_type_vars
-            $for $i, $T in @f77_type_names
+            $call dump_f77_type_vars, $typelist
+            $for $i, $T in @$typelist
                 $print $sp print *, 'A$i:', cisize(A$i(1), A$i(2))
 
     subcode: create_tlib_o
@@ -174,7 +180,7 @@ subcode: get_f77_sizes_hybrid
         system "$CC -c -o tlib.o t.c"
 
 #---------------------------------------- 
-subcode: get_f77_true_false_hybrid
+fncode: get_f77_true_false_hybrid
     $call create_tlib_o
     $call create_t_f
     my $t = `$FC t.f tlib.o -o t && ./t`
@@ -199,8 +205,8 @@ subcode: get_f77_true_false_hybrid
         system "$CC -c -o tlib.o t.c"
 
 #---------------------------------------- 
-subcode: dump_f77_type_vars
-    $for $i, $T in @f77_type_names
+subcode: dump_f77_type_vars(typelist)
+    $for $i, $T in @$(typelist)
         $(set:A=A$i)
         $(if:hybrid)
             $(set:A=A$i(2))
@@ -228,7 +234,7 @@ subcode: write_f90
         $print END 
 
 #---------------------------------------- 
-subcode: get_f90_names_direct
+fncode: get_f90_names_direct($namelist)
     $call create_t_f
     my $t = `$FC t.f90 -o t && ./t`
     $while $t=~/(\w+):\s*([\d, ]+)/g
@@ -239,7 +245,7 @@ subcode: get_f90_names_direct
         my %byte_map=("ADDRESS"=>$cross_hash{void_p}, "OFFSET"=>8, "INTEGER"=>$cross_hash{INTEGER})
         my %size_map=(1=>2, 2=>4, 4=>8, 8=>16, 16=>30)
         &call write_f90
-            $foreach $name in @f90_names
+            $foreach $name in @$namelist
                 $if $name=~/(\w+)_MODEL/
                     my $T=$1
                     $if $T eq "DOUBLE"
@@ -247,7 +253,7 @@ subcode: get_f90_names_direct
                     $print $T :: A_$1
             $print
 
-            $foreach $name in @f90_names
+            $foreach $name in @$namelist
                 $if $name=~/(\w+)_KIND/
                     my $n = $size_map{$byte_map{$1}}
                     $print PRINT *, '$name:', SELECTED_INT_KIND($n)
@@ -257,11 +263,13 @@ subcode: get_f90_names_direct
                     $print PRINT *, '$name:', range(A_$1)
 
 #---------------------------------------- 
-subcode: get_f90_kinds_direct
+fncode: get_f90_kinds_direct
     $call create_t_f
     my $t=`$FC t.f90 -o t && ./t`
+    my @range_kind_size
     $while $t=~/K:\s*(\d+)\s*,\s*(\d+)/g
         push @range_kind_size, [$1, $2]
+    return \@range_kind_size
 
     subcode: create_t_f
         &call write_f90

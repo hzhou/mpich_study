@@ -5,7 +5,7 @@ page: fix_whitespace
     chdir $root or die
     
     my @filelist
-    &call open_r, "git log --name-only HEAD~1..HEAD |"
+    &call open_r, "git log --name-only HEAD~12..HEAD |"
         $if /^(src\/\S+)/
             push @filelist, $1
 

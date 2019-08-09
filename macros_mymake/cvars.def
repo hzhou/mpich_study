@@ -221,12 +221,15 @@ subcode: each_cvar
         $print "    if (tmp_str != NULL) {"
         my $c = "if"
         $foreach $t in @{$h->{enum}}
-            $print "        $c (0 == strcmp(tmp_str, \"$t\"))"
+            my $t2 = $t
+            $t2=~s/^$v\_//
+            $print "        $c (0 == strcmp(tmp_str, \"$t2\"))"
             $print "            $v = $t;"
             $c = "else if"
-        $(if:0)
-            $print "        else"
-            $print "            MPIR_ERR_CHKANDJUMP1(1,mpi_errno,MPI_ERR_OTHER,\"**envvarparse\",\"**envvarparse %s\",\"$v: bad enum value\");"
+        $print "        else {"
+        $print "            mpi_errno = MPIR_Err_create_code(mpi_errno,MPIR_ERR_RECOVERABLE,__func__,__LINE__, MPI_ERR_OTHER, \"**cvar_val\", \"**cvar_val %s %s\", \"$v\", tmp_str);"
+        $print "            goto fn_fail;"
+        $print "        }"
         $print "    }"
 
 subcode: parse_yaml_block_in_t
