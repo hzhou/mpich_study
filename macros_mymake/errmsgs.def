@@ -10,7 +10,7 @@ subcode: defmsg_h
         $call load_err_patterns
         &call each_ch_file
             $call get_err_usage, $f
-        # src/util/cvar/mpir_cvars.c
+        # src/util/mpir_cvars.c
         $generics{"**envvarparse"}++
         $specifics{"**envvarparse %s"}++
         $generics{"**cvar_val"}++

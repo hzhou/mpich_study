@@ -2,7 +2,7 @@ output_dir: ./mymake
 
 macros:
     NJOB: 16
-    OPT: /nfs/gce/projects/login-pmrs/opt
+    OPT: /nfs/gce/projects/pmrs/opt
 
 #---------------------------------------- 
 macros:

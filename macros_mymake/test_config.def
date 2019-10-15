@@ -28,7 +28,7 @@ subcode: test_mymake_config
                 $val = "true"
             $ENV{$key}=$val
 
-        $if $trigger_phrase=~/^env:\s*(\w+)\s*=\s*(.*?)\s*$/m
+        $while $trigger_phrase=~/^env:\s*(\w+)\s*=\s*(.*?)\s*$/mg
             $ENV{$1}=$2
 
         $if !$ENV{skip_test}

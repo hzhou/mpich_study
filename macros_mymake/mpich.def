@@ -1,5 +1,8 @@
 
 subcode: compile_mpich
+    # push @config_args, "--enable-izem=atomic --with-zm-prefix=yes"
+    # $call need_izem
+
     $call @preproc_bindings
     $call mpich_configure
     $call @post_mpich_configure
@@ -13,9 +16,9 @@ subcode: compile_mpich
     $if !$opts{disable_romio}
         $call need_romio
 
-    $if $opts{device}=~/ucx/
+    $if $opts{device}=~/ch4:ucx/
         $call need_ucx
-    $if $opts{device}=~/ofi/
+    $if $opts{device}=~/ch4:ofi/
         $call need_ofi
     $call custom_make
 
@@ -83,6 +86,7 @@ macros:
     mpich_configure_deps:: mymake/Makefile.*
 
 subcode: mpich_configure
+    $call @hack_MPI_OFFSET
     $if !-f "subsys_include.m4"
         $call stage, maint/gen_subcfg_m4
         system "perl maint/gen_subcfg_m4"
@@ -101,6 +105,11 @@ subcode: mpich_configure
         &call temporary_modify
             $call patch_libtool
 
+    # -------------------
+    subcode: hack_MPI_OFFSET
+        my $t = `uname -m`
+        $if $t=~/x86_64/
+            $ENV{FORTRAN_MPI_OFFSET}="integer*8"
     # -------------------
     subcode: modify_configure_ac
         &call modify, configure.ac

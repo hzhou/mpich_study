@@ -1,3 +1,5 @@
+macros:
+    # dry_run: 1
 
 subcode: patch_frame
     $(if:root)
@@ -10,9 +12,11 @@ subcode: patch_frame
 
     $foreach $f in @files
         $if $f
-            $print patching $f... -
+            $(if:!dry_run)
+                $print patching $f... -
             my $cnt = patch($f)
-            $print $cnt changes
+            $(if:!dry_run)
+                $print $cnt changes
 
 fncode: patch($f)
     $call get_file_lines, $f
@@ -26,14 +30,15 @@ fncode: patch($f)
         $(set:L=$lines[$i+$1])
         $call filter_lines_$(patch)
     $call @pass2_$(patch)
-    $if $cnt>0
-        &call open_w, $f
-            $foreach $l in @lines
-                $if ref($l) eq "ARRAY"
-                    $foreach $ll in @$l
-                        print Out $ll
-                $elif $l ne "-DELETE"
-                    print Out $l
+    $(if:!dry_run)
+        $if $cnt>0
+            &call open_w, $f
+                $foreach $l in @lines
+                    $if ref($l) eq "ARRAY"
+                        $foreach $ll in @$l
+                            print Out $ll
+                    $elif $l ne "-DELETE"
+                        print Out $l
     return $cnt
 
 subcode: delete(l)

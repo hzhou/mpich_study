@@ -256,7 +256,10 @@ subcode: parse_yaml_block_in_t
 
 #---------------------------------------- 
 subcode: dump_cvars_c
-    &call open_W, src/util/cvar/mpir_cvars.c
+    my $cvars_c = "src/util/mpir_cvars.c"
+    $if -f "src/util/cvar/Makefile.mk"
+        $cvars_c = "src/util/cvar/mpir_cvars.c"
+    &call open_W, $cvars_c
         $print #include "mpiimpl.h"
         $print 
         $call dump_cvar_globals
@@ -344,6 +347,5 @@ subcode: dump_cvars_h
             $print "/* Arbitrary, simplifies interaction with external interfaces like MPI_T_ */"
             $print "#define MPIR_CVAR_MAX_STRLEN (384)"
             $print
-            my $t = join(" ## ", qw(MPIR_CVAR_ A _ a))
-            $print "#define MPIR_CVAR_ENUM_IS(A, a) ($t)"
+            $print "#define MPIR_CVAR_ENUM_IS(A, a) (MPIR_CVAR_ ## A == MPIR_CVAR_ ## A ## _ ## a)"
             $print

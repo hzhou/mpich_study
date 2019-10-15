@@ -1,10 +1,9 @@
+include: macros/github.def
 page: pr_signoff
     module: perl
     # arg: 3767 wesley
     arg: 3792 # just rebase to master
 
-    my $ORG="pmodels"
-    my $REPO="mpich"
     my $base="$ENV{HOME}/work/mpich-github"
     my $default_signoff="hzhou"
     $call init_signoff
@@ -20,8 +19,7 @@ page: pr_signoff
         # $by = $default_signoff
 
     # --------------------------
-    my $curl = "curl"
-    $call @get_oauth_token
+    $call get_github_token
     $call get_pr_info
     $print PR $pr - $author : $branch\n--------------\n
     $if $by && $by eq $author
@@ -64,31 +62,6 @@ page: pr_signoff
     subcode: usage
         $if !$ARGV[0]>0
             die "Usage: $0 PR\x23 reviewer\n"
-
-    subcode: get_oauth_token
-        my ($user, $token)
-        &call open_r, $ENV{HOME}/.ssh/github.token
-            $if /^(\w+):\s+(\S+)/
-                $user = $1
-                $token= $2
-                last
-        $if $token
-            $curl = "curl -H \"Authorization: token $token\""
-
-    subcode: get_pr_info
-        my ($author, $branch)
-        my $url = "https://api.github.com/repos/$ORG/$REPO/pulls/$pr"
-        $print Querying $url ...
-        my $t=`$curl --silent $url`
-        $if $t=~/^\s*"label":\s*"(\w+):(\S+)",/m
-            $if $1 ne $ORG
-                $author = $1
-                $branch = $2
-        $if !$author or !$branch
-            die "Failed to gather PR information\n"
-        $(if:0)
-            &call open_W, /tmp/t.json
-                $print $t
 
     subcode: init_signoff
         my %users=(
@@ -143,31 +116,3 @@ page: pr_signoff
             system "git rebase --abort"
             die "Sign-off unsuccessful."
             
-page: pr_signoff_seq
-    module: perl
-
-    my $f_in = $ARGV[0]
-    $if !-f $f_in
-        die "File $f_in not found.\n"
-    $call get_file_in_t, $f_in
-    my $n = ($t=~s/^pick /edit /mg)
-    &call open_w, $f_in
-        print Out $t
-    $print edit $n commits
-
-page: pr_signoff_commit
-    module: perl
-
-    my $f_in = $ARGV[0]
-    $if !-f $f_in
-        die "File $f_in not found.\n"
-    my $signoff=$ENV{signoff}
-    $call get_file_in_t, $f_in
-    $(if:1)
-        # add sign-off. TODO: specify which commit
-        $t=~s/^(# .*)/Signed-off-by: $signoff\n\1/m
-    $(else)
-        # fix a sign-off mistake :(
-        $t=~s/^(Signed-off-by: .*)/Signed-off-by: $signoff\n/m
-    &call open_w, $f_in
-        print Out $t

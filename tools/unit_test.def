@@ -1,0 +1,210 @@
+page: unit_test
+    module: perl
+    arg: test/sockaddr.c
+
+    $global %g_opts
+    my $src_list = parse_options(\%g_opts)
+
+    $call chdir_test
+
+    $: \x23-------------------------------------------
+    my ($cnt, $n_ok, $n_fail, $n_xfail, $n_skip) = (0, 0, 0, 0, 0)
+    my $alltests=[]
+    my $i=0
+    $foreach $f in @$src_list
+        my $testlist = gather_tests($f)
+        push @$alltests, @$testlist
+
+    $foreach $test in @$alltests
+        my $test_opts = $test->{opts}
+        my ($title, $result)
+        $cnt ++
+        $i++
+        $print Test $i: $test->{title} ... -
+
+        $if $test_opts->{SKIP}
+            $result = "SKIP"
+            $n_skip++
+        $else
+            $result = run_test($test, $i)
+        $test->{result} = $result
+        $print $result
+
+    $call report
+
+    #---------------------------------------- 
+    subcode: chdir_test
+        $if -d ".test"
+            $print "Removing old .test folder..."
+            system "rm -rf .test"
+        mkdir ".test"
+
+    subcode: report
+        $print Ran $cnt tests, $n_ok OK, $n_fail FAIL, $n_xfail XFAIL, $n_skip SKIP
+        my $date = `date "+%Y-%m-%d-%H-%M"`;
+        $date =~ s/\r?\n//;
+
+        my $junitfile = "unit_test.xml"
+        &call open_W, $junitfile
+            $print "<testsuites>"
+            $print "  <testsuite failures=\"$n_fail\""
+            $print "             skipped=\"$n_skip\""
+            $print "             tests=\"$cnt\""
+            $print "             date=\"$date\""
+            $print "             name=\"unit_test\">"
+            $foreach $i,$test in @$alltests
+                my $name= "$i - $test->{title}"
+                $if $test->{result} eq "SKIP"
+                    $print "    <testcase name=\"$name\">"
+                    my $msg = $test->{opts}->{SKIP}
+                    $print "      <skipped type=\"TodoTestSkipped\""
+                    $print "             message=\"$msg\"></skipped>"
+                    $print "    </testcase>"
+                $elif $test->{result} eq "OK"
+                    $print "    <testcase name=\"$name\" ></testcase>"
+                $else
+                    $print "    <testcase name=\"$name\" >"
+                    $print "      <failure type=\"TestFailed\""
+                    $print "               message=\"$test->{result}: $name\">"
+                    $print "    </failure>"
+                    $print "    </testcase>"
+            $print "    <system-out></system-out>"
+            $print "    <system-err></system-err>"
+            $print "  </testsuite>"
+            $print "</testsuites>"
+
+
+#---------------------------------------- 
+fncode: parse_options($g_opts)    
+    my @src_list
+
+    $foreach $a in @ARGV
+        $if $a=~/^(\w+)=(.*)/
+            $g_opts->{uc($1)}=$2
+        $elif $a=~/^(.*\.c)$/
+            push @src_list, "../$a"
+
+    $if !@src_list
+        my $dir = "test"
+        $if $g_opts->{SRCDIR}
+            $dir = "$g_opts->{SRCDIR}"
+        &call open_r, "find $dir -name '*.c' |"
+            chomp
+            push @src_list, $_
+        # @src_list = glob("$dir/*.c")
+        # $print dir: $dir; src_list: @src_list
+    return \@src_list
+
+fncode: gather_tests($f)
+    my @tests
+    my @common
+    my %opts = %g_opts
+    my $source = []
+    my ($title) = $f=~/^(.+)\.c$/
+    &call open_r, $f
+        $if /^\/\*\s+(\w+):\s*(.+?)\s*\*\//
+            $if $1 eq "TEST"
+                $if !@common
+                    @common = @$source
+                $else
+                    $call push_test, continue
+                $title = $2
+            $opts{$1}=$2
+        $elif /^int\s+(main|test_\w+)\(\s*\)\s*$/
+            push @$source, "int main()\n"
+        $else
+            push @$source, $_
+    $call push_test, final
+
+    return \@tests
+
+    subcode: push_test(is_final)
+        my $opt_list = opt_multiplex(\%opts)
+        $if @$opt_list == 1
+            push @tests, {title=> $title, opts=>$opt_list->[0], source=>$source}
+        $else
+            $foreach $t_opt in @$opt_list
+                push @tests, {title=> "$title - $t_opt->{subtitle}", opts=>$t_opt, source=>$source}
+        $(if:is_final!=final)
+            $source = []
+            push @$source, @common
+
+fncode: opt_multiplex($opts)
+    my (@all_opts, @CFLAGS_list, @LDFLAGS_list)
+    $(for:CFLAGS,LDFLAGS)
+        $if $opts->{$1}
+            @$1_list = split /\s*\|\s*/, $opts->{$1}
+        $else
+            @$1_list = (undef)
+    $foreach $cflags in @CFLAGS_list
+        $foreach $ldflags in @LDFLAGS_list
+            my %t_opts = %$opts
+            my $subtitle = "[$cflags $ldflags]"
+            $t_opts{CFLAGS} = $cflags
+            $t_opts{LDFLAGS} = $ldflags
+            $t_opts{subtitle} = $subtitle
+            push @all_opts, \%t_opts 
+    return \@all_opts
+
+fncode: run_test($test, $i)
+    my $name = "test-$i"
+    my $test_opts = $test->{opts}
+    $call dump_source
+    $call set_cmd
+
+    my $result
+    $call run
+    return $result
+
+    subcode: dump_source
+        &call open_w, .test/$name.c
+            $foreach $l in @{$test->{source}}
+                print Out $l
+
+    subcode: set_cmd
+        my $cc = $test_opts->{CC}
+        $if !$cc
+            $cc = "gcc"
+        my $extra
+
+        $if $test_opts->{CFLAGS}
+            $cc .= " $test_opts->{CFLAGS}"
+
+        $if $test_opts->{SOURCE}
+            $extra .= " $test_opts->{SOURCE}"
+
+        $if $test_opts->{LDFLAGS}
+            $extra .= " $test_opts->{LDFLAGS}"
+            $if $test_opts->{LDFLAGS} =~ /\.la\b/
+                $cc = "../libtool --silent --mode=link $cc"
+
+        my $cmd = "$cc -o .test/$name .test/$name.c $extra && .test/$name"
+
+    subcode: run
+        $if $test_opts->{DEBUG}
+            $print $cmd
+        system $cmd
+
+        $if $? == -1
+            $n_fail ++ 
+            $result = "FAIL"
+            $call append_fail
+        $elif $? & 0xff
+            $n_fail ++
+            $result = "KILLED"
+            $call append_fail
+        $else
+            my $ret = $?>>8
+            $if $ret == 0
+                $result = "OK"
+                $n_ok++
+            $elif $test_opts->{XFAIL}
+                $n_xfail++
+                $result = "FAIL (expected)"
+            $else
+                $n_fail++
+                $result = "FAIL ($ret)"
+                $call append_fail
+        subcode: append_fail
+            $result .= " - failing command: $cmd"
+

@@ -1,5 +1,5 @@
 subcode: PrepareEnv
-    PMRS=/nfs/gce/projects/login-pmrs
+    PMRS=/nfs/gce/projects/pmrs
     if test -d $HOME/software/autotools/bin; then
         export PATH=$HOME/software/autotools/bin:$PATH
     fi

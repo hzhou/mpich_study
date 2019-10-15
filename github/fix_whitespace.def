@@ -1,0 +1,28 @@
+page: fix_whitespace
+    module: perl
+
+    my $N = 1;
+    $if $ARGV[0]=~/^([0-9a-f]+)$/
+        $N = $1
+    
+    my $commit
+    $if length($N) > 4
+        $commit = $N
+    $elif $N>0 && $N<100
+        $commit = "HEAD~$N"
+    $else
+        die "Wrong commit mark: $N\n"
+
+    my $root="$ENV{HOME}/work/mpich-github"
+    chdir $root or die
+    
+    my (@filelist, %filehash)
+    &call open_r, "git log --name-only $commit..HEAD |"
+        $if /^(src\/\S+)/
+            $if !$filehash{$1}
+                $filehash{$1} = 1
+                push @filelist, $1
+
+    $foreach $f in @filelist
+        $print $f...
+        system "sh maint/code-cleanup.sh $f"

@@ -23,7 +23,7 @@ macros:
     Dizem: $moddir/izem
     Iizem: $moddir/izem/src/include
     Lizem: $moddir/izem/src/libzm.la
-    Hizem: $(Iizem)/izem/src/include/zm_config.h
+    Hizem: $(Iizem)/zm_config.h
 
     embed_ucx: src/mpid/ch4/netmod/ucx/ucx
     Ducx: $moddir/ucx
@@ -89,11 +89,12 @@ subcode: need_opa
     $call add_subdir_make, $(Dopa), $(Lopa), $(Hopa)
 
 subcode: filter_var_mpl_etc
-    $t=~s/-I.*\/(mpl|openpa|romio)\/\S+\s*//g
+    $t=~s/-I.*\/(mpl|openpa|romio|izem)\/\S+\s*//g
 
 subcode: filter_lib_mpl_etc
     $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
     $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
+    $t=~s/\S+\bsrc\/izem\/\S+\s*//g
 
 #---------------------------------------- 
 subcode: need_romio
@@ -261,7 +262,7 @@ subcode: patch_configure_ofi
                 $flag = 0
                 $call @print_Out_defines
                 next
-            $elif $l=~/AC_ARG_ENABLE.*legacy-ofi/
+            $elif $l=~/AC_ARG_ENABLE/
                 $flag=2
             $elif $flag==2
                 # pass thru

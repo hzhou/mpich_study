@@ -64,7 +64,8 @@ subcode: preproc_bindings
             push @extra_make_rules, "$(U)/mpi_sizeofs.lo: $(U)/mpifnoext.h", ""
             push @extra_make_rules, "$(U)/mpi_constants.lo: $(U)/mpifnoext.h", ""
             push @extra_make_rules, "$(U)/mpifnoext.h: $(D)/mpif_h/mpif.h"
-            push @extra_make_rules, "\tsed -e 's/^C/!/g' -e '/EXTERNAL|REAL\*8|DOUBLE PRECISION|MPI_WTICK/d' \$< > \$@"
+            # remove EXTERNAL functions and MPI_WTIME/MPI_WTICK declarations
+            push @extra_make_rules, "\tsed -e 's/^C/!/g' -e '/EXTERNAL/d' -e '/MPI_WTICK/d' \$< > \$@"
             push @extra_make_rules, ""
 
         subcode: add_extra_use_mpi_f08

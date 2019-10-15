@@ -40,10 +40,13 @@ page: mymake
         $call pre_patch
 
         subcode: pre_patch
+            my $cvars_c = "src/util/mpir_cvars.c"
+            $if -f "src/util/cvar/Makefile.mk"
+                $cvars_c = "src/util/cvar/mpir_cvars.c"
             # .lo.c, the missing c file will throw off gnumake
-            #     src/util/cvar/mpir_cvars.c will gets regenerated due to the prerequisite of src/include/mpir_cvars.h
-            $if !-f 'src/util/cvar/mpir_cvars.c'
-                system "touch src/util/cvar/mpir_cvars.c"
+            #     mpir_cvars.c will gets regenerated due to the prerequisite of src/include/mpir_cvars.h
+            $if !-f $cvars_c
+                system "touch $cvars_c"
 
 
     subcode: set_mymake_DO
