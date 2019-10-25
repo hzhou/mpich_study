@@ -262,6 +262,9 @@ subcode: dump_cvars_c
     &call open_W, $cvars_c
         $print #include "mpiimpl.h"
         $print 
+        $if 1
+            # so it works with old PRs
+            $print #define FCNAME __func__
         $call dump_cvar_globals
         &call dump_fn_init
             $call dump_cat_add_desc

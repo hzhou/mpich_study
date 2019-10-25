@@ -120,6 +120,8 @@ subcode: defmsg_h
                     $print "$(s:long) = \"$errnames{$name}\";"
                 $else
                     warn "missing: $name\n"
+                    $print "$(s:short) = \"$name\";"
+                    $print "$(s:long)  = \"$name (missing description)\";"
 
             $print "static const msgpair $(which)_err_msgs[] = {"
             $for $i=0:$n

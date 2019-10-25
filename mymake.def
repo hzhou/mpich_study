@@ -4,6 +4,7 @@ include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
 include: macros_mymake/bindings.def
 include: macros_mymake/hydra.def
+include: macros_mymake/gforker.def
 include: macros_mymake/testing.def
 
 output_dir: ./mymake
@@ -29,6 +30,7 @@ page: mymake
     $call @dump_args
 
     $call add_rule_hydra
+    $call add_rule_gforker
     # $call add_rule_testing
     $call compile_mpich
 
