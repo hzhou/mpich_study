@@ -29,8 +29,10 @@ page: mymake
     $call save_last_ARGV
     $call @dump_args
 
-    $call add_rule_hydra
-    $call add_rule_gforker
+    $if $opts{pm} eq "gforker"
+        $call add_rule_gforker
+    $else
+        $call add_rule_hydra
     # $call add_rule_testing
     $call compile_mpich
 

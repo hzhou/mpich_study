@@ -17,6 +17,12 @@ subcode: add_rule_gforker
 
     push @extra_make_rules,  ".PHONY: gforker-install"
     push @extra_make_rules,  "gforker-install: mpiexec.gforker"
-    push @extra_make_rules,  "\t/bin/sh ./libtool --mode=install --quiet install mpiexec.gforker \x24(PREFIX)/bin"
+    my $bin = "\x24(PREFIX)/bin"
+    push @extra_make_rules,  "\t/bin/sh ./libtool --mode=install --quiet install mpiexec.gforker $bin"
+    push @extra_make_rules,  "\trm -f $bin/mpiexec  && ln -s $bin/mpiexec.gforker $bin/mpiexec"
+    push @extra_make_rules,  "\trm -f $bin/mpirun  && ln -s $bin/mpiexec.gforker $bin/mpirun"
     push @extra_make_rules, ""
 
+    # hack
+    push @extra_INCLUDES, "-Isrc/pm/util"
+    push @extra_DEFS, "-DHAVE_GETTIMEOFDAY -DUSE_SIGACTION"

@@ -256,6 +256,12 @@ subcode: dump_custom_make
     subcode: dump_variable(key)
         my $t = get_object("$(key)")
         $call @dump_variable_custom
+        $(if:key=DEFS)
+            $global @extra_DEFS
+            $t .= " @extra_DEFS"
+        $(if:key=INCLUDES)
+            $global @extra_INCLUDES
+            $t .= " @extra_INCLUDES"
         $call P, "$(key) = $t"
 
     subcode: dump_object(key, tlist)

@@ -75,6 +75,9 @@ subcode: parse_args
                 $if $a=~/^--with-device=(.*)/
                     $opts{device}=$1
                     push @config_args, $a
+                $elif $a=~/^--with-pm=(.*)/
+                    $opts{pm}=$1
+                    # push @config_args, $a
                 $elif $a=~/--(dis|en)able-.*tests/
                     push @test_config_args, $a
                 $elif $a=~/--disable-(romio|cxx|fortran)/
