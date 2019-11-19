@@ -4,9 +4,14 @@ subcode: report_make_log
         $call parse_make_log_icc
     $elif $compiler=~/pgi/
         $call parse_make_log_pgi
+    $elif $compiler=~/sun/
+        $call parse_make_log_sun
     $else
         $call parse_make_log
     my $n_fails = @make_log
+    $(set:LIMIT=10000)
+    $if $n_fails>=$(LIMIT)
+        $n_fails = $(LIMIT)
     my $n_tests = $n_fails+1
     &call open_W, summary.junit.xml
         $print <testsuites>
@@ -15,6 +20,8 @@ subcode: report_make_log
         $print <testcase name="1 - build" time="$dur"></testcase>
         my $i = 1
         $foreach $t in @make_log
+            $if $i>$(LIMIT)
+                last
             $i++
             $t=~s/"//g
             $t=~s/</&lt;/g
@@ -56,8 +63,20 @@ subcode: report_make_log
         &call open_r, make.log
             # PGC-W-0114-More than one type specified (/var/lib/jenkins-slave/workspace/hzhou-warnings-more/compiler/pgi/config/ch3-tcp/label/centos64/modules/mpl/include/uthash.h: 90)
             $if /^(PGC-W-\d+-.*)/ -> $t
-                $t=~s/\(\/.*(centos64)\//\(/
                 push @make_log, $t
+
+    subcode: parse_make_log_sun
+        my %got_hash
+        &call open_r, make.log
+            # "src/include/mpir_handlemem.h", line 120: warning: null dimension: indirect
+            $if /^(".*",\s*line \d+:\s*warning:.*)/ -> $t
+                $if $t=~/opa_gcc_intel_32_64_ops/
+                    $if !$got_hash{opa_asm}
+                        push @make_log, $t
+                        $got_hash{opa_asm}=1
+                $else
+                    push @make_log, $t
+
 
 fncode: parse_warning($t)
     my $o
@@ -67,9 +86,13 @@ fncode: parse_warning($t)
         $o = { file=>$1, line=>$2 }
     $elif $t=~/^PGC-.*\((.*):\s*(\d+)\)/ # pgi
         $o = { file=>$1, line=>$2 }
+    $elif $t=~/"(.*)", line (\d+): warning:/ # suncc
+        $o = { file=>$1, line=>$2 }
+    $elif $t=~/(\S+), line (\d+): warning:/ # suncc
+        $o = { file=>$1, line=>$2 }
 
     $if $o
-        $if $o->{file}=~/^\/var\/.*\/modules\/(.*)/g
+        $if $o->{file}=~/^\/var\/.*\/mymake\/(.*)/g
             $o->{file}="~$1"
             $if $o->{file}=~/^~(ucx|libfabric)/
                 $o->{skip}="external module: $1"

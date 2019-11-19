@@ -48,6 +48,13 @@ subcode: delete(l)
 macros:
     FIND: find . -name '*.[ch]'
 
+subcode: grep_all
+    my $grep_cmd="$(FIND)"
+    my @files
+    &call open_r, $grep_cmd |
+        chomp
+        push @files, $_
+
 subcode: grep_cmd(@cmd)
     my $grep_cmd="$(FIND) |xargs $(cmd) "
     my %files

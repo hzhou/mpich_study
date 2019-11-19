@@ -139,41 +139,80 @@ page: test_quick.sh
 page: build_modules.sh
     module: general
 
+    $call check_option
     uname -a
 
-    git clone https://github.com/pmodels/hwloc
-    git clone https://github.com/pmodels/izem
-    git clone https://github.com/pmodels/ucx
-    # git clone https://github.com/ofiwg/libfabric
-    git clone https://github.com/pmodels/libfabric
-    git clone https://github.com/json-c/json-c jsonc
+    $(for:a in $(MODLIST))
+        if test $do_$(a) = yes ; then
+            $call do_$(a)
+        fi
 
-    $call config, hwloc, --enable-embedded-mode --enable-visibility
-    $call config, izem, --enable-embedded
-    $call config, ucx, --disable-shared --with-pic
-    $call config, libfabric, --enable-embedded --disable-verbs
-    $call config, jsonc 
-
-    rm -rf */.git
     find . -name '*.o' |xargs rm -f
-    tar czf modules.tar.gz hwloc izem ucx libfabric
+    rm -rf */.git
+    tar czf modules.tar.gz hwloc izem ucx libfabric jsonc
 
+    macros:
+        MODLIST: hwloc, izem, ucx, libfabric, jsonc
+
+    subcode: check_option
+        if test -z "$1" ; then
+            $(for:a in $(MODLIST))
+                do_$(a)=yes
+        else
+            $(for:a in $(MODLIST))
+                if test "$1" = "$(a)" ; then
+                    do_$(a)=yes
+                else
+                    do_$(a)=no
+                fi
+        fi
+            
     subcode: config(dir, @option)
         cd $(dir)
         $call @pre_$(dir)
         # ucx will need pkg-config macro: ~share/aclocal/pkg.m4
         sh autogen.sh
         ./configure $(option)
-        make -j 16
+        make
         $call @post_$(dir)
         cd ..
+
+    subcode: do_hwloc
+        git clone https://github.com/pmodels/hwloc
+        $call config, hwloc, --enable-embedded-mode --enable-visibility
+
+    subcode: do_izem
+        git clone https://github.com/pmodels/izem
+        $call config, izem, --enable-embedded
+        find izem -name '*.o' |xargs rm -f
+
+    subcode: do_ucx
+        git clone https://github.com/pmodels/ucx
+        # $call config, ucx, --disable-shared --with-pic
+        $call config, ucx, --prefix=/MODPREFIX --disable-static
+        # find ucx -name '*.o' |xargs rm -f
+        touch ucx/need_sed
+
+        subcode: post_ucx
+            # MODDIR allows relocate the path
+            find . -name '*.la' |xargs --verbose sed -i "s,$PWD,MODDIR,g"
+            # libdir='/usr/lib' -> libdir=''  makes it a convenience library
+            # find . -name '*.la' |xargs --verbose sed -i "s,/usr/lib,,g"
+
+    subcode: do_libfabric
+        # git clone https://github.com/ofiwg/libfabric
+        git clone https://github.com/pmodels/libfabric
+        $call config, libfabric, --enable-embedded --disable-verbs
+        find libfabric -name '*.o' |xargs rm -f
+
+    subcode: do_jsonc
+        git clone https://github.com/json-c/json-c jsonc
+        $call config, jsonc 
+        find jsonc -name '*.o' |xargs rm -f
 
     subcode: pre_libfabric
         git checkout -b mpich origin/v1.7.1-mpich
         git log --oneline -n 5
-
-    subcode: post_ucx
-        find . -name '*.la' |xargs --verbose sed -i "s,$PWD,MODDIR,g"
 
 #---------------------------------------- 
 page: apply_xfail

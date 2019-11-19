@@ -16,12 +16,15 @@ subcode: parse_args
     $global %opts
     $global @config_args, @test_config_args
     $call @set_opts_default
+    $if @ARGV == 1 && $ARGV[0] eq "V=1"
+        $opts{V} = 1
+        @ARGV=()
     $call @load_last_ARGV
     $call parse_ARGV
     $map opt_set, srcdir, moddir, prefix
+    $call set_prefix
     $call set_moddir
     $call probe_srcdir
-    $call set_prefix
 
     subcode: set_moddir
         my $mod_tarball
@@ -40,7 +43,6 @@ subcode: parse_args
             $moddir = "$pwd/mymake"
             $call do_cmd, mkdir -p $moddir
             $call do_cmd, tar -C $moddir -xf $mod_tarball
-            $call do_cmd, find $moddir/ucx -name '*.la' | xargs sed -i \"s,MODDIR,$moddir/ucx,g\"
         $else
             die "moddir not set\n"
 
@@ -64,6 +66,8 @@ subcode: parse_args
 
     subcode: set_opts_default
         $opts{V}=0
+        $opts{ucx}="embedded"
+        $opts{libfabric}="embedded"
 
     subcode: parse_ARGV
         $foreach $a in @ARGV
@@ -90,6 +94,14 @@ subcode: parse_args
                     $opts{enable_fortran}=$1
                     push @config_args, $a
                     push @test_config_args, $a
+                $elif $a=~/--with-atomic-primitives=(.*)/
+                    $opts{openpa_primitives} = $1
+                $elif $a=~/--enable-strict/
+                    $opts{enable_strict} = 1
+                    push @config_args, $a
+                $elif $a=~/--with-(ucx|libfabric)=(.*)/
+                    $opts{$1}=$2
+                    push @config_args, $a
                 $else
                     push @config_args, $a
             $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/

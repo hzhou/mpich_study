@@ -4,6 +4,11 @@ subcode: PrepareEnv
         export PATH=$HOME/software/autotools/bin:$PATH
     fi
 
+    export OSU=$PMRS/opt/osu-micro-benchmarks/mpi
+    if test -n "$HOSTS"; then
+        export HOSTS=$PMRS/hosts.$HOSTS # eg hosts.centos64
+    fi
+
     export UCX_NET_DEVICES=mlx5_0:1
     
 subcode: SetCompiler
@@ -32,7 +37,7 @@ subcode: SetCompiler
             ;;
         clang-*)
             export PATH=$PMRS/opt/$compiler/bin:$PATH
-            export LD_LIBRARY_PATH=$PMRS/opt/gcc-8/lib64:$PMRS/opt/$PATH/lib:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=$PMRS/opt/gcc-8/lib64:$LD_LIBRARY_PATH
             CC=$compiler
             CXX=clang++
             F77=gfortran
@@ -64,6 +69,16 @@ subcode: SetCompiler
             # F77=pgf77
             F77=pgfortran
             FC=pgfortran
+            ;;
+        sun)
+            source /etc/profile.d/spack.sh
+            module load oracledeveloperstudio/12.5
+            CC=suncc
+            CXX=sunCC
+            F77=sunf77
+            FC=sunf90
+            export CFLAGS="-errtags=yes -erroff=E_END_OF_LOOP_CODE_NOT_REACHED -erroff=E_STATEMENT_NOT_REACHED -erroff=E_ANONYMOUS_UNION_DECL -erroff=E_EMPTY_TRANSLATION_UNIT"
+            # export EXTRA_LIB="-latomic" # note: doesn't work
             ;;
         *)
             echo "Unknown compiler suite"

@@ -479,7 +479,24 @@ subcode: build_alltests
 
 #---------------------------------------- 
 fncode: RunMPIProgram($test)
-    $if $test->{dir} && ! -x "$test->{dir}/$test->{prog}"
+    # -- Is it an osu micro benchmark
+    $if $test->{prog} =~ /^osu_.+/
+        $if !$ENV{OSU}
+            $test->{found_error} = "Need set environment OSU to run osu micro benchmarks"
+            goto done
+        my $OSU=$ENV{OSU}
+
+        $(for:pt2pt,collective,one-sided,startup)
+            $if -e "$OSU/$1/$test->{prog}"
+                $test->{dir}="$OSU/$1"
+        $if ! $test->{dir}
+            $test->{found_error} = "$test->{prog} not found"
+            goto done
+
+        $test->{resultTest} = "TestStatusZero"
+
+    # ------------------------------- 
+    $if $test->{dir} && ! -e "$test->{dir}/$test->{prog}"
         BuildMPIProgram($test)
     $if $test->{found_error}
         # presummably, build error
@@ -506,6 +523,7 @@ fncode: RunMPIProgram($test)
     $elif $test->{resultTest} eq "TestStatusNoErrors"
         $call check_TestStatusNoErrors
 
+    done:
     $if $verbose
         $if $test->{found_error}
             $print "Failed: [$test->{line}] - $test->{found_error}"

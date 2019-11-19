@@ -28,7 +28,10 @@ macros:
     embed_ucx: src/mpid/ch4/netmod/ucx/ucx
     Ducx: $moddir/ucx
     Iucx: $(Ducx)/src
-    Lucx: $(Ducx)/src/ucp/libucp.la
+    Lucp: $(Ducx)/src/ucp/libucp.la
+    Luct: $(Ducx)/src/uct/libuct.la
+    Lucs: $(Ducx)/src/ucs/libucs.la
+    Lucm: $(Ducx)/src/ucm/libucm.la
     Hucx: $(Ducx)/config.h
 
     embed_ofi: src/mpid/ch4/netmod/ofi/libfabric
@@ -58,7 +61,7 @@ subcode: copy_subdir_module(dir)
 
 #---------------------------------------- 
 subcode: need_mpl
-    $call copy_subdir_module, mpl 
+    # $call copy_subdir_module, mpl 
     $I_list .= " -I$(Impl)"
     $L_list .= " $(Lmpl)"
     push @CONFIGS, "$(Hmpl)"
@@ -67,34 +70,39 @@ subcode: need_mpl
         push @t, "\x24(DO_stage) Configure MPL"
         push @t, "autoreconf -ivf"
         push @t, "./configure $config_args"
+        push @t, "cp $pwd/libtool ."
     $call add_subdir_make, $(Dmpl), $(Lmpl), $(Hmpl)
 
     subcode: set_config_args
         my $config_args = "--disable-versioning --enable-embedded"
         $foreach $t in @config_args
-            $if $t=~/--enable-g/
+            $if $t=~/--enable-(g|strict)/
                 $config_args.=" $t"
 
 #---------------------------------------- 
 subcode: need_opa
-    $call copy_subdir_module, opa
+    # $call copy_subdir_module, opa
     $I_list .= " -I$(Iopa)"
     $L_list .= " $(Lopa)"
     push @CONFIGS, "$(Hopa)"
     &call add_subdir_rule_block, $(Dopa), $(Hopa)
         push @t, "\x24(DO_stage) Configure OpenPA"
         push @t, "autoreconf -ivf"
-        # check --with-atomic-primitives [auto_allow_emulation]
         push @t, "./configure --disable-versioning --enable-embedded"
+        $if $opts{openpa_primitives}
+            $t[-1] .= " --with-atomic-primitives=$opts{openpa_primitives}"
+        push @t, "cp $pwd/libtool ."
     $call add_subdir_make, $(Dopa), $(Lopa), $(Hopa)
 
 subcode: filter_var_mpl_etc
-    $t=~s/-I.*\/(mpl|openpa|romio|izem)\/\S+\s*//g
+    $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc)\/\S+\s*//g
 
 subcode: filter_lib_mpl_etc
-    $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
-    $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
-    $t=~s/\S+\bsrc\/izem\/\S+\s*//g
+    $t=~s/\S+\/(mpl|openpa|romio|izem|hwloc)\/\S+\.la\s*//g
+    $(if:0)
+        $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
+        $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
+        $t=~s/\bsrc\/izem\/\S+\s*//g
 
 #---------------------------------------- 
 subcode: need_romio
@@ -120,9 +128,6 @@ subcode: need_romio
 
     $dst_hash{"$(Dromio)/include/mpio.h"} = "$prefix/include"
     $dst_hash{"$(Dromio)/include/mpiof.h"} = "$prefix/include"
-
-subcode: filter_var_romio
-subcode: filter_lib_romio
 
 #---------------------------------------- 
 subcode: need_hwloc
@@ -156,25 +161,48 @@ subcode: need_izem
 
 #---------------------------------------- 
 subcode: need_ucx
+    $if -e "$moddir/ucx/need_sed"
+        $print Patch $moddir/ucx ...
+        system "find $moddir/ucx -name '*.la' | xargs sed -i \"s,MODDIR,$moddir/ucx,g\""
+        system "find $moddir/ucx -name '*.la*' | xargs sed -i \"s,/MODPREFIX,$prefix,g\""
+        system "mkdir -p $prefix/lib/ucx"
+        $foreach $m in "ucm", "ucs", "uct", "ucp"
+            system "$moddir/ucx/libtool --mode=install --quiet install $moddir/ucx/src/$m/lib$m.la $prefix/lib"
+        my @tlist = glob("$moddir/ucx/modules/*.la")
+        $foreach $m in @tlist
+            system "$moddir/ucx/libtool --mode=install --quiet install $m $prefix/lib/ucx"
+        unlink "$moddir/ucx/need_sed"
+
+    $if $opts{ucx} eq "embedded"
+        $I_list .= " -I$(Iucx)"
+        $L_list .= " $prefix/lib/libucp.la"
+        # $L_list .= " $(Lucp)"
+        # $L_list .= " $(Lucp) $(Luct) $(Lucs) $(Lucm)"
+        $call @need_ucx_embedded
+    $else
+        # until: -I, -L path added by configure
+        $I_list .= " -I$opts{ucx}/include"
+        $L_list .= " -L$opts{ucx}/lib"
+        $L_list .= " -lucp -lucs"
+
+subcode: need_ucx_embedded
     $call copy_subdir_module, ucx
     $call patch_ucx_for_pgi
-    $I_list .= " -I$(Iucx)"
-    $L_list .= " $(Lucx)"
+
     push @CONFIGS, "$(Hucx)"
     &call add_subdir_rule_block, $(Ducx), $(Hucx)
         push @t, "\x24(DO_stage) Configure UCX"
         # push @t, "sh autogen.sh"
         push @t, "mkdir -p config/m4 config/aux"
         push @t, "autoreconf -iv"
-        # push @t, "./configure --disable-static --enable-embedded --with-prefix=NONE"
-        push @t, "./configure --disable-shared --with-pic"
-    $call add_subdir_make, $(Ducx), $(Lucx), $(Hucx)
+        # push @t, "./configure --prefix=\x24(PREFIX) --disable-static --enable-embedded"
+        push @t, "./configure --prefix=\x24(PREFIX) --disable-static"
+    $call add_subdir_make, $(Ducx), $(Lucp), $(Hucx)
 
     subcode: patch_ucx_for_pgi
-        $if $ENV{compiler} =~ /pgi/
+        $if $ENV{compiler} =~ /pgi|sun/
             &call just_modify, $(Ducx)/src/ucs/type/status.h
                 s/UCS_S_PACKED\s*ucs_status_t/ucs_status_t/
-
 
 subcode: patch_configure_ucx
     my $flag
@@ -195,13 +223,22 @@ subcode: filter_var_ucx
 subcode: filter_lib_ucx
     $t=~s/\@ucxlib\@\s*//g
 
+#------------------------
+subcode: patch_install_ucx
 #---------------------------------------- 
-macros:
-    # patch_ofi_inline: 1
 subcode: need_ofi
+    $if $opts{libfabric} eq "embedded"
+        $I_list .= " -I$(Iofi)"
+        $L_list .= " $(Lofi)"
+        $call @need_ofi_embedded
+    $else
+        # until: -I, -L path added by configure
+        $I_list .= " -I$opts{libfabric}/include"
+        $L_list .= " -L$opts{libfabric}/lib"
+        $L_list .= " -lfabric"
+
+subcode: need_ofi_embedded
     $call copy_subdir_module, ofi
-    $I_list .= " -I$(Iofi)"
-    $L_list .= " $(Lofi)"
     push @CONFIGS, "$(Hofi)"
     &call add_subdir_rule_block, $(Dofi), $(Hofi)
         push @t, "\x24(DO_stage) Configure libfabric"
@@ -209,49 +246,9 @@ subcode: need_ofi
         $(set:C=$(join:--enable-$1=no: :psm,psm2,verbs,usnic,mlx,gni,ugni,rxm,mrail,rxd,bgq,rstream,udp,perf))
         push @t, "./configure --enable-embedded --enable-sockets=yes $(C)"
     $call add_subdir_make, $(Dofi), $(Lofi), $(Hofi)
-    $(if:patch_ofi_inline)
-        $call patch_inline
-
-    subcode: patch_inline
-        my $ofi="src/mpid/ch4/netmod/ofi"
-        $if !-f "$ofi/ofi_noinline.c" and !-f "mymake/ofi_events.h.orig"
-            system "mv $ofi/ofi_events.h mymake/ofi_events.h.orig" 
-            my (@lines, @lines_2, $flag)
-            &call open_r, mymake/ofi_events.h.orig
-                $if /^MPL_STATIC_INLINE_PREFIX (int MPIDI_OFI_dispatch_function.*)/
-                    $flag = 1
-                    push @lines_2, "$2\n"
-                    push @lines, "$2\n"
-                $elif $flag
-                    $if /^{/
-                        chomp $lines[-1]
-                        $lines[-1].=";\n"
-                        push @lines_2, "{"
-                        $flag=2
-                    $elif /^}/
-                        push @lines_2, "}\n"
-                        $flag=0
-                    $elif $flag>1
-                        push @lines_2, $_
-                    $else
-                        push @lines, $_
-                $else
-                    push @lines, $_
-            &call open_w, $ofi/ofi_events.h
-                $foreach $l in @lines
-                    print Out $l
-            &call open_w, $ofi/ofi_noinline.c
-                $foreach $l in @lines_2
-                    print Out $l
-        # still need add to Makefile
 
 # assuming using sockets provider
 subcode: patch_configure_ofi
-    $(if:patch_ofi_inline)
-        &call modify, src/mpid/ch4/netmod/ofi/Makefile.mk
-            $if $l=~/^(\s*)src.mpid.ch4.netmod.ofi.ofi_init.c/
-                print Out $1, "src/mpid/ch4/netmod/ofi/ofi_noinline.c \\\n"
-
     my $flag
     &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
         $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/

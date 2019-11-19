@@ -29,10 +29,17 @@ subcode: test_frame
         $(for:autoconf,automake,libtool)
             which $1
             $1 --version
+
+        if test $compiler = "sun" ; then
+            optV="-V"
+        else
+            optV="--version"
+        fi
         $(for:CC,CXX,F77,FC)
             export $1
             which $$1
-            $$1 --version
+            $$1 $optV
+
         WORKSPACE=$PWD
         SRC=$PWD
         # $call prepare_from_tarball
@@ -52,9 +59,16 @@ subcode: test_frame
         export CPATH=$PREFIX/include:$CPATH
         export LD_LIBRARY_PATH=$PREFIX/lib:$LD_LIBRARY_PATH
 
+        $call test_cpi
+
         if test x$skip_test = xtrue ; then 
             exit 0
         else
             BLOCK
         fi
 
+    subcode: test_cpi
+        which mpicc
+        which mpirun
+        mpicc examples/cpi.c -o examples/cpi
+        mpirun -n 2 examples/cpi

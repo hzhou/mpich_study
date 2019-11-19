@@ -3,13 +3,16 @@ subcode: compile_mpich
     # push @config_args, "--enable-izem=atomic --with-zm-prefix=yes"
     # $call need_izem
 
+    $(for:mpl,opa)
+        $call copy_subdir_module, $1
+
     $call @preproc_bindings
     $call mpich_configure
     $call @post_mpich_configure
 
     $call add_rule_cpi
 
-    $call need_mpich_preproc
+    $call need_mpich_preproc # cvar, errmsg, etc.
     $(for:mpl,opa,hwloc)
         $call need_$1
 
@@ -20,7 +23,14 @@ subcode: compile_mpich
         $call need_ucx
     $if $opts{device}=~/ch4:ofi/
         $call need_ofi
+
+    $if $ENV{EXTRA_LIB}
+        $L_list .= " $ENV{EXTRA_LIB}"
+
     $call custom_make
+
+    $ENV{CFLAGS}=$opts{CFLAGS}
+    system "make $(Hmpl) $(Hopa)"
 
     # ---------------------------
     subcode: custom_programs
@@ -54,6 +64,9 @@ subcode: compile_mpich
         &call open_r, config.status
             $if /S\["WRAPPER_LIBS"\]="(.*)"/
                 $opts{WRAPPER_LIBS}=$1
+        &call open_r, mymake/Makefile.orig
+            $if /^CFLAGS *= *(.*)/
+                $opts{CFLAGS}=$1
 
         $if !$opts{have_weak}
             $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
@@ -93,7 +106,7 @@ subcode: mpich_configure
     $if !-f "configure"
         system "rm -f mymake/Makefile.orig"
         $call stage, Autoconf MPICH
-        &call temporary_modify
+        &call modify_frame, temporary
             $call modify_configure_ac
             system "autoreconf -ivf"
     $if !-f "mymake/Makefile.orig"
@@ -102,7 +115,7 @@ subcode: mpich_configure
         my $t = join ' ', @config_args
         system "./configure --with-pm=no $t" # we'll configure/build hydra separately
         system "mv Makefile mymake/Makefile.orig"
-        &call temporary_modify
+        &call modify_frame
             $call patch_libtool
 
     # -------------------
@@ -117,8 +130,14 @@ subcode: mpich_configure
                 next
             $elif $l=~/^\s*HWLOC_/
                 next
-            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/
+            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR|PAC_CONFIG_ALL_SUBDIRS)/
                 $l = "$1: \x23 $2\n"
+            $elif $l=~/^(\s*PAC_SUBDIR_MPL)/
+                $l = "$1([$(Dmpl)])"
+            $elif $l=~/^(\s*PAC_SUBDIR_OPA)/
+                $l = "$1([$(Dopa)])"
+            $elif $l=~/^(\s*PAC_SUBDIR_HWLOC)/
+                $l = "$1([$(Dhwloc)])"
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"

@@ -46,7 +46,7 @@ subcode: hydra_config
         $if !-f "version.m4"
             die "hydra: missing version.m4\n"
 
-    &call temporary_modify
+    &call modify_frame, temporary
         &call modify, configure.ac
             $if $l=~/^\s*hwloc\)/
                 print Out $l
@@ -55,20 +55,19 @@ subcode: hydra_config
             $elif $flag_skip && $l=~/AC_MSG_RESULT/
                 $flag_skip=2
             $elif $flag_skip==2 && $l=~/^(\s*)if test.*\$have_hwloc.*then/
-                $l = $1."if true ; then\n"
+                print Out $1, "have_hwloc=yes\n"
+                print Out $1, "hydra_use_embedded_hwloc=no\n" # we handles it
                 $flag_skip=0
             $elif $l=~/^(HWLOC_DO_AM_CONDITIONALS)/
-                $l = "\x23 $1"
+                $l = "\x23 $1\n"
             $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/ # mpl
                 $l = "$1: \x23 $2\n"
+            $elif $l=~/^(\s*)PAC_SUBDIR_HWLOC/
+                $l = $1."AM_CONDITIONAL([HAVE_HWLOC], [true])\n"
+                $flag_skip=0
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
-        &call modify, tools/topo/Makefile.mk
-            $if $l=~/if\s+HYDRA_HAVE_HWLOC/i
-                next
-            $elif $l=~/endif/
-                next
         &call modify, tools/topo/hwloc/Makefile.mk
             $if $l=~/if\s+HYDRA_USE_EMBEDDED_HWLOC/i
                 $flag_skip=1
@@ -76,11 +75,10 @@ subcode: hydra_config
             $elif $l=~/endif/
                 $flag_skip=0
                 next
-
         system "autoreconf -ivf"
     system "rm -f Makefile"
     system "./configure"
-    &call temporary_modify
+    &call modify_frame, temporary
         $call patch_libtool
     system "mv Makefile mymake/Makefile.orig"
 

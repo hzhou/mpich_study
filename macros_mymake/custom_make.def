@@ -14,11 +14,12 @@ subcode: custom_make
     system "ln -s mymake/Makefile.custom Makefile"
 
 #---------------------------------------- 
-subcode: temporary_modify
+subcode: modify_frame(@is_temp)
     my @mod_list
     BLOCK
-    $foreach $m in @mod_list
-        system "cp $m->[1] $m->[0]"
+    $(if:is_temp=temporary)
+        $foreach $m in @mod_list
+            system "cp $m->[1] $m->[0]"
 
     subcode: modify(f)
         my $f = "$(f)"
@@ -41,10 +42,30 @@ subcode: temporary_modify
 
     subcode: patch_libtool
         $(set:skip_mod_list=1)
+        my %need_patch
         &call modify, libtool
             $if $l=~/^AR_FLAGS=/
                 $l = "AR_FLAGS=\"cr\"\n"
+            # --------------------------
+            $elif $l=~/^CC="(.*)"/ -> $CC
+                $call set_need_patch
+            $elif $l=~/^(pic_flag|wl|link_static_flag)=/
+                $if $need_patch{$1}
+                    $l = "$1='$need_patch{$1}'\n"
+            $elif $l=~/^(archive_cmds=|\s*\\\$CC\s+-shared )/
+                $if $need_patch{shared}
+                    $l=~s/-shared /$need_patch{shared} /
+            # --------------------------
         system "chmod a+x libtool"
+
+        subcode: set_need_patch
+            $if $CC =~ /^sun(f77|f9.|fortran)/
+                $need_patch{pic_flag}=" -KPIC"
+                $need_patch{wl}="-Qoption ld "
+                $need_patch{link_static_flag}=" -Bstatic"
+                $need_patch{shared}="-G"
+            $else
+                %need_patch=()
 
 subcode: just_modify(f)
     my @lines
@@ -128,13 +149,14 @@ subcode: dump_custom_make
         my $flags = get_object("CXXFLAGS")
         my $am_flags = get_object("AM_CXXFLAGS")
         $print "CXXCOMPILE = $cxx \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) $flags $am_flags"
-        $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
 
         my $cxxld = get_object("CXXLD")
         $if $cxxld
+            $print "LTCXX = $(LT:compile) --tag=CXX \x24(CXXCOMPILE)"
             $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $else
             # mac os
+            $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
             $print "CXXLD = $(LT:link) --tag=CC $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $print
 
@@ -147,12 +169,16 @@ subcode: dump_custom_make
             my $am_flags = get_object("AM_$2FLAGS")
             $flags.=" $am_flags"
             $if $flags=~/-I(\S+)/ -> $modpath
-                $if $fc =~/(pgfortran|ifort)/
+                $if $fc =~/^(pgfortran|ifort)/
                     $flags.=" -module $modpath"
+                $elif $fc =~/^sunf\d+/
+                    $flags.=" -moddir=$modpath"
+                $elif $fc =~/^af\d+/
+                    $flags.=" -YMOD_OUT_DIR=$modpath"
                 $else
                     $flags.=" -J$modpath"
             $print "$1COMPILE = $fc $flags"
-            $print "LT$1 = $(LT:compile) \x24($1COMPILE)"
+            $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
 
             my $ld = get_object("$1LD")
             $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
@@ -237,7 +263,8 @@ subcode: dump_custom_make
         $print "\t(find src $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
         $print
         $print "realclean: clean"
-        $print "\t\x24(DO_clean)"
+        $print "\trm -f configure mymake/Makefile.orig src/mpi/errhan/defmsg.h src/include/mpir_cvars.h src/utils/mpir_cvars.c src/pm/hydra/configure src/pm/hydra/mymake/Makefile.orig"
+        $print "\trm -rf mymake/mpl mymake/openpa mymake/romio"
         $print
 
     subcode: quiet_rule(cmd, @rule)
