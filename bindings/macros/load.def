@@ -1,0 +1,80 @@
+subcode: load_funcs
+    $global @func_list, %func_hash
+    my $func
+    &call open_r, standard/mpi_functions.txt
+        $if /^(\w+):/
+            $call push_func
+            $func = {name=>$1, params=>[]}
+        $elif $func and /\s+(\w+),\s*(\w+)(.*)/
+            my $param={name=>$1, type=>$2}
+            $call parse_param_attrs
+            push @{$func->{params}}, $param
+    $call push_func
+
+    subcode: parse_param_attrs
+        my $t = $3
+        $t=~s/^,\s*//
+        $while $t=~/(\w+)\s*=\s*(True|['"].*['"])/g
+            $param->{$1} = $2
+    subcode: push_func
+        $if $func and $func->{name}
+            push @func_list, $func
+            $func_hash{$func->{name}} = $func
+
+subcode: dump_func(name)
+    my $func = $func_hash{$(name)}
+    $print $(name):
+    $foreach $p in @{$func->{params}}
+        my $type = get_type_C($p)
+        $print "\t$p->{name}: $type"
+
+fncode: f_get_arg_types($Func)
+    my $func = $func_hash{$Func}
+    my @tlist
+    $foreach $p in @{$func->{params}}
+        push @tlist, get_type_C($p)
+    return join(", ", @tlist)
+
+#---------------------------------------- 
+subcode: load_types(lang)
+    $global $type_hash
+    $type_hash = f_load_types("$(lang)")
+
+fncode: f_load_types($lang)
+    my %type_hash
+    &call open_r, standard/${lang}_types.txt
+        $if /^(\w+):\s*(.*?)\s*$/ -> $k, $v
+            $type_hash{$k}=$v
+    return \%type_hash
+
+fncode: get_type_C($p)
+    $global $type_hash
+    my $ptype = $p->{type}
+    $if $ptype eq "VARARGS"
+        return "..."
+    $elif $ptype eq "FUNCTION"
+        # FIXME
+        return "FUNCTION"
+    $else    
+        my $type = $type_hash->{$ptype}
+        $if $p->{constant}
+            $type = "const $type"
+        $if $type !~/\*$/
+            $call @check_C_pointer
+        return $type
+
+    # ---------------------
+    subcode: check_C_pointer
+        my $pdir = $p->{direction}
+        $if $ptype=~/(BUFFER|C_BUFFER|C_BUFFER[234]|STRING|EXTRA_STATE|ATTRIBUTE_VAL|ATTRIBUTE_VAL_10)/
+            $type .= " *"
+        $elif $ptype=~/^ATTRIBUTE_VAL/
+            # no star
+        $elif $pdir=~/inout|out/
+            $type .= " *"
+        $elif $p->{pointer} and $p->{length} eq "None"
+            $type .= " *"
+        $elif $ptype eq "STRING" and $p->{length} eq '*'
+            # no star
+            # no star
+
