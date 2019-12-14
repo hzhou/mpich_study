@@ -42,6 +42,73 @@ page: buildiface
 
 #---------------------------------------- 
 fncode: ReadAndProcessInterface($f, $protect_MPIO)
+    my $stage
+    &call open_r, $f
+        $if /\/\*\s*Begin Prototypes/
+            $stage = 1
+        $elif /\/\*\s*End Prototypes/
+            $stage = 0
+        $elif !$stage
+            last
+        $elif /\/\*\s*Begin Skip Prototypes/
+            $stage = 2
+        $elif /\/\*\s*End Skip Prototypes/
+            $stage = 1
+        $elif $stage == 2
+            next
+        $elif /$(match_routine)/
+            # routine_name, $args
+            my $lcname = lc($routine_name)
+            $if $CtoFName{$lcname}
+                $lcname = $CtoFName{$lcname}
+                
+            $if defined $special_routines{$routine_name}
+                # skip
+            $else
+                my $filename = $name_map{$lcname}
+                $if !$filename
+                    $filename = $lcname."f.c"
+
+                &call open_W, $filename
+                    $call dump_f_c
+                $call dump_f_h
+
+    subcode: dump_f_c
+        $call print_header
+        $if $do_subdecls
+            $print "FORT_DLL_SPEC $returnType FORT_CALL -"
+        $else
+            $print "$returnType FORT_CALL -"
+        $print "${out_prefix}$lcname_ -"
+        $call print_args
+        $print "{\n"
+        $call specialInitClear
+        $if $protectMPIO
+            $print "#ifdef MPI_MODE_RDONLY"
+        $if $do_fint
+            $call printCallForFint
+        $call print_special_decls
+        $call adjust_mpi_bottom
+        $if defined $ChangeCall{$routine_name}
+            my ($newName, $extraArgs) = split /:/, $ChangeCall{$routine_name}
+            $print "    $errparmlval = $newName-"
+            $call print_call_args
+        $else
+            $print "    $errparmlval = $routine_prefix$routine_name-"
+            $call print_call_args
+        $call print_post_call
+        $if $do_fint
+            $print "#endif"
+        $if $protectMPIO
+            $print "#else\n$errparmlval = MPI_ERR_INTERN;\n#endif"
+        $if $returnErrval
+            $print "    return $errparmlval;"
+        $print }
+
+    subcode: dump_f_h
+        &call open_W, fproto.h
+            $call print_copy_right
+            $print "\x2f* Prototypes for Fortran Interface Functions */"
 
 
 #---------------------------------------- 

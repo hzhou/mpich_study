@@ -1,0 +1,45 @@
+page: dump_funcs
+    module: perl
+
+    $call dump_all_funcs
+
+subcode: load_all_funcs
+    my @all_latexes = glob("*/*.tex")
+    my @all_funcs
+    $foreach $a in @all_latexes
+        my $func;
+        &call open_r, $a
+            $if /\\begin\{mpi-binding\}/
+                $func={params=>[], lines=>[]}
+                push @{$func->{lines}}, $_
+            $elif /\\end\{mpi-binding\}/
+                push @{$func->{lines}}, $_
+                push @all_funcs, $func
+                undef $func
+            $elif $func
+                push @{$func->{lines}}, $_
+                $if /^\s*function_name\(['"](.*)['"]\)/
+                    $func->{name} = $1
+                $elif /^\s*parameter\((.*)\)/ -> $t
+                    my @tlist = split /,\s*/, $t
+                    my $param = {}
+                    $param->{_name} = strip_quotes($tlist[0])
+                    $param->{_type} = strip_quotes($tlist[1])
+                    $foreach $b in @tlist
+                        $if $b=~/^(\w+)=['"](.*)['"]/
+                            $param->{$1}=$2
+                    push @{$func->{params}}, $param
+
+subcode: dump_all_funcs
+    my $mapping = $MAPS{BASE_C_KIND_MAP}
+    my @sorted = sort {$a->{name} cmp $b->{name}} @all_funcs
+    $foreach $func in @sorted
+        my @plist
+        $foreach $p in @{$func->{params}}
+            my $type = $mapping->{$p->{_type}}
+            push @plist, "$type $p->{_name}"
+        $if !@plist
+            push @plist, "void"
+        my $t = join(', ', @plist)
+        $print $func->{name}($t)
+

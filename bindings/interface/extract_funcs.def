@@ -1,0 +1,86 @@
+page: extract_funcs
+    module: perl
+
+    $(if:1)
+        $call load_funcs
+        $call dump_funcs, def/mpi_functions.txt
+    $(else)
+        # eg: f77_type.txt
+        $call load_types
+        $call dump_types, def
+
+subcode: load_types
+    my %MAPS
+    my $mapping
+    &call open_r, binding-tool/bindingtypes.py
+        s/#.*$//g
+        $if /^(\w+_KIND_MAP)\s*=\s*\{/
+            $mapping = {}
+            $MAPS{$1} = $mapping
+        $elif /^(\w+_KIND_MAP)\s*=\s*copy.deepcopy\((\w+)\)/
+            $mapping = {}
+            $MAPS{$1} = $mapping
+            %$mapping = %{$MAPS{$2}}
+        $if /^(\w+_KIND_MAP)\.update\(\{\s*$/
+            $mapping = $MAPS{$1}
+        $elif /^\}/
+            undef $mapping
+        $elif $mapping && /^\s*'(\w+)'\s*:\s*(.*)/ -> $key, $val
+            $if $val=~/['"](.*)['"]/
+                $val = $1
+            $elif $val=~/^(\w+)/
+                $val = $1
+            $mapping->{$key} = $val
+
+subcode: dump_types(def)
+    $foreach $key in sort keys %MAPS
+        my $a = $key
+        $a=~s/_KIND_MAP//g
+        &call open_W, $(def)/${a}_types.txt
+            my $mapping = $MAPS{$key}
+            $foreach $k in sort keys %$mapping
+                $print $k: $mapping->{$k}
+
+subcode: load_funcs
+    my @all_latexes = glob("*/*.tex")
+    my @all_funcs
+    $foreach $a in @all_latexes
+        my $func
+        my $i_line=0
+        &call open_r, $a
+            $i_line++
+            $call parse_latex
+
+    subcode: parse_latex
+        $if /\\begin\{mpi-binding\}/
+            $func={name=>"", params=>[]}
+        $elif /\\end\{mpi-binding\}/
+            $if $func->{name}
+                push @all_funcs, $func
+            $else
+                warn "Missing name in $a:$i_line\n"
+            undef $func
+        $elif $func
+            $if /^\s*function_name\(['"](.*)['"]\)/
+                $func->{name} = $1
+            $elif /^\s*parameter\((.*)\)/ -> $t
+                $t=~s/,\s*desc=['"][^'"]*['"]//
+                $t=~s/^['"](\w+)['"],\s*['"](\w+)['"]/$1, $2/
+                push @{$func->{params}}, $t
+            $elif /^\s*(callback|no_ierror)/
+                $func->{$1}=1
+
+subcode: dump_funcs(outfile)
+    my @sorted = sort {$a->{name} cmp $b->{name}} @all_funcs
+    &call open_W, $(outfile)
+        $foreach $fn in @sorted
+            $print $fn->{name}:
+            $foreach $p in @{$fn->{params}}
+                $print "    $p"
+
+#---------------------------------------- 
+fncode: strip_quotes($t)
+    $if $t=~/^['"](.*)['"]/
+        return $1
+    return $t
+
