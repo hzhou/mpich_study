@@ -1,0 +1,1979 @@
+MPI_Abort:
+    comm, COMMUNICATOR
+    errorcode, ERROR_CODE
+MPI_Accumulate:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    op, OPERATION
+    win, WINDOW
+MPI_Add_error_class:
+MPI_Add_error_code:
+    errorclass, ERROR_CLASS
+MPI_Add_error_string:
+    errorcode, ERROR_CODE
+MPI_Aint_add:
+    base, DISPLACEMENT
+    disp, DISPLACEMENT
+MPI_Aint_diff:
+    addr1, DISPLACEMENT
+    addr2, DISPLACEMENT
+MPI_Allgather:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Allgather_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Allgatherv:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Allgatherv_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Alloc_mem:
+    size, ALLOC_MEM_NUM_BYTES
+    info, INFO
+MPI_Allreduce:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+MPI_Allreduce_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Alltoall:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Alltoall_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Alltoallv:
+    sendbuf, BUFFER, constant=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    rdispls, POLYDISPLACEMENT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Alltoallv_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    rdispls, POLYDISPLACEMENT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Alltoallw:
+    sendbuf, BUFFER, constant=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*"
+    sendtypes, DATATYPE, constant=True, length="*"
+    recvbuf, BUFFER, direction="out"
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    rdispls, POLYDISPLACEMENT, constant=True, length="*"
+    recvtypes, DATATYPE, constant=True, length="*"
+    comm, COMMUNICATOR
+MPI_Alltoallw_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*"
+    sendtypes, DATATYPE, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    rdispls, POLYDISPLACEMENT, constant=True, length="*"
+    recvtypes, DATATYPE, constant=True, length="*"
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Attr_delete:
+    keyval, KEYVAL, 'The key value of the deleted attribute'
+MPI_Attr_get:
+    comm, COMMUNICATOR
+    keyval, KEYVAL
+MPI_Attr_put:
+    attribute_val, ATTRIBUTE_VAL_10
+MPI_Barrier:
+    comm, COMMUNICATOR
+MPI_Barrier_init:
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Bcast:
+    buffer, BUFFER, direction="inout"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Bcast_init:
+    buffer, BUFFER, direction="inout", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Bsend:
+    buf, BUFFER, constant=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+MPI_Bsend_init:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Buffer_attach:
+    size, POLYNUM_BYTES
+MPI_Buffer_detach:
+    buffer_addr, C_BUFFER2, pointer=True, direction='out'
+    size, POLYNUM_BYTES, direction='out'
+MPI_COMM_DUP_FN:
+    oldcomm, COMMUNICATOR
+    comm_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_COMM_NULL_COPY_FN:
+    oldcomm, COMMUNICATOR
+    comm_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_COMM_NULL_DELETE_FN:
+    comm, COMMUNICATOR
+    comm_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+    extra_state, EXTRA_STATE
+MPI_CONVERSION_FN_NULL:
+    userbuf, C_BUFFER3, suppress='f08_intent'
+    datatype, DATATYPE, suppress='f08_intent'
+    count, DEFERRED_INT, suppress='f08_intent'
+    filebuf, C_BUFFER3, suppress='f08_intent'
+    position, OFFSET, suppress='f08_intent'
+    extra_state, EXTRA_STATE, suppress='f08_intent'
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Cancel:
+    request, REQUEST, direction='in', pointer=True
+MPI_Cart_coords:
+MPI_Cart_create:
+    comm_old, COMMUNICATOR
+MPI_Cart_get:
+MPI_Cart_map:
+    comm, COMMUNICATOR
+MPI_Cart_rank:
+MPI_Cart_shift:
+MPI_Cart_sub:
+MPI_Cartdim_get:
+MPI_Close_port:
+    port_name, STRING, constant=True
+MPI_Comm_accept:
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Comm_call_errhandler:
+    comm, COMMUNICATOR
+    errorcode, ERROR_CODE
+MPI_Comm_compare:
+    comm1, COMMUNICATOR
+    comm2, COMMUNICATOR
+    result, ENUM, direction='out'
+MPI_Comm_connect:
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Comm_create:
+    comm, COMMUNICATOR
+    group, GROUP
+MPI_Comm_create_errhandler:
+    errhandler, ERRHANDLER, direction='out'
+MPI_Comm_create_group:
+    comm, COMMUNICATOR
+    group, GROUP
+    tag, TAG
+MPI_Comm_create_keyval:
+    extra_state, EXTRA_STATE
+MPI_Comm_delete_attr:
+    comm_keyval, KEYVAL
+MPI_Comm_delete_attr_function:
+    oldcomm, COMMUNICATOR
+    comm_keyval, DEFERRED_INT
+    extra_state, EXTRA_STATE
+    attribute_val_in, DEFERRED_VOID
+    attribute_val_out, DEFERRED_VOID, direction='out'
+    flag, LOGICAL
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Comm_delete_attr_function:
+    comm, COMMUNICATOR
+    comm_keyval, DEFERRED_INT
+    attribute_val, DEFERRED_VOID, direction='out'
+    extra_state, EXTRA_STATE
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Comm_disconnect:
+    comm, COMMUNICATOR, direction='inout'
+MPI_Comm_dup:
+    comm, COMMUNICATOR
+MPI_Comm_dup_with_info:
+    comm, COMMUNICATOR
+    info, INFO
+MPI_Comm_errhandler_function:
+    comm, COMMUNICATOR
+    error_code, ERROR_CODE
+    varargs, VARARGS
+MPI_Comm_free:
+MPI_Comm_free_keyval:
+    comm_keyval, KEYVAL, direction='inout'
+MPI_Comm_get_attr:
+    comm_keyval, KEYVAL
+MPI_Comm_get_errhandler:
+    comm, COMMUNICATOR
+MPI_Comm_get_info:
+    comm, COMMUNICATOR
+    info_used, INFO, direction='out'
+MPI_Comm_get_name:
+MPI_Comm_get_parent:
+MPI_Comm_group:
+    comm, COMMUNICATOR
+MPI_Comm_idup:
+    comm, COMMUNICATOR
+MPI_Comm_idup_with_info:
+    comm, COMMUNICATOR
+    info, INFO
+MPI_Comm_join:
+    fd, FILE_DESCRIPTOR
+MPI_Comm_rank:
+    comm, COMMUNICATOR
+MPI_Comm_remote_group:
+    comm, COMMUNICATOR
+MPI_Comm_remote_size:
+    comm, COMMUNICATOR
+MPI_Comm_set_attr:
+    comm_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+MPI_Comm_set_errhandler:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
+    errhandler, ERRHANDLER
+MPI_Comm_set_info:
+    info, INFO
+MPI_Comm_set_name:
+MPI_Comm_size:
+    comm, COMMUNICATOR
+MPI_Comm_spawn:
+MPI_Comm_spawn_multiple:
+MPI_Comm_split:
+    comm, COMMUNICATOR
+    color, COLOR
+    key, KEY
+MPI_Comm_split_type:
+    comm, COMMUNICATOR
+    split_type, ENUM
+    key, KEY
+    info, INFO
+MPI_Comm_test_inter:
+    comm, COMMUNICATOR
+    flag, LOGICAL, direction='out'
+MPI_Compare_and_swap:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    compare_addr, BUFFER, constant=True, mpi_owned=True
+    result_addr, BUFFER, direction='out', mpi_owned=True
+    datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    win, WINDOW
+MPI_Copy_function:
+    oldcomm, COMMUNICATOR
+    keyval, KEYVAL
+    extra_state, EXTRA_STATE2
+    attribute_val_in, ATTRIBUTE_VAL_10
+    attribute_val_out, ATTRIBUTE_VAL_10, direction='out'
+    flag, LOGICAL, direction='out'
+    ierr, ERROR_CODE, suppress='c_parameter'
+MPI_DUP_FN:
+    oldcomm, COMMUNICATOR
+    keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL_10
+    attribute_val_out, ATTRIBUTE_VAL_10
+    flag, LOGICAL
+MPI_Datarep_conversion_function:
+    userbuf, BUFFER
+    datatype, DATATYPE
+    count, DEFERRED_INT
+    filebuf, BUFFER
+    position, OFFSET
+    extra_state, EXTRA_STATE
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Datarep_extent_function:
+    datatype, DATATYPE
+    file_extent, DEFERRED_MPI_AINT, direction='out'
+    extra_state, EXTRA_STATE, direction='out'
+    ierror, ERROR_CODE, suppress='c_parameter f08_intent'
+MPI_Delete_function:
+    comm, COMMUNICATOR
+    keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL_10
+    extra_state, EXTRA_STATE2
+    ierr, ERROR_CODE
+MPI_Dims_create:
+    nnodes, DEFERRED_INT
+MPI_Dist_graph_create:
+    comm_old, COMMUNICATOR
+MPI_Dist_graph_create_adjacent:
+    comm_old, COMMUNICATOR
+MPI_Dist_graph_neighbors:
+MPI_Dist_graph_neighbors_count:
+MPI_Errhandler_free:
+    errhandler, ERRHANDLER, direction='inout'
+MPI_Error_class:
+    errorcode, ERROR_CODE
+MPI_Error_string:
+    errorcode, ERROR_CODE
+MPI_Exscan:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+MPI_Exscan_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_F_sync_reg:
+MPI_Fetch_and_op:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    result_addr, BUFFER, direction='out', mpi_owned=True
+    datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    op, OPERATION
+    win, WINDOW
+MPI_File_call_errhandler:
+    fh, FILE
+    errorcode, ERROR_CODE
+MPI_File_close:
+    fh, FILE, direction="inout"
+MPI_File_create_errhandler:
+    errhandler, ERRHANDLER, direction='out'
+MPI_File_delete:
+    filename, STRING, constant=True
+    info, INFO
+MPI_File_errhandler_function:
+    file, FILE
+    error_code, ERROR_CODE
+    varargs, VARARGS
+MPI_File_get_amode:
+    fh, FILE
+    amode, ACCESS_MODE, direction="out"
+MPI_File_get_atomicity:
+    fh, FILE
+    flag, LOGICAL, direction="out"
+MPI_File_get_byte_offset:
+    fh, FILE
+    offset, OFFSET
+    disp, OFFSET, direction="out"
+MPI_File_get_errhandler:
+    file, FILE
+MPI_File_get_group:
+    fh, FILE
+    group, GROUP, direction="out"
+MPI_File_get_info:
+    fh, FILE
+    info_used, INFO, direction="out"
+MPI_File_get_position:
+    fh, FILE
+    offset, OFFSET, direction="out"
+MPI_File_get_position_shared:
+    fh, FILE
+    offset, OFFSET, direction="out"
+MPI_File_get_size:
+    fh, FILE
+    size, OFFSET, direction="out"
+MPI_File_get_type_extent:
+    fh, FILE
+    datatype, DATATYPE
+    extent, DEFERRED_MPI_AINT, direction="out"
+MPI_File_get_view:
+    fh, FILE
+    disp, OFFSET, direction="out"
+    etype, DATATYPE, direction="out"
+    filetype, DATATYPE, direction="out"
+    datarep, STRING, direction="out"
+MPI_File_iread:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iread_all:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iread_at:
+    fh, FILE, 
+    offset, OFFSET
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iread_at_all:
+    fh, FILE
+    offset, OFFSET
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iread_shared:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iwrite:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iwrite_all:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iwrite_at:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iwrite_at_all:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_iwrite_shared:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    request, REQUEST, direction="out"
+MPI_File_open:
+    comm, COMMUNICATOR
+    filename, STRING, constant=True
+    amode, ACCESS_MODE
+    info, INFO
+    fh, FILE, direction="out"
+MPI_File_preallocate:
+    fh, FILE, direction="lis:inout,param:in"
+    size, OFFSET
+MPI_File_read:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_read_all:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_read_all_begin:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_read_all_end:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_read_at:
+    fh, FILE
+    offset, OFFSET
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_read_at_all:
+    fh, FILE
+    offset, OFFSET
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_read_at_all_begin:
+    fh, FILE
+    offset, OFFSET
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_read_at_all_end:
+    fh, FILE
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_read_ordered:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_read_ordered_begin:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_read_ordered_end:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_read_shared:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, direction="out"
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_seek:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    whence, UPDATE_MODE
+MPI_File_seek_shared:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    whence, UPDATE_MODE
+MPI_File_set_atomicity:
+    fh, FILE, direction="lis:inout,param:in"
+    flag, LOGICAL
+MPI_File_set_errhandler:
+    file, FILE, direction='lis:inout,param:in'
+    errhandler, ERRHANDLER
+MPI_File_set_info:
+    fh, FILE, direction="lis:inout,param:in"
+    info, INFO
+MPI_File_set_size:
+    fh, FILE, direction="lis:inout,param:in"
+    size, OFFSET
+MPI_File_set_view:
+    fh, FILE, direction="lis:inout,param:in"
+    disp, OFFSET
+    etype, DATATYPE
+    filetype, DATATYPE
+    datarep, STRING, constant=True
+    info, INFO
+MPI_File_sync:
+    fh, FILE, direction="lis:inout,param:in"
+MPI_File_write:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_write_all:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_write_all_begin:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_write_all_end:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_write_at:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_write_at_all:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_write_at_all_begin:
+    fh, FILE, direction="lis:inout,param:in"
+    offset, OFFSET
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_write_at_all_end:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_write_ordered:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_File_write_ordered_begin:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+MPI_File_write_ordered_end:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True, mpi_owned=True
+    status, STATUS, direction="out"
+MPI_File_write_shared:
+    fh, FILE, direction="lis:inout,param:in"
+    buf, BUFFER, constant=True
+    count, DEFERRED_INT
+    datatype, DATATYPE
+    status, STATUS, direction="out"
+MPI_Finalize:
+MPI_Finalized:
+MPI_Free_mem:
+MPI_Gather:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", root_only=True
+    recvcount, POLYXFER_NUM_ELEM, root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Gather_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True, root_only=True
+    recvcount, POLYXFER_NUM_ELEM, root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Gatherv:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*", root_only=True
+    displs, POLYDISPLACEMENT, constant=True, length="*", root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Gatherv_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*", root_only=True
+    displs, POLYDISPLACEMENT, constant=True, length="*", root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Get:
+    origin_addr, BUFFER, direction='out', mpi_owned=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    win, WINDOW
+MPI_Get_accumulate:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    result_addr, BUFFER, direction='out', mpi_owned=True
+    result_count, DEFERRED_INT
+    result_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    op, OPERATION
+    win, WINDOW
+MPI_Get_address:
+MPI_Get_count:
+    status, STATUS, pointer=True, constant=True
+    datatype, DATATYPE
+    count, POLYXFER_NUM_ELEM, direction='out'
+MPI_Get_library_version:
+MPI_Get_processor_name:
+MPI_Get_version:
+    version, VERSION, direction='out'
+    subversion, VERSION, direction='out'
+MPI_Graph_create:
+    comm_old, COMMUNICATOR
+    nnodes, DEFERRED_INT
+MPI_Graph_get:
+MPI_Graph_map:
+    comm, COMMUNICATOR
+    nnodes, ARRAY_LENGTH
+MPI_Graph_neighbors:
+MPI_Graph_neighbors_count:
+MPI_Graphdims_get:
+MPI_Grequest_cancel_function:
+    extra_state, EXTRA_STATE
+    complete, LOGICAL
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Grequest_complete:
+    request, REQUEST, direction='lis:inout,param:in'
+MPI_Grequest_free_function:
+    extra_state, EXTRA_STATE
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Grequest_query_function:
+    extra_state, EXTRA_STATE
+    status, STATUS, direction='out'
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Grequest_start:
+    extra_state, EXTRA_STATE
+    request, REQUEST, direction='out'
+MPI_Group_compare:
+    group1, GROUP
+    group2, GROUP
+    result, ENUM, direction='out'
+MPI_Group_difference:
+    group1, GROUP
+    group2, GROUP
+    newgroup, GROUP, direction='out'
+MPI_Group_excl:
+    group, GROUP
+MPI_Group_free:
+    group, GROUP, direction='inout'
+MPI_Group_incl:
+    group, GROUP
+MPI_Group_intersection:
+    group1, GROUP
+    group2, GROUP
+    newgroup, GROUP, direction='out'
+MPI_Group_range_excl:
+    group, GROUP
+MPI_Group_range_incl:
+    group, GROUP
+MPI_Group_rank:
+    group, GROUP
+MPI_Group_size:
+    group, GROUP
+MPI_Group_translate_ranks:
+    group1, GROUP
+    group2, GROUP
+MPI_Group_union:
+    group1, GROUP
+    group2, GROUP
+    newgroup, GROUP, direction='out'
+MPI_Iallgather:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Iallgatherv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*", mpi_owned=True
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Iallreduce:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ialltoall:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ialltoallv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*", mpi_owned=True
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*", mpi_owned=True
+    rdispls, POLYDISPLACEMENT, constant=True, length="*", mpi_owned=True
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ialltoallw:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*"
+    sdispls, POLYDISPLACEMENT, constant=True, length="*", mpi_owned=True
+    sendtypes, DATATYPE, constant=True, mpi_owned=True, length="*"
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*", mpi_owned=True
+    rdispls, POLYDISPLACEMENT, constant=True, length="*", mpi_owned=True
+    recvtypes, DATATYPE, constant=True, length="*", mpi_owned=True
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ibarrier:
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ibcast:
+    buffer, BUFFER, direction="inout", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ibsend:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Iexscan:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Igather:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", mpi_owned=True, root_only=True
+    recvcount, POLYXFER_NUM_ELEM, root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Igatherv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True, root_only=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*", root_only=True
+    displs, POLYDISPLACEMENT, constant=True, length="*", root_only=True
+    recvtype, DATATYPE, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Improbe:
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    flag, LOGICAL, direction='out'
+    message, MESSAGE, direction='out'
+    status, STATUS, direction='out'
+MPI_Imrecv:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    message, MESSAGE, direction='inout'
+    request, REQUEST, direction='out'
+MPI_Ineighbor_allgather:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress='f08_intent', mpi_owned=True
+    recvcount, DEFERRED_INT
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ineighbor_allgatherv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, mpi_owned=True, length="*"
+    displs, DEFERRED_INT, constant=True, length="*", mpi_owned=True
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ineighbor_alltoall:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, DEFERRED_INT
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ineighbor_alltoallv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, DEFERRED_INT, constant=True, mpi_owned=True, length="*"
+    sdispls, DEFERRED_INT, constant=True, length="*", mpi_owned=True
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, length="*", mpi_owned=True
+    rdispls, DEFERRED_INT, constant=True, length="*", mpi_owned=True
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ineighbor_alltoallw:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, DEFERRED_INT, constant=True, mpi_owned=True, length="*"
+    sdispls, DEFERRED_MPI_AINT, constant=True, mpi_owned=True, length="*"
+    sendtypes, DATATYPE, constant=True, mpi_owned=True, length="*"
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, length="*", mpi_owned=True
+    rdispls, DEFERRED_MPI_AINT, constant=True, length="*", mpi_owned=True
+    recvtypes, DATATYPE, constant=True, length="*", mpi_owned=True
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Info_create:
+MPI_Info_delete:
+    key, STRING, constant=True
+MPI_Info_dup:
+    info, INFO
+    newinfo, INFO, direction='out'
+MPI_Info_free:
+MPI_Info_get:
+    info, INFO
+    key, STRING, constant=True
+    valuelen, INFO_VALUE_LENGTH
+    value, STRING, direction='out', length='valuelen'
+MPI_Info_get_nkeys:
+    info, INFO
+MPI_Info_get_nthkey:
+    info, INFO
+    n, KEY_INDEX
+    key, STRING, direction='out'
+MPI_Info_get_valuelen:
+    info, INFO
+    key, STRING, constant=True
+MPI_Info_set:
+    key, STRING, constant=True
+    value, STRING, constant=True
+MPI_Init:
+MPI_Init_thread:
+    required, THREAD_LEVEL
+MPI_Initialized:
+MPI_Intercomm_create:
+    local_comm, COMMUNICATOR
+    tag, TAG
+MPI_Intercomm_merge:
+    intercomm, COMMUNICATOR
+    high, LOGICAL
+MPI_Iprobe:
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    flag, LOGICAL, direction='out'
+    status, STATUS, direction='out'
+MPI_Irecv:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Ireduce:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ireduce_scatter:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*"
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Ireduce_scatter_block:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Irsend:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Is_thread_main:
+MPI_Iscan:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Iscatter:
+    sendbuf, BUFFER, constant=True, mpi_owned=True, root_only=True
+    sendcount, POLYXFER_NUM_ELEM, root_only=True
+    sendtype, DATATYPE, root_only=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Iscatterv:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, mpi_owned=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    request, REQUEST, direction="out"
+MPI_Isend:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Issend:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Keyval_create:
+    keyval, KEYVAL, direction='out'
+    extra_state, EXTRA_STATE2
+MPI_Keyval_free:
+MPI_Lookup_name:
+    info, INFO
+MPI_Mprobe:
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    message, MESSAGE, direction='out'
+    status, STATUS, direction='out'
+MPI_Mrecv:
+    buf, BUFFER, direction='out'
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    message, MESSAGE, direction='inout'
+    status, STATUS, direction='out'
+MPI_NULL_COPY_FN:
+    oldcomm, COMMUNICATOR
+    keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL_10
+    attribute_val_out, ATTRIBUTE_VAL_10
+    flag, LOGICAL
+MPI_NULL_DELETE_FN:
+    comm, COMMUNICATOR
+    keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL_10
+    extra_state, EXTRA_STATE
+MPI_Neighbor_allgather:
+MPI_Neighbor_allgather_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, DEFERRED_INT
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Neighbor_allgatherv:
+MPI_Neighbor_allgatherv_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    displs, DEFERRED_INT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Neighbor_alltoall:
+MPI_Neighbor_alltoall_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcount, DEFERRED_INT
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, DEFERRED_INT
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Neighbor_alltoallv:
+MPI_Neighbor_alltoallv_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcounts, DEFERRED_INT, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    sdispls, DEFERRED_INT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, length="*"
+    rdispls, DEFERRED_INT, constant=True, length="*"
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Neighbor_alltoallw:
+    sendbuf, BUFFER, constant=True
+    sendcounts, DEFERRED_INT, constant=True, length="*"
+    sdispls, DEFERRED_MPI_AINT, constant=True, length="*"
+    sendtypes, DATATYPE, constant=True, length="*"
+    recvbuf, BUFFER, direction="out"
+    recvcounts, DEFERRED_INT, constant=True, length="*"
+    rdispls, DEFERRED_MPI_AINT, constant=True, length="*"
+    recvtypes, DATATYPE, constant=True, length="*"
+    comm, COMMUNICATOR
+MPI_Neighbor_alltoallw_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    sendcounts, DEFERRED_INT, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    sdispls, DEFERRED_MPI_AINT, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    sendtypes, DATATYPE, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, DEFERRED_INT, constant=True, length="*"
+    rdispls, DEFERRED_MPI_AINT, constant=True, length="*"
+    recvtypes, DATATYPE, constant=True, length="*"
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Op_commutative:
+    op, OPERATION
+    commute, LOGICAL, direction="out", pointer=True
+MPI_Op_create:
+    user_fn, FUNCTION, func_type="MPI_User_function", pointer=True
+    commute, LOGICAL
+    op, OPERATION, direction="out", pointer=True
+MPI_Op_free:
+    op, OPERATION, direction="inout", pointer=True
+MPI_Open_port:
+MPI_Pack:
+    inbuf, BUFFER, constant=True
+    datatype, DATATYPE
+    outsize, POLYNUM_BYTES
+    comm, COMMUNICATOR
+MPI_Pack_external:
+    datarep, STRING, constant=True, length='*'
+    inbuf, BUFFER, constant=True
+    datatype, DATATYPE
+MPI_Pack_external_size:
+    datarep, STRING, constant=True, length='*'
+    datatype, DATATYPE
+MPI_Pack_size:
+    datatype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Pcontrol:
+    level, PROFILE_LEVEL, constant=True
+    varargs, VARARGS
+MPI_Probe:
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    status, STATUS, direction='out'
+MPI_Publish_name:
+    info, INFO
+MPI_Put:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    win, WINDOW
+MPI_Query_thread:
+MPI_Raccumulate:
+    origin_addr, BUFFER, mpi_owned=True, constant=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    op, OPERATION
+    win, WINDOW
+    request, REQUEST, direction='out'
+MPI_Recv:
+    buf, BUFFER, direction='out'
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    status, STATUS, direction='out'
+MPI_Recv_init:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    source, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Reduce:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Reduce_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Reduce_local:
+    inbuf, BUFFER, constant=True
+    inoutbuf, BUFFER, direction="inout"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+MPI_Reduce_scatter:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+MPI_Reduce_scatter_block:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    recvcount, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+MPI_Reduce_scatter_block_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Reduce_scatter_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Register_datarep:
+    datarep, STRING, constant=True
+    read_conversion_fn, FUNCTION, func_type="MPI_Datarep_conversion_function", pointer=True
+    write_conversion_fn, FUNCTION, func_type="MPI_Datarep_conversion_function", pointer=True
+    dtype_file_extent_fn, FUNCTION, func_type="MPI_Datarep_extent_function", pointer=True
+    extra_state, EXTRA_STATE, pointer=True
+MPI_Request_free:
+    request, REQUEST, direction='inout'
+MPI_Request_get_status:
+    request, REQUEST
+MPI_Rget:
+    origin_addr, BUFFER, direction='out', mpi_owned=True, constant=False
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    win, WINDOW
+    request, REQUEST, direction='out'
+MPI_Rget_accumulate:
+    origin_addr, BUFFER, mpi_owned=True, constant=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    result_addr, BUFFER, direction='out', mpi_owned=True
+    result_count, DEFERRED_INT
+    result_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    op, OPERATION
+    win, WINDOW
+    request, REQUEST, direction='out'
+MPI_Rput:
+    origin_addr, BUFFER, constant=True, mpi_owned=True
+    origin_count, DEFERRED_INT
+    origin_datatype, DATATYPE
+    target_rank, RANK
+    target_disp, DEFERRED_MPI_AINT
+    target_count, DEFERRED_INT
+    target_datatype, DATATYPE
+    win, WINDOW
+    request, REQUEST, direction='out'
+MPI_Rsend:
+    buf, BUFFER, constant=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+MPI_Rsend_init:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Scan:
+    sendbuf, BUFFER, constant=True
+    recvbuf, BUFFER, direction="out"
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+MPI_Scan_init:
+    sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    op, OPERATION
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Scatter:
+    sendbuf, BUFFER, constant=True, root_only=True
+    sendcount, POLYXFER_NUM_ELEM, root_only=True
+    sendtype, DATATYPE, root_only=True
+    recvbuf, BUFFER, direction="out"
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Scatter_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True, root_only=True
+    sendcount, POLYXFER_NUM_ELEM, root_only=True
+    sendtype, DATATYPE, root_only=True
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Scatterv:
+    sendbuf, BUFFER, constant=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out"
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+MPI_Scatterv_init:
+    sendbuf, BUFFER, constant=True, mpi_owned=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
+    displs, POLYDISPLACEMENT, constant=True, length="*"
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    root, RANK
+    comm, COMMUNICATOR
+    info, INFO
+    request, REQUEST, direction="out"
+MPI_Send:
+    buf, BUFFER, constant=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+MPI_Send_init:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Sendrecv:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    dest, RANK
+    sendtag, TAG
+    recvbuf, BUFFER, direction='out'
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    source, RANK
+    recvtag, TAG
+    comm, COMMUNICATOR
+    status, STATUS, direction='out'
+MPI_Sendrecv_replace:
+    buf, BUFFER, direction='inout'
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    sendtag, TAG
+    source, RANK
+    recvtag, TAG
+    comm, COMMUNICATOR
+    status, STATUS, direction='out'
+MPI_Sizeof:
+MPI_Ssend:
+    buf, BUFFER, constant=True
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+MPI_Ssend_init:
+    count, POLYXFER_NUM_ELEM
+    datatype, DATATYPE
+    dest, RANK
+    tag, TAG
+    comm, COMMUNICATOR
+    request, REQUEST, direction='out'
+MPI_Start:
+    request, REQUEST, direction='inout'
+MPI_Startall:
+    count, ARRAY_LENGTH
+MPI_Status_f082f:
+MPI_Status_f2f08:
+MPI_Status_set_cancelled:
+    flag, LOGICAL, 'if true, indicates request was cancelled', direction='out'
+MPI_Status_set_elements:
+    status, STATUS, direction='inout'
+    datatype, DATATYPE
+    count, POLYXFER_NUM_ELEM
+MPI_Status_set_elements_x:
+    status, STATUS, direction='inout'
+    datatype, DATATYPE
+    count, XFER_NUM_ELEM
+MPI_TYPE_DUP_FN:
+    oldtype, DATATYPE
+    type_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_TYPE_NULL_COPY_FN:
+    oldtype, DATATYPE
+    type_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_TYPE_NULL_DELETE_FN:
+    datatype, DATATYPE
+    type_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+    extra_state, EXTRA_STATE
+MPI_T_category_changed:
+    stamp, TIMESTAMP, direction="out"
+MPI_T_category_get_categories:
+    cat_index, CAT_INDEX
+    len, DEFERRED_INT
+    indices, DEFERRED_INT, direction="out", length="*"
+MPI_T_category_get_cvars:
+    cat_index, CAT_INDEX
+    len, DEFERRED_INT
+    indices, DEFERRED_INT, direction="out", length="*"
+MPI_T_category_get_index:
+    name, STRING, constant=True
+    cat_index, CAT_INDEX, direction="out"
+MPI_T_category_get_info:
+    cat_index, DEFERRED_INT
+    name, STRING, direction="out"
+    name_len, STRING_LENGTH, direction="inout"
+    desc, STRING, direction="out"
+    desc_len, STRING_LENGTH, direction="inout"
+    num_cvars, DEFERRED_INT, direction="out"
+    num_pvars, DEFERRED_INT, direction="out"
+    num_categories, DEFERRED_INT, direction="out"
+MPI_T_category_get_num:
+    num_cat, DEFERRED_INT, direction="out"
+MPI_T_category_get_pvars:
+    cat_index, CAT_INDEX
+    len, DEFERRED_INT
+    indices, DEFERRED_INT, direction="out", length="*"
+MPI_T_cvar_get_index:
+    name, STRING, constant=True
+    cvar_index, CVAR_INDEX, direction="out"
+MPI_T_cvar_get_info:
+    cvar_index, CVAR_INDEX
+    name, STRING, direction="out"
+    name_len, STRING_LENGTH, direction="inout"
+    verbosity, TOOL_VAR_VERBOSITY, direction="out"
+    datatype, DATATYPE, direction="out"
+    enumtype, TOOLS_ENUM, direction="out"
+    desc, STRING, direction="out"
+    desc_len, STRING_LENGTH, direction="inout"
+    bind, DEFERRED_INT, direction="out"
+    scope, DEFERRED_INT, direction="out"
+MPI_T_cvar_get_num:
+    num_cvar, DEFERRED_INT, direction="out"
+MPI_T_cvar_handle_alloc:
+    cvar_index, CVAR_INDEX
+    obj_handle, TOOL_MPI_OBJ, pointer=True
+    handle, CVAR, direction="out"
+    count, DEFERRED_INT, direction="out"
+MPI_T_cvar_handle_free:
+    handle, CVAR, direction="inout"
+MPI_T_cvar_read:
+    handle, CVAR
+    buf, BUFFER, direction="out"
+MPI_T_cvar_write:
+    handle, CVAR
+    buf, BUFFER, constant=True
+MPI_T_enum_get_info:
+    enumtype, TOOLS_ENUM
+    num, DEFERRED_INT, direction="out"
+    name, STRING, direction="out"
+    name_len, STRING_LENGTH, direction="inout"
+MPI_T_enum_get_item:
+    enumtype, TOOLS_ENUM
+    index, TOOLENUM_INDEX
+    value, TOOL_VAR_VALUE, direction="out"
+    name, STRING, direction="out"
+    name_len, STRING_LENGTH, direction="inout"
+MPI_T_finalize:
+MPI_T_init_thread:
+    required, THREAD_LEVEL
+    provided, THREAD_LEVEL, direction="out"
+MPI_T_pvar_get_index:
+    name, STRING, constant=True
+    var_class, PVAR_CLASS
+    pvar_index, PVAR_INDEX, direction="out"
+MPI_T_pvar_get_info:
+    pvar_index, PVAR_INDEX
+    name, STRING, direction="out"
+    name_len, STRING_LENGTH, direction="inout"
+    verbosity, TOOL_VAR_VERBOSITY, direction="out"
+    var_class, PVAR_CLASS, direction="out"
+    datatype, DATATYPE, direction="out"
+    enumtype, TOOLS_ENUM, direction="out"
+    desc, STRING, direction="out"
+    desc_len, STRING_LENGTH, direction="inout"
+    bind, DEFERRED_INT, direction="out"
+    readonly, DEFERRED_INT, direction="out"
+    continuous, DEFERRED_INT, direction="out"
+    atomic, DEFERRED_INT, direction="out"
+MPI_T_pvar_get_num:
+    num_pvar, DEFERRED_INT, direction="out"
+MPI_T_pvar_handle_alloc:
+    session, PVAR_SESSION
+    pvar_index, PVAR_INDEX
+    obj_handle, TOOL_MPI_OBJ, pointer=True
+    handle, PVAR, direction="out"
+    count, DEFERRED_INT, direction="out"
+MPI_T_pvar_handle_free:
+    session, PVAR_SESSION
+    handle, PVAR, direction="inout"
+MPI_T_pvar_read:
+    session, PVAR_SESSION
+    handle, PVAR
+    buf, BUFFER, direction="out"
+MPI_T_pvar_readreset:
+    session, PVAR_SESSION
+    handle, PVAR
+    buf, BUFFER, direction="out"
+MPI_T_pvar_reset:
+    session, PVAR_SESSION
+    handle, PVAR
+MPI_T_pvar_session_create:
+    session, PVAR_SESSION, direction="out"
+MPI_T_pvar_session_free:
+    session, PVAR_SESSION, direction="inout"
+MPI_T_pvar_start:
+    session, PVAR_SESSION
+    handle, PVAR
+MPI_T_pvar_stop:
+    session, PVAR_SESSION
+    handle, PVAR
+MPI_T_pvar_write:
+    session, PVAR_SESSION
+    handle, PVAR
+    buf, BUFFER, constant=True
+MPI_Test:
+    request, REQUEST, direction='inout'
+    flag, LOGICAL, direction='out'
+    status, STATUS, direction='out'
+MPI_Test_cancelled:
+    status, STATUS, constant=True, pointer=True
+    flag, LOGICAL, direction='out'
+MPI_Testall:
+    count, ARRAY_LENGTH, 'lists length'
+    flag, LOGICAL, direction='out'
+MPI_Testany:
+    count, ARRAY_LENGTH, 'list length'
+    array_of_requests, REQUEST, direction='inout', length='count'
+    flag, LOGICAL, direction='out'
+    status, STATUS, direction='out'
+MPI_Testsome:
+    incount, ARRAY_LENGTH
+MPI_Topo_test:
+    comm, COMMUNICATOR
+MPI_Type_commit:
+MPI_Type_contiguous:
+    count, ARRAY_LENGTH
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_darray:
+    size, COMM_SIZE
+    rank, RANK
+    order, ORDER
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_f90_complex:
+    p, MATH
+    r, MATH
+MPI_Type_create_f90_integer:
+MPI_Type_create_f90_real:
+    p, MATH
+    r, MATH
+MPI_Type_create_hindexed:
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_hindexed_block:
+    count, ARRAY_LENGTH
+    blocklength, BLOCKLENGTH
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_hvector:
+    count, ARRAY_LENGTH
+    blocklength, BLOCKLENGTH
+    stride, STRIDE_BYTES
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_indexed_block:
+    count, ARRAY_LENGTH
+    blocklength, BLOCKLENGTH
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_keyval:
+    extra_state, EXTRA_STATE
+MPI_Type_create_resized:
+    oldtype, DATATYPE
+    lb, DISPLACEMENT
+    extent, DISPLACEMENT
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_struct:
+    count, ARRAY_LENGTH
+    newtype, DATATYPE, direction='out'
+MPI_Type_create_subarray:
+    ndims, ARRAY_LENGTH
+    order, ORDER
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_delete_attr:
+    type_keyval, KEYVAL
+MPI_Type_dup:
+    oldtype, DATATYPE
+MPI_Type_free:
+MPI_Type_free_keyval:
+    type_keyval, KEYVAL, direction='inout'
+MPI_Type_get_attr:
+    type_keyval, KEYVAL
+MPI_Type_get_contents:
+    datatype, DATATYPE
+MPI_Type_get_elements:
+    datatype, DATATYPE
+MPI_Type_get_elements_x:
+    datatype, DATATYPE
+MPI_Type_get_envelope:
+    datatype, DATATYPE
+MPI_Type_get_extent:
+    datatype, DATATYPE
+MPI_Type_get_extent_x:
+    datatype, DATATYPE
+MPI_Type_get_name:
+MPI_Type_get_true_extent:
+    datatype, DATATYPE
+MPI_Type_get_true_extent_x:
+    datatype, DATATYPE
+MPI_Type_indexed:
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Type_match_size:
+    typeclass, ENUM
+    size, DEFERRED_INT
+MPI_Type_set_attr:
+    type_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+MPI_Type_set_name:
+MPI_Type_size:
+    datatype, DATATYPE
+    size, POLYXFER_NUM_ELEM, direction='out'
+MPI_Type_size_x:
+    datatype, DATATYPE
+    size, XFER_NUM_ELEM, direction='out'
+MPI_Type_vector:
+    count, ARRAY_LENGTH
+    blocklength, BLOCKLENGTH
+    stride, STRIDE_ELEM
+    oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
+MPI_Unpack:
+    inbuf, BUFFER, constant=True
+    datatype, DATATYPE
+    comm, COMMUNICATOR
+MPI_Unpack_external:
+    datarep, STRING, constant=True, length='*', pointer=False
+    inbuf, BUFFER, constant=True
+    datatype, DATATYPE
+MPI_Unpublish_name:
+    info, INFO
+MPI_User_function', 'USER_FUNCTION:
+    invec, C_BUFFER4, suppress='f08_intent', length='len', pointer=True
+    inoutvec, C_BUFFER4, suppress='f08_intent', length='len', pointer=True
+    len, DEFERRED_INT, pointer=True, suppress='f08_intent'
+    datatype, DATATYPE, pointer=True, suppress='f08_intent'
+MPI_WIN_DUP_FN:
+    oldwin, WINDOW
+    win_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_WIN_NULL_COPY_FN:
+    oldwin, WINDOW
+    win_keyval, KEYVAL
+    extra_state, EXTRA_STATE
+    attribute_val_in, ATTRIBUTE_VAL
+    attribute_val_out, ATTRIBUTE_VAL
+    flag, LOGICAL, direction='out'
+MPI_WIN_NULL_DELETE_FN:
+    win, WINDOW
+    win_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+    extra_state, EXTRA_STATE
+MPI_Wait:
+    request, REQUEST, direction='inout'
+    status, STATUS, direction='out'
+MPI_Waitall:
+    count, ARRAY_LENGTH
+MPI_Waitany:
+    count, ARRAY_LENGTH, 'list length'
+    array_of_requests, REQUEST,direction='inout', length='count'
+    index, INDEX, direction='out'
+    status, STATUS, direction='out'
+MPI_Waitsome:
+    incount, ARRAY_LENGTH
+MPI_Win_allocate:
+    size, WINDOW_SIZE
+    disp_unit, DEFERRED_INT
+    info, INFO
+    comm, COMMUNICATOR
+    baseptr, C_BUFFER, direction='out'
+    win, WINDOW, direction='out'
+MPI_Win_allocate_shared:
+    size, WINDOW_SIZE
+    disp_unit, DEFERRED_INT
+    info, INFO
+    comm, COMMUNICATOR
+    baseptr, C_BUFFER, direction='out'
+    win, WINDOW, direction='out'
+MPI_Win_attach:
+    win, WINDOW
+    base, BUFFER, mpi_owned=True, suppress='f08_intent'
+    size, DEFERRED_MPI_AINT
+MPI_Win_call_errhandler:
+    win, WINDOW
+    errorcode, ERROR_CODE
+MPI_Win_complete:
+    win, WINDOW
+MPI_Win_copy_attr_function:
+    oldwin, WINDOW
+    win_keyval, DEFERRED_INT
+    extra_state, EXTRA_STATE
+    attribute_val_in, DEFERRED_VOID
+    attribute_val_out, DEFERRED_VOID, direction='out'
+    flag, LOGICAL, direction='out'
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Win_copy_attr_function:
+    win, WINDOW
+    win_keyval, DEFERRED_INT
+    attribute_val, DEFERRED_VOID
+    extra_state, EXTRA_STATE
+    ierror, ERROR_CODE, suppress='f08_intent c_parameter'
+MPI_Win_create:
+    base, BUFFER, mpi_owned=True, suppress='f08_intent'
+    size, WINDOW_SIZE
+    disp_unit, DEFERRED_INT
+    info, INFO
+    comm, COMMUNICATOR
+    win, WINDOW, direction='out'
+MPI_Win_create_dynamic:
+    info, INFO
+    comm, COMMUNICATOR
+    win, WINDOW, direction='out'
+MPI_Win_create_errhandler:
+    errhandler, ERRHANDLER, direction='out'
+MPI_Win_create_keyval:
+    extra_state, EXTRA_STATE
+MPI_Win_delete_attr:
+    win_keyval, KEYVAL
+MPI_Win_detach:
+    win, WINDOW
+    base, BUFFER, constant=True, mpi_owned=True, suppress='f08_intent'
+MPI_Win_errhandler_function:
+    win, WINDOW
+    error_code, ERROR_CODE
+    varargs, VARARGS
+MPI_Win_fence:
+    assert, ASSERT
+    win, WINDOW
+MPI_Win_flush:
+    rank, RANK
+    win, WINDOW
+MPI_Win_flush_all:
+    win, WINDOW
+MPI_Win_flush_local:
+    rank, RANK
+    win, WINDOW
+MPI_Win_flush_local_all:
+    win, WINDOW
+MPI_Win_free:
+    win, WINDOW, direction='inout'
+MPI_Win_free_keyval:
+    win_keyval, KEYVAL, direction='inout'
+MPI_Win_get_attr:
+    win_keyval, KEYVAL
+MPI_Win_get_errhandler:
+    win, WINDOW
+MPI_Win_get_group:
+    win, WINDOW
+    group, GROUP, direction='out'
+MPI_Win_get_info:
+    win, WINDOW
+    info_used, INFO, direction='out'
+MPI_Win_get_name:
+MPI_Win_lock:
+    lock_type, LOCK_TYPE
+    rank, RANK
+    assert, ASSERT
+    win, WINDOW
+MPI_Win_lock_all:
+    assert, ASSERT
+    win, WINDOW
+MPI_Win_post:
+    group, GROUP
+    assert, ASSERT
+    win, WINDOW
+MPI_Win_set_attr:
+    win_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL
+MPI_Win_set_errhandler:
+    win, WINDOW, direction='lis:inout,param:in'
+    errhandler, ERRHANDLER
+MPI_Win_set_info:
+    win, WINDOW, direction='lis:inout,param:in'
+    info, INFO
+MPI_Win_set_name:
+MPI_Win_shared_query:
+    win, WINDOW
+    rank, RANK
+    size, WINDOW_SIZE, direction='out'
+    disp_unit, DEFERRED_INT, direction='out'
+    baseptr, C_BUFFER, direction='out'
+MPI_Win_start:
+    group, GROUP
+    assert, ASSERT
+    win, WINDOW
+MPI_Win_sync:
+    win, WINDOW
+MPI_Win_test:
+    win, WINDOW
+    flag, LOGICAL, direction='out'
+MPI_Win_unlock:
+    rank, RANK
+    win, WINDOW
+MPI_Win_unlock_all:
+    win, WINDOW
+MPI_Win_wait:
+    win, WINDOW
+MPI_Wtick:
+MPI_Wtime:

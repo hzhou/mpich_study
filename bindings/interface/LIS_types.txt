@@ -1,0 +1,94 @@
+ACCESS_MODE: integer
+ALLOC_MEM_NUM_BYTES: non-negative integer
+ARRAY_LENGTH: integer
+ASSERT: integer
+ATTRIBUTE_VAL: None
+ATTRIBUTE_VAL_10: None
+BLOCKLENGTH: non-negative integer
+BUFFER: choice
+CAT_INDEX: integer
+COLOR: integer
+COMBINER: state
+COMMUNICATOR: handle
+COMM_SIZE: non-negative integer
+COORDINATE: integer
+CVAR: handle
+CVAR_INDEX: integer
+C_BUFFER: None
+C_BUFFER2: choice
+C_BUFFER3: None
+C_BUFFER4: None
+DATATYPE: handle
+DEFERRED_INT: integer
+DEFERRED_MPI_AINT: address integer
+DEFERRED_VOID: void
+DEGREE: non-negative integer
+DIMENSION: positive integer
+DISPLACEMENT: integer
+DISPLACEMENT_SMALL: integer
+ENUM: integer
+ERRHANDLER: handle
+ERROR_CLASS: integer
+ERROR_CODE: integer
+EXTRA_STATE: None
+EXTRA_STATE2: None
+F08_STATUS: None
+F90_STATUS: None
+FILE: handle
+FILE_DESCRIPTOR: integer
+FUNCTION: function
+GROUP: handle
+INDEX: integer
+INFO: handle
+INFO_VALUE_LENGTH: integer
+KEY: integer
+KEYVAL: integer
+KEY_INDEX: integer
+LOCK_TYPE: state
+LOGICAL: logical
+MATH: integer
+MESSAGE: handle
+NOTHING: None
+NUM_BYTES: integer
+NUM_BYTES_SMALL: integer
+NUM_DIMS: positive integer
+OFFSET: integer
+OPERATION: handle
+ORDER: state
+PACK_EXTERNAL_SIZE: integer
+POLYDISPLACEMENT: integer
+POLYDTYPE_NUM_ELEM: non-negative integer
+POLYNUM_BYTES: non-negative integer
+POLYXFER_NUM_ELEM: non-negative integer
+PROFILE_LEVEL: integer
+PVAR: handle
+PVAR_CLASS: integer
+PVAR_INDEX: integer
+PVAR_SESSION: handle
+RANK: non-negative integer
+REQUEST: handle
+STATUS: Status
+STRIDE_BYTES: integer
+STRIDE_ELEM: integer
+STRING: string
+STRING_2DARRAY: array of array of strings
+STRING_ARRAY: array of strings
+STRING_LENGTH: integer
+TAG: integer
+THREAD_LEVEL: integer
+TICK_RESOLUTION: None
+TIMESTAMP: integer
+TOOLENUM_INDEX: integer
+TOOLS_ENUM: handle
+TOOL_MPI_OBJ: pointer
+TOOL_VAR_VALUE: integer
+TOOL_VAR_VERBOSITY: integer
+UPDATE_MODE: state
+VARARGS: \\ldots
+VERSION: integer
+WALL_TIME: None
+WEIGHT: non-negative integer
+WINDOW: handle
+WINDOW_SIZE: non-negative integer
+XFER_NUM_ELEM: integer
+XFER_NUM_ELEM_SMALL: integer
