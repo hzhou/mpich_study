@@ -4,6 +4,14 @@ subcode: custom_make
     $if $opts{V}==0
         $lt_opt = "--quiet"
 
+    # FIXME
+    $if $opts{argobots}
+        $I_list .= " -I$opts{argobots}/include"
+    # Try shorten the path, or pgi compiler will have trouble
+    my $_P = `pwd`
+    chomp $_P
+    $I_list=~s/$_P/./g
+
     $call parse_Makefile, mymake/Makefile.orig
     &call open_W, mymake/Makefile.custom
         $print "export MODDIR=$moddir"
@@ -442,6 +450,9 @@ fncode: get_object($key)
         $t=~s/\$\(am__v_[\w]+\)//g
         $t=~s/\$\((\w+)\)/get_object($1)/ge
         $t=~s/\s+/ /g
+
+        $global %make_vars
+        $make_vars{$key} = $t
         return $t
     $else
         return ""

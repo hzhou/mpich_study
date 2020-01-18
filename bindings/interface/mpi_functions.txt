@@ -12,10 +12,13 @@ MPI_Accumulate:
     op, OPERATION
     win, WINDOW
 MPI_Add_error_class:
+    errorclass, ERROR_CLASS, direction='out'
 MPI_Add_error_code:
     errorclass, ERROR_CLASS
+    errorcode, ERROR_CODE, direction='out'
 MPI_Add_error_string:
     errorcode, ERROR_CODE
+    string, STRING, constant=True
 MPI_Aint_add:
     base, DISPLACEMENT
     disp, DISPLACEMENT
@@ -63,6 +66,7 @@ MPI_Allgatherv_init:
 MPI_Alloc_mem:
     size, ALLOC_MEM_NUM_BYTES
     info, INFO
+    baseptr, C_BUFFER, direction='out'
 MPI_Allreduce:
     sendbuf, BUFFER, constant=True
     recvbuf, BUFFER, direction="out"
@@ -142,11 +146,16 @@ MPI_Alltoallw_init:
     info, INFO
     request, REQUEST, direction="out"
 MPI_Attr_delete:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
     keyval, KEYVAL, 'The key value of the deleted attribute'
 MPI_Attr_get:
     comm, COMMUNICATOR
     keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL_10, direction='out'
+    flag, LOGICAL, direction='out'
 MPI_Attr_put:
+    comm, COMMUNICATOR, direction='lis:inout,param:in', pointer=False
+    keyval, KEYVAL
     attribute_val, ATTRIBUTE_VAL_10
 MPI_Barrier:
     comm, COMMUNICATOR
@@ -176,6 +185,7 @@ MPI_Bsend:
     tag, TAG
     comm, COMMUNICATOR
 MPI_Bsend_init:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -183,6 +193,7 @@ MPI_Bsend_init:
     comm, COMMUNICATOR
     request, REQUEST, direction='out'
 MPI_Buffer_attach:
+    buffer, BUFFER, mpi_owned=True, suppress='f08_intent'
     size, POLYNUM_BYTES
 MPI_Buffer_detach:
     buffer_addr, C_BUFFER2, pointer=True, direction='out'
@@ -217,20 +228,54 @@ MPI_CONVERSION_FN_NULL:
 MPI_Cancel:
     request, REQUEST, direction='in', pointer=True
 MPI_Cart_coords:
+    comm, COMMUNICATOR
+    rank, RANK
+    maxdims, ARRAY_LENGTH
+    coords, COORDINATE, length='maxdims', direction='out'
 MPI_Cart_create:
     comm_old, COMMUNICATOR
+    ndims, ARRAY_LENGTH
+    dims, DIMENSION, length='ndims', constant=True
+    periods, LOGICAL, length='ndims', constant=True
+    reorder, LOGICAL
+    comm_cart, COMMUNICATOR, direction='out'
 MPI_Cart_get:
+    comm, COMMUNICATOR
+    maxdims, ARRAY_LENGTH
+    dims, DIMENSION, direction='out', length='maxdims'
+    periods, LOGICAL, direction='out', length='maxdims'
+    coords, COORDINATE, direction='out', length='maxdims'
 MPI_Cart_map:
     comm, COMMUNICATOR
+    ndims, ARRAY_LENGTH
+    dims, DIMENSION, length='ndims', constant=True
+    periods, LOGICAL, length='ndims', constant=True
+    newrank, RANK, direction='out'
 MPI_Cart_rank:
+    comm, COMMUNICATOR
+    coords, COORDINATE, length='*', constant=True
+    rank, RANK, direction='out'
 MPI_Cart_shift:
+    comm, COMMUNICATOR
+    direction, INDEX
+    disp, DIMENSION
+    rank_source, RANK, direction='out'
+    rank_dest, RANK, direction='out'
 MPI_Cart_sub:
+    comm, COMMUNICATOR
+    remain_dims, LOGICAL, constant=True, length='*'
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Cartdim_get:
+    comm, COMMUNICATOR
+    ndims, ARRAY_LENGTH, direction='out'
 MPI_Close_port:
     port_name, STRING, constant=True
 MPI_Comm_accept:
+    port_name, STRING, constant=True, root_only=True
+    info, INFO, root_only=True
     root, RANK
     comm, COMMUNICATOR
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_call_errhandler:
     comm, COMMUNICATOR
     errorcode, ERROR_CODE
@@ -239,20 +284,30 @@ MPI_Comm_compare:
     comm2, COMMUNICATOR
     result, ENUM, direction='out'
 MPI_Comm_connect:
+    port_name, STRING, constant=True, root_only=True
+    info, INFO, root_only=True
     root, RANK
     comm, COMMUNICATOR
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_create:
     comm, COMMUNICATOR
     group, GROUP
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_create_errhandler:
+    comm_errhandler_fn, FUNCTION, func_type='MPI_Comm_errhandler_function'
     errhandler, ERRHANDLER, direction='out'
 MPI_Comm_create_group:
     comm, COMMUNICATOR
     group, GROUP
     tag, TAG
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_create_keyval:
+    comm_copy_attr_fn, FUNCTION, func_type='MPI_Comm_copy_attr_function'
+    comm_delete_attr_fn, FUNCTION, func_type='MPI_Comm_delete_attr_function'
+    comm_keyval, KEYVAL, direction='out'
     extra_state, EXTRA_STATE
 MPI_Comm_delete_attr:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
     comm_keyval, KEYVAL
 MPI_Comm_delete_attr_function:
     oldcomm, COMMUNICATOR
@@ -272,62 +327,106 @@ MPI_Comm_disconnect:
     comm, COMMUNICATOR, direction='inout'
 MPI_Comm_dup:
     comm, COMMUNICATOR
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_dup_with_info:
     comm, COMMUNICATOR
     info, INFO
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_errhandler_function:
     comm, COMMUNICATOR
     error_code, ERROR_CODE
     varargs, VARARGS
 MPI_Comm_free:
+    comm, COMMUNICATOR, direction='inout'
 MPI_Comm_free_keyval:
     comm_keyval, KEYVAL, direction='inout'
 MPI_Comm_get_attr:
+    comm, COMMUNICATOR
     comm_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL, direction='out'
+    flag, LOGICAL, direction='out'
 MPI_Comm_get_errhandler:
     comm, COMMUNICATOR
+    errhandler, ERRHANDLER, direction='out'
 MPI_Comm_get_info:
     comm, COMMUNICATOR
     info_used, INFO, direction='out'
 MPI_Comm_get_name:
+    comm, COMMUNICATOR
+    comm_name, STRING, direction='out', length='MPI_MAX_OBJECT_NAME'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Comm_get_parent:
+    parent, COMMUNICATOR, direction='out'
 MPI_Comm_group:
     comm, COMMUNICATOR
+    group, GROUP, direction='out'
 MPI_Comm_idup:
     comm, COMMUNICATOR
+    newcomm, COMMUNICATOR, direction='out', mpi_owned=True
+    request, REQUEST, direction='out'
 MPI_Comm_idup_with_info:
     comm, COMMUNICATOR
     info, INFO
+    newcomm, COMMUNICATOR, direction='out', mpi_owned=True
+    request, REQUEST, direction='out'
 MPI_Comm_join:
     fd, FILE_DESCRIPTOR
+    intercomm, COMMUNICATOR, direction='out'
 MPI_Comm_rank:
     comm, COMMUNICATOR
+    rank, RANK, direction='out'
 MPI_Comm_remote_group:
     comm, COMMUNICATOR
+    group, GROUP, direction='out'
 MPI_Comm_remote_size:
     comm, COMMUNICATOR
+    size, COMM_SIZE, direction='out'
 MPI_Comm_set_attr:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
     comm_keyval, KEYVAL
     attribute_val, ATTRIBUTE_VAL
 MPI_Comm_set_errhandler:
     comm, COMMUNICATOR, direction='lis:inout,param:in'
     errhandler, ERRHANDLER
 MPI_Comm_set_info:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
     info, INFO
 MPI_Comm_set_name:
+    comm, COMMUNICATOR, direction='lis:inout,param:in'
+    comm_name, STRING, constant=True
 MPI_Comm_size:
     comm, COMMUNICATOR
+    size, COMM_SIZE, direction='out'
 MPI_Comm_spawn:
+    command, STRING, root_only=True, constant=True
+    argv, STRING_ARRAY, root_only=True
+    maxprocs, DEFERRED_INT, root_only=True
+    info, INFO, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    intercomm, COMMUNICATOR, direction='out'
+    array_of_errcodes, ERROR_CODE, direction='out', length='', suppress='f08_intent lis_paren'
 MPI_Comm_spawn_multiple:
+    count, DEFERRED_INT, root_only=True
+    array_of_commands, STRING_ARRAY, root_only=True
+    array_of_argv, STRING_2DARRAY, root_only=True, length='count'
+    array_of_maxprocs, COMM_SIZE, length='', constant=True, root_only=True
+    array_of_info, INFO, length='', constant=True, root_only=True
+    root, RANK
+    comm, COMMUNICATOR
+    intercomm, COMMUNICATOR, direction='out'
+    array_of_errcodes, ERROR_CODE, direction='out', length='', suppress='f08_intent'
 MPI_Comm_split:
     comm, COMMUNICATOR
     color, COLOR
     key, KEY
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_split_type:
     comm, COMMUNICATOR
     split_type, ENUM
     key, KEY
     info, INFO
+    newcomm, COMMUNICATOR, direction='out'
 MPI_Comm_test_inter:
     comm, COMMUNICATOR
     flag, LOGICAL, direction='out'
@@ -375,18 +474,50 @@ MPI_Delete_function:
     ierr, ERROR_CODE
 MPI_Dims_create:
     nnodes, DEFERRED_INT
+    ndims, ARRAY_LENGTH
+    dims, DIMENSION, length='ndims', direction='inout'
 MPI_Dist_graph_create:
     comm_old, COMMUNICATOR
+    n, ARRAY_LENGTH
+    degrees, DEGREE, length='n', constant=True
+    destinations, RANK, length='*', constant=True
+    weights, WEIGHT, length='*', constant=True
+    info, INFO
+    reorder, LOGICAL
+    comm_dist_graph, COMMUNICATOR, direction='OUT'
 MPI_Dist_graph_create_adjacent:
     comm_old, COMMUNICATOR
+    indegree, DEGREE
+    sources, RANK, length='indegree', constant=True
+    sourceweights, WEIGHT, length='*', constant=True
+    outdegree, DEGREE
+    destinations, RANK, length='outdegree', constant=True
+    destweights, WEIGHT, length='*', constant=True
+    info, INFO
+    reorder, LOGICAL
+    comm_dist_graph, COMMUNICATOR, direction='OUT'
 MPI_Dist_graph_neighbors:
+    comm, COMMUNICATOR
+    maxindegree, ARRAY_LENGTH
+    sources, RANK, direction='out', length='maxindegree'
+    sourceweights, WEIGHT, direction='out', length='*', suppress='f08_intent'
+    maxoutdegree, ARRAY_LENGTH
+    destinations, RANK, direction='out', length='maxoutdegree'
+    destweights, WEIGHT, direction='out', length='*', suppress='f08_intent'
 MPI_Dist_graph_neighbors_count:
+    comm, COMMUNICATOR
+    indegree, DEGREE, direction='out'
+    outdegree, DEGREE, direction='out'
+    weighted, LOGICAL, direction='out'
 MPI_Errhandler_free:
     errhandler, ERRHANDLER, direction='inout'
 MPI_Error_class:
     errorcode, ERROR_CODE
+    errorclass, ERROR_CLASS, direction='out'
 MPI_Error_string:
     errorcode, ERROR_CODE
+    string, STRING, direction='out', length='MPI_MAX_ERROR_STRING'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Exscan:
     sendbuf, BUFFER, constant=True
     recvbuf, BUFFER, direction="out"
@@ -404,6 +535,7 @@ MPI_Exscan_init:
     info, INFO
     request, REQUEST, direction="out"
 MPI_F_sync_reg:
+    buf, BUFFER, direction='inout', mpi_owned=True
 MPI_Fetch_and_op:
     origin_addr, BUFFER, constant=True, mpi_owned=True
     result_addr, BUFFER, direction='out', mpi_owned=True
@@ -418,6 +550,7 @@ MPI_File_call_errhandler:
 MPI_File_close:
     fh, FILE, direction="inout"
 MPI_File_create_errhandler:
+    file_errhandler_fn, FUNCTION, func_type='MPI_File_errhandler_function'
     errhandler, ERRHANDLER, direction='out'
 MPI_File_delete:
     filename, STRING, constant=True
@@ -438,6 +571,7 @@ MPI_File_get_byte_offset:
     disp, OFFSET, direction="out"
 MPI_File_get_errhandler:
     file, FILE
+    errhandler, ERRHANDLER, direction='out'
 MPI_File_get_group:
     fh, FILE
     group, GROUP, direction="out"
@@ -699,7 +833,9 @@ MPI_File_write_shared:
     status, STATUS, direction="out"
 MPI_Finalize:
 MPI_Finalized:
+    flag, LOGICAL, direction='out'
 MPI_Free_mem:
+    base, BUFFER, mpi_owned=True
 MPI_Gather:
     sendbuf, BUFFER, constant=True
     sendcount, POLYXFER_NUM_ELEM
@@ -765,25 +901,53 @@ MPI_Get_accumulate:
     op, OPERATION
     win, WINDOW
 MPI_Get_address:
+    location, BUFFER, constant=True, mpi_owned=True, suppress='f08_intent'
+    address, DISPLACEMENT, direction='out'
 MPI_Get_count:
     status, STATUS, pointer=True, constant=True
     datatype, DATATYPE
     count, POLYXFER_NUM_ELEM, direction='out'
 MPI_Get_library_version:
+    version, STRING, length='MPI_MAX_LIBRARY_VERSION_STRING', direction='OUT'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Get_processor_name:
+    name, STRING, length='MPI_MAX_PROCESSOR_NAME', direction='OUT'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Get_version:
     version, VERSION, direction='out'
     subversion, VERSION, direction='out'
 MPI_Graph_create:
     comm_old, COMMUNICATOR
     nnodes, DEFERRED_INT
+    index, INDEX, length='nnodes', constant=True
+    edges, RANK, length='*', constant=True
+    reorder, LOGICAL
+    comm_graph, COMMUNICATOR, direction='out'
 MPI_Graph_get:
+    comm, COMMUNICATOR
+    maxindex, ARRAY_LENGTH
+    maxedges, ARRAY_LENGTH
+    index, INDEX, length='maxindex', direction='OUT'
+    edges, RANK, length='maxedges', direction='OUT'
 MPI_Graph_map:
     comm, COMMUNICATOR
     nnodes, ARRAY_LENGTH
+    index, INDEX, constant=True, length='nnodes'
+    edges, RANK, constant=True, length='*'
+    newrank, RANK, direction='out'
 MPI_Graph_neighbors:
+    comm, COMMUNICATOR
+    rank, RANK
+    maxneighbors, ARRAY_LENGTH
+    neighbors, RANK, direction='out', length='maxneighbors'
 MPI_Graph_neighbors_count:
+    comm, COMMUNICATOR
+    rank, RANK
+    nneighbors, ARRAY_LENGTH, direction='out'
 MPI_Graphdims_get:
+    comm, COMMUNICATOR
+    nnodes, ARRAY_LENGTH, direction='OUT'
+    nedges, ARRAY_LENGTH, direction='OUT'
 MPI_Grequest_cancel_function:
     extra_state, EXTRA_STATE
     complete, LOGICAL
@@ -798,6 +962,9 @@ MPI_Grequest_query_function:
     status, STATUS, direction='out'
     ierror, ERROR_CODE, suppress='f08_intent c_parameter'
 MPI_Grequest_start:
+    query_fn, FUNCTION, func_type='MPI_Grequest_query_function'
+    free_fn, FUNCTION, func_type='MPI_Grequest_free_function'
+    cancel_fn, FUNCTION, func_type='MPI_Grequest_cancel_function'
     extra_state, EXTRA_STATE
     request, REQUEST, direction='out'
 MPI_Group_compare:
@@ -810,25 +977,42 @@ MPI_Group_difference:
     newgroup, GROUP, direction='out'
 MPI_Group_excl:
     group, GROUP
+    n, DEFERRED_INT
+    ranks, RANK, length='n', constant=True
+    newgroup, GROUP, direction='out'
 MPI_Group_free:
     group, GROUP, direction='inout'
 MPI_Group_incl:
     group, GROUP
+    n, DEFERRED_INT
+    ranks, RANK, length='n', constant=True
+    newgroup, GROUP, direction='out'
 MPI_Group_intersection:
     group1, GROUP
     group2, GROUP
     newgroup, GROUP, direction='out'
 MPI_Group_range_excl:
     group, GROUP
+    n, DEFERRED_INT
+    ranges, RANK, length=['n', '3']
+    newgroup, GROUP, direction='out'
 MPI_Group_range_incl:
     group, GROUP
+    n, DEFERRED_INT
+    ranges, RANK, length=['n', '3']
+    newgroup, GROUP, direction='out'
 MPI_Group_rank:
     group, GROUP
+    rank, RANK, direction='out'
 MPI_Group_size:
     group, GROUP
+    size, COMM_SIZE, direction='out'
 MPI_Group_translate_ranks:
     group1, GROUP
+    n, DEFERRED_INT
+    ranks1, RANK, length='n', constant=True
     group2, GROUP
+    ranks2, RANK, length='n', direction='out'
 MPI_Group_union:
     group1, GROUP
     group2, GROUP
@@ -902,6 +1086,7 @@ MPI_Ibcast:
     comm, COMMUNICATOR
     request, REQUEST, direction="out"
 MPI_Ibsend:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -945,6 +1130,7 @@ MPI_Improbe:
     message, MESSAGE, direction='out'
     status, STATUS, direction='out'
 MPI_Imrecv:
+    buf, BUFFER, direction='out', mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     message, MESSAGE, direction='inout'
@@ -1000,19 +1186,24 @@ MPI_Ineighbor_alltoallw:
     comm, COMMUNICATOR
     request, REQUEST, direction="out"
 MPI_Info_create:
+    info, INFO, direction='out'
 MPI_Info_delete:
+    info, INFO, direction='lis:inout,param:in'
     key, STRING, constant=True
 MPI_Info_dup:
     info, INFO
     newinfo, INFO, direction='out'
 MPI_Info_free:
+    info, INFO, direction='inout'
 MPI_Info_get:
     info, INFO
     key, STRING, constant=True
     valuelen, INFO_VALUE_LENGTH
     value, STRING, direction='out', length='valuelen'
+    flag, LOGICAL, direction='out'
 MPI_Info_get_nkeys:
     info, INFO
+    nkeys, DEFERRED_INT, direction='out'
 MPI_Info_get_nthkey:
     info, INFO
     n, KEY_INDEX
@@ -1020,19 +1211,31 @@ MPI_Info_get_nthkey:
 MPI_Info_get_valuelen:
     info, INFO
     key, STRING, constant=True
+    valuelen, INFO_VALUE_LENGTH, direction='out'
+    flag, LOGICAL, direction='out'
 MPI_Info_set:
+    info, INFO, direction='lis:inout,param:in'
     key, STRING, constant=True
     value, STRING, constant=True
 MPI_Init:
+    C-only: int~*argc, char~***argv
 MPI_Init_thread:
+    C-only: int~*argc, char~***argv
     required, THREAD_LEVEL
+    provided, THREAD_LEVEL, direction='out'
 MPI_Initialized:
+    flag, LOGICAL, direction='out'
 MPI_Intercomm_create:
     local_comm, COMMUNICATOR
+    local_leader, RANK
+    peer_comm, COMMUNICATOR' communicator; significant only at the \\mpiarg{local_leader}"
+    remote_leader, RANK
     tag, TAG
+    newintercomm, COMMUNICATOR, direction='out'
 MPI_Intercomm_merge:
     intercomm, COMMUNICATOR
     high, LOGICAL
+    newintracomm, COMMUNICATOR, direction='out'
 MPI_Iprobe:
     source, RANK
     tag, TAG
@@ -1040,6 +1243,7 @@ MPI_Iprobe:
     flag, LOGICAL, direction='out'
     status, STATUS, direction='out'
 MPI_Irecv:
+    buf, BUFFER, direction='out', mpi_owned=True, suppress='f08_intent'
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     source, RANK
@@ -1072,6 +1276,7 @@ MPI_Ireduce_scatter_block:
     comm, COMMUNICATOR
     request, REQUEST, direction="out"
 MPI_Irsend:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1079,6 +1284,7 @@ MPI_Irsend:
     comm, COMMUNICATOR
     request, REQUEST, direction='out'
 MPI_Is_thread_main:
+    flag, LOGICAL, direction='out'
 MPI_Iscan:
     sendbuf, BUFFER, constant=True, mpi_owned=True
     recvbuf, BUFFER, direction="out", suppress="f08_intent", mpi_owned=True
@@ -1109,6 +1315,7 @@ MPI_Iscatterv:
     comm, COMMUNICATOR
     request, REQUEST, direction="out"
 MPI_Isend:
+    buf, BUFFER, mpi_owned=True, constant=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1116,6 +1323,7 @@ MPI_Isend:
     comm, COMMUNICATOR
     request, REQUEST, direction='out'
 MPI_Issend:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1123,11 +1331,16 @@ MPI_Issend:
     comm, COMMUNICATOR
     request, REQUEST, direction='out'
 MPI_Keyval_create:
+    copy_fn, FUNCTION, func_type='MPI_Copy_function'
+    delete_fn, FUNCTION, func_type='MPI_Delete_function'
     keyval, KEYVAL, direction='out'
     extra_state, EXTRA_STATE2
 MPI_Keyval_free:
+    keyval, KEYVAL, direction='inout'
 MPI_Lookup_name:
+    service_name, STRING, constant=True
     info, INFO
+    port_name, STRING, direction='out', length='MPI_MAX_PORT_NAME'
 MPI_Mprobe:
     source, RANK
     tag, TAG
@@ -1153,6 +1366,13 @@ MPI_NULL_DELETE_FN:
     attribute_val, ATTRIBUTE_VAL_10
     extra_state, EXTRA_STATE
 MPI_Neighbor_allgather:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction='out'
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
 MPI_Neighbor_allgather_init:
     sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
     sendcount, DEFERRED_INT
@@ -1164,6 +1384,14 @@ MPI_Neighbor_allgather_init:
     info, INFO
     request, REQUEST, direction="out"
 MPI_Neighbor_allgatherv:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction='out'
+    recvcounts, POLYXFER_NUM_ELEM, length='*', constant=True, desc='non-negative integer array (of length indegree
+    displs, POLYDISPLACEMENT, constant=True, length='*', desc='integer array (of length indegree
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
 MPI_Neighbor_allgatherv_init:
     sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
     sendcount, DEFERRED_INT
@@ -1176,6 +1404,13 @@ MPI_Neighbor_allgatherv_init:
     info, INFO
     request, REQUEST, direction="out"
 MPI_Neighbor_alltoall:
+    sendbuf, BUFFER, constant=True
+    sendcount, POLYXFER_NUM_ELEM
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction='out'
+    recvcount, POLYXFER_NUM_ELEM
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
 MPI_Neighbor_alltoall_init:
     sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
     sendcount, DEFERRED_INT
@@ -1187,6 +1422,15 @@ MPI_Neighbor_alltoall_init:
     info, INFO
     request, REQUEST, direction="out"
 MPI_Neighbor_alltoallv:
+    sendbuf, BUFFER, constant=True
+    sendcounts, POLYXFER_NUM_ELEM, constant=True,length='*', desc='non-negative integer array (of length outdegree
+    sdispls, POLYDISPLACEMENT, constant=True, length='*', desc='integer array (of length outdegree
+    sendtype, DATATYPE
+    recvbuf, BUFFER, direction='out'
+    recvcounts, POLYXFER_NUM_ELEM, constant=True, length='*', desc='non-negative integer array (of length indegree
+    rdispls, POLYDISPLACEMENT, constant=True, length='*', desc='integer array (of length indegree
+    recvtype, DATATYPE
+    comm, COMMUNICATOR
 MPI_Neighbor_alltoallv_init:
     sendbuf, BUFFER, constant=True, suppress="f08_intent", mpi_owned=True
     sendcounts, DEFERRED_INT, constant=True, suppress="f08_intent", mpi_owned=True, length="*"
@@ -1231,21 +1475,34 @@ MPI_Op_create:
 MPI_Op_free:
     op, OPERATION, direction="inout", pointer=True
 MPI_Open_port:
+    info, INFO
+    port_name, STRING, length='MPI_MAX_PORT_NAME', direction='out'
 MPI_Pack:
     inbuf, BUFFER, constant=True
+    incount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
+    outbuf, BUFFER, direction='out'
     outsize, POLYNUM_BYTES
+    position, POLYDISPLACEMENT, direction='inout'
     comm, COMMUNICATOR
 MPI_Pack_external:
     datarep, STRING, constant=True, length='*'
     inbuf, BUFFER, constant=True
+    incount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
+    outbuf, BUFFER, direction='out'
+    outsize, PACK_EXTERNAL_SIZE
+    position, DISPLACEMENT, direction='inout'
 MPI_Pack_external_size:
     datarep, STRING, constant=True, length='*'
+    incount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
+    size, PACK_EXTERNAL_SIZE, direction='out'
 MPI_Pack_size:
+    incount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
     comm, COMMUNICATOR
+    size, POLYNUM_BYTES, direction='out'
 MPI_Pcontrol:
     level, PROFILE_LEVEL, constant=True
     varargs, VARARGS
@@ -1255,7 +1512,9 @@ MPI_Probe:
     comm, COMMUNICATOR
     status, STATUS, direction='out'
 MPI_Publish_name:
+    service_name, STRING, constant=True
     info, INFO
+    port_name, STRING, constant=True
 MPI_Put:
     origin_addr, BUFFER, constant=True, mpi_owned=True
     origin_count, DEFERRED_INT
@@ -1266,6 +1525,7 @@ MPI_Put:
     target_datatype, DATATYPE
     win, WINDOW
 MPI_Query_thread:
+    provided, THREAD_LEVEL, direction='out'
 MPI_Raccumulate:
     origin_addr, BUFFER, mpi_owned=True, constant=True
     origin_count, DEFERRED_INT
@@ -1286,6 +1546,7 @@ MPI_Recv:
     comm, COMMUNICATOR
     status, STATUS, direction='out'
 MPI_Recv_init:
+    buf, BUFFER, direction='out', mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     source, RANK
@@ -1358,6 +1619,8 @@ MPI_Request_free:
     request, REQUEST, direction='inout'
 MPI_Request_get_status:
     request, REQUEST
+    flag, LOGICAL, direction='out'
+    status, STATUS, direction='out'
 MPI_Rget:
     origin_addr, BUFFER, direction='out', mpi_owned=True, constant=False
     origin_count, DEFERRED_INT
@@ -1400,6 +1663,7 @@ MPI_Rsend:
     tag, TAG
     comm, COMMUNICATOR
 MPI_Rsend_init:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1472,6 +1736,7 @@ MPI_Send:
     tag, TAG
     comm, COMMUNICATOR
 MPI_Send_init:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1502,6 +1767,8 @@ MPI_Sendrecv_replace:
     comm, COMMUNICATOR
     status, STATUS, direction='out'
 MPI_Sizeof:
+    x, BUFFER, suppress='f08_intent f90_buf_paren'
+    size, DEFERRED_INT, direction='out'
 MPI_Ssend:
     buf, BUFFER, constant=True
     count, POLYXFER_NUM_ELEM
@@ -1510,6 +1777,7 @@ MPI_Ssend:
     tag, TAG
     comm, COMMUNICATOR
 MPI_Ssend_init:
+    buf, BUFFER, constant=True, mpi_owned=True
     count, POLYXFER_NUM_ELEM
     datatype, DATATYPE
     dest, RANK
@@ -1520,9 +1788,15 @@ MPI_Start:
     request, REQUEST, direction='inout'
 MPI_Startall:
     count, ARRAY_LENGTH
+    array_of_requests, REQUEST, direction='inout', length='count'
 MPI_Status_f082f:
+    f08_status, F08_STATUS, pointer=True
+    f_status, F90_STATUS, direction='out'
 MPI_Status_f2f08:
+    f_status, F90_STATUS, pointer=True
+    f08_status, F08_STATUS, direction='out'
 MPI_Status_set_cancelled:
+    status, STATUS, direction='inout'
     flag, LOGICAL, 'if true, indicates request was cancelled', direction='out'
 MPI_Status_set_elements:
     status, STATUS, direction='inout'
@@ -1686,17 +1960,26 @@ MPI_Test_cancelled:
     flag, LOGICAL, direction='out'
 MPI_Testall:
     count, ARRAY_LENGTH, 'lists length'
+    array_of_requests, REQUEST, direction='inout', length='count'
     flag, LOGICAL, direction='out'
+    array_of_statuses, STATUS, direction='out', length='*'
 MPI_Testany:
     count, ARRAY_LENGTH, 'list length'
     array_of_requests, REQUEST, direction='inout', length='count'
+    index, INDEX, direction='out'
     flag, LOGICAL, direction='out'
     status, STATUS, direction='out'
 MPI_Testsome:
     incount, ARRAY_LENGTH
+    array_of_requests, REQUEST, direction='inout', length='incount'
+    outcount, ARRAY_LENGTH, direction='out'
+    array_of_indices, INDEX, direction='out', length='*'
+    array_of_statuses, STATUS, direction='out', length='*'
 MPI_Topo_test:
     comm, COMMUNICATOR
+    status, ENUM, direction='OUT'
 MPI_Type_commit:
+    datatype, DATATYPE, direction='inout'
 MPI_Type_contiguous:
     count, ARRAY_LENGTH
     oldtype, DATATYPE
@@ -1704,22 +1987,35 @@ MPI_Type_contiguous:
 MPI_Type_create_darray:
     size, COMM_SIZE
     rank, RANK
+    ndims, ARRAY_LENGTH
+    array_of_gsizes, POLYDTYPE_NUM_ELEM, constant=True, length='ndims'
+    array_of_distribs, POLYDTYPE_NUM_ELEM, constant=True, length='ndims'
+    array_of_dargs, POLYDTYPE_NUM_ELEM, constant=True, length='ndims'
+    array_of_psizes, POLYDTYPE_NUM_ELEM, constant=True, length='ndims'
     order, ORDER
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_create_f90_complex:
     p, MATH
     r, MATH
+    newtype, DATATYPE, direction='out'
 MPI_Type_create_f90_integer:
+    r, MATH
+    newtype, DATATYPE, direction='out'
 MPI_Type_create_f90_real:
     p, MATH
     r, MATH
+    newtype, DATATYPE, direction='out'
 MPI_Type_create_hindexed:
+    count, ARRAY_LENGTH
+    array_of_blocklengths, BLOCKLENGTH, length='count', constant=True
+    array_of_displacements, DISPLACEMENT, length='count', constant=True
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_create_hindexed_block:
     count, ARRAY_LENGTH
     blocklength, BLOCKLENGTH
+    array_of_displacements, DISPLACEMENT, length='count', constant=True
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_create_hvector:
@@ -1731,9 +2027,13 @@ MPI_Type_create_hvector:
 MPI_Type_create_indexed_block:
     count, ARRAY_LENGTH
     blocklength, BLOCKLENGTH
+    array_of_displacements, POLYDISPLACEMENT, length='count', constant=True
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_create_keyval:
+    type_copy_attr_fn, FUNCTION, func_type='MPI_Type_copy_attr_function'
+    type_delete_attr_fn, FUNCTION, func_type='MPI_Type_delete_attr_function'
+    type_keyval, KEYVAL, direction='out'
     extra_state, EXTRA_STATE
 MPI_Type_create_resized:
     oldtype, DATATYPE
@@ -1742,48 +2042,92 @@ MPI_Type_create_resized:
     newtype, DATATYPE, direction='out'
 MPI_Type_create_struct:
     count, ARRAY_LENGTH
+    array_of_blocklengths, BLOCKLENGTH, length='count', constant=True
+    array_of_displacements, DISPLACEMENT, length='count', constant=True
+    array_of_types, DATATYPE, constant=True, length='count'
     newtype, DATATYPE, direction='out'
 MPI_Type_create_subarray:
     ndims, ARRAY_LENGTH
+    array_of_sizes, POLYDTYPE_NUM_ELEM, length='ndims', constant=True
+    array_of_subsizes, POLYDTYPE_NUM_ELEM, length='ndims', constant=True
+    array_of_starts, POLYDTYPE_NUM_ELEM, length='ndims', constant=True
     order, ORDER
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_delete_attr:
+    datatype, DATATYPE, direction='lis:inout,param:in'
     type_keyval, KEYVAL
 MPI_Type_dup:
     oldtype, DATATYPE
+    newtype, DATATYPE, direction='out'
 MPI_Type_free:
+    datatype, DATATYPE, direction='inout'
 MPI_Type_free_keyval:
     type_keyval, KEYVAL, direction='inout'
 MPI_Type_get_attr:
+    datatype, DATATYPE
     type_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL, direction='out'
+    flag, LOGICAL, direction='out'
 MPI_Type_get_contents:
     datatype, DATATYPE
+    max_integers, ARRAY_LENGTH
+    max_addresses, ARRAY_LENGTH
+    max_datatypes, ARRAY_LENGTH
+    array_of_integers, ARRAY_LENGTH, direction='out', length='max_integers'
+    array_of_addresses, DISPLACEMENT, direction='out', length='max_addresses'
+    array_of_datatypes, DATATYPE, direction='out', length='max_datatypes'
 MPI_Type_get_elements:
+    status, STATUS, pointer=True
     datatype, DATATYPE
+    count, POLYNUM_BYTES, direction='out'
 MPI_Type_get_elements_x:
+    status, STATUS, pointer=True
     datatype, DATATYPE
+    count, NUM_BYTES, direction='out'
 MPI_Type_get_envelope:
     datatype, DATATYPE
+    num_integers, ARRAY_LENGTH, direction='out'
+    num_addresses, ARRAY_LENGTH, direction='out'
+    num_datatypes, ARRAY_LENGTH, direction='out'
+    combiner, COMBINER, direction='out'
 MPI_Type_get_extent:
     datatype, DATATYPE
+    lb, DISPLACEMENT, direction='out'
+    extent, DISPLACEMENT, direction='out'
 MPI_Type_get_extent_x:
     datatype, DATATYPE
+    lb, XFER_NUM_ELEM, direction='out'
+    extent, XFER_NUM_ELEM, direction='out'
 MPI_Type_get_name:
+    datatype, DATATYPE
+    type_name, STRING, direction='out', length='MPI_MAX_OBJECT_NAME'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Type_get_true_extent:
     datatype, DATATYPE
+    true_lb, DISPLACEMENT, direction='out'
+    true_extent, DISPLACEMENT, direction='out'
 MPI_Type_get_true_extent_x:
     datatype, DATATYPE
+    true_lb, XFER_NUM_ELEM, direction='out'
+    true_extent, XFER_NUM_ELEM, direction='out'
 MPI_Type_indexed:
+    count, ARRAY_LENGTH
+    array_of_blocklengths, BLOCKLENGTH, length='count', constant=True
+    array_of_displacements, POLYDISPLACEMENT, length='count', constant=True
     oldtype, DATATYPE
     newtype, DATATYPE, direction='out'
 MPI_Type_match_size:
     typeclass, ENUM
     size, DEFERRED_INT
+    datatype, DATATYPE, direction='out'
 MPI_Type_set_attr:
+    datatype, DATATYPE, direction='lis:inout,param:in'
     type_keyval, KEYVAL
     attribute_val, ATTRIBUTE_VAL
 MPI_Type_set_name:
+    datatype, DATATYPE, direction='lis:inout,param:in'
+    type_name, STRING, constant=True
 MPI_Type_size:
     datatype, DATATYPE
     size, POLYXFER_NUM_ELEM, direction='out'
@@ -1798,14 +2142,24 @@ MPI_Type_vector:
     newtype, DATATYPE, direction='out'
 MPI_Unpack:
     inbuf, BUFFER, constant=True
+    insize, POLYNUM_BYTES
+    position, POLYDISPLACEMENT, direction='inout'
+    outbuf, BUFFER, direction='out'
+    outcount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
     comm, COMMUNICATOR
 MPI_Unpack_external:
     datarep, STRING, constant=True, length='*', pointer=False
     inbuf, BUFFER, constant=True
+    insize, PACK_EXTERNAL_SIZE
+    position, DISPLACEMENT, direction='inout'
+    outbuf, BUFFER, direction='out'
+    outcount, POLYDTYPE_NUM_ELEM
     datatype, DATATYPE
 MPI_Unpublish_name:
+    service_name, STRING, constant=True
     info, INFO
+    port_name, STRING, constant=True
 MPI_User_function', 'USER_FUNCTION:
     invec, C_BUFFER4, suppress='f08_intent', length='len', pointer=True
     inoutvec, C_BUFFER4, suppress='f08_intent', length='len', pointer=True
@@ -1835,6 +2189,8 @@ MPI_Wait:
     status, STATUS, direction='out'
 MPI_Waitall:
     count, ARRAY_LENGTH
+    array_of_requests, REQUEST, direction='inout', length='count'
+    array_of_statuses, STATUS, direction='out', length='*'
 MPI_Waitany:
     count, ARRAY_LENGTH, 'list length'
     array_of_requests, REQUEST,direction='inout', length='count'
@@ -1842,6 +2198,10 @@ MPI_Waitany:
     status, STATUS, direction='out'
 MPI_Waitsome:
     incount, ARRAY_LENGTH
+    array_of_requests, REQUEST, direction='inout', length='incount'
+    outcount, ARRAY_LENGTH, direction='out'
+    array_of_indices, INDEX, direction='out', length='*'
+    array_of_statuses, STATUS, direction='out', length='*'
 MPI_Win_allocate:
     size, WINDOW_SIZE
     disp_unit, DEFERRED_INT
@@ -1891,10 +2251,15 @@ MPI_Win_create_dynamic:
     comm, COMMUNICATOR
     win, WINDOW, direction='out'
 MPI_Win_create_errhandler:
+    win_errhandler_fn, FUNCTION, func_type='MPI_Win_errhandler_function'
     errhandler, ERRHANDLER, direction='out'
 MPI_Win_create_keyval:
+    win_copy_attr_fn, FUNCTION, func_type='MPI_Win_copy_attr_function'
+    win_delete_attr_fn, FUNCTION, func_type='MPI_Win_delete_attr_function'
+    win_keyval, KEYVAL, direction='out'
     extra_state, EXTRA_STATE
 MPI_Win_delete_attr:
+    win, WINDOW, direction='lis:inout,param:in'
     win_keyval, KEYVAL
 MPI_Win_detach:
     win, WINDOW
@@ -1921,9 +2286,13 @@ MPI_Win_free:
 MPI_Win_free_keyval:
     win_keyval, KEYVAL, direction='inout'
 MPI_Win_get_attr:
+    win, WINDOW
     win_keyval, KEYVAL
+    attribute_val, ATTRIBUTE_VAL, direction='out'
+    flag, LOGICAL, direction='out'
 MPI_Win_get_errhandler:
     win, WINDOW
+    errhandler, ERRHANDLER, direction='out'
 MPI_Win_get_group:
     win, WINDOW
     group, GROUP, direction='out'
@@ -1931,6 +2300,9 @@ MPI_Win_get_info:
     win, WINDOW
     info_used, INFO, direction='out'
 MPI_Win_get_name:
+    win, WINDOW
+    win_name, STRING, direction='out', length='MPI_MAX_OBJECT_NAME'
+    resultlen, STRING_LENGTH, direction='out'
 MPI_Win_lock:
     lock_type, LOCK_TYPE
     rank, RANK
@@ -1944,6 +2316,7 @@ MPI_Win_post:
     assert, ASSERT
     win, WINDOW
 MPI_Win_set_attr:
+    win, WINDOW, direction='lis:inout,param:in'
     win_keyval, KEYVAL
     attribute_val, ATTRIBUTE_VAL
 MPI_Win_set_errhandler:
@@ -1953,6 +2326,8 @@ MPI_Win_set_info:
     win, WINDOW, direction='lis:inout,param:in'
     info, INFO
 MPI_Win_set_name:
+    win, WINDOW, direction='lis:inout,param:in'
+    win_name, STRING, constant=True
 MPI_Win_shared_query:
     win, WINDOW
     rank, RANK

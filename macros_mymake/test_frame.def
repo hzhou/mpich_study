@@ -70,5 +70,14 @@ subcode: test_frame
     subcode: test_cpi
         which mpicc
         which mpirun
-        mpicc examples/cpi.c -o examples/cpi
+        case "$compiler" in
+            sun)
+                cpi_lib="-lm"
+                ;;
+            *)
+                cpi_lib=
+                ;;
+        esac
+
+        mpicc examples/cpi.c -o examples/cpi $cpi_lib
         mpirun -n 2 examples/cpi

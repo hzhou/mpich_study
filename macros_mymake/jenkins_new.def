@@ -14,7 +14,7 @@ subcode: PrepareEnv
 subcode: SetCompiler
     # gcc-8, osx-gcc ...
     case $compiler in
-        gnu|gcc|gcc-4)
+        gnu|gcc|gcc-4|gcc-4.8)
             CC=gcc
             CXX=g++
             F77=gfortran

@@ -11,7 +11,8 @@ subcode: test_mymake_config
         $print parsing config: [$config]...
         $config=~s/[\/-]/:/g
         $if $config=~/^(default|ch3:tcp)/
-            NOOP
+            $config = "ch3:nemesis"
+            push @mpich_config, "--with-device=$config"
         $elif $config=~/^ch[34]/
             push @mpich_config, "--with-device=$config"
 
@@ -23,7 +24,7 @@ subcode: test_mymake_config
         $call check_test_script
         $call check_mpich_config
 
-        $if $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree)\s*[:=]\s*([\w\-\.]+)/m -> $key, $val
+        $while $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree)\s*[:=]\s*([\w\-\.]+)/mg -> $key, $val
             $if $val=~/(yes|1)/
                 $val = "true"
             $ENV{$key}=$val
@@ -43,8 +44,9 @@ subcode: test_mymake_config
         subcode: check_mpich_config
             my $t = $ENV{configOption}."\n".$trigger_phrase
             $print parsing trigger phrase: \n   [$t]...
-            $while $t=~/(--(enable|disable|with|without)-\S+)/g
-                push @mpich_config, $1
+            $while $t=~/(--(enable|disable|with|without)-\S+)/g -> $a
+                $a=~s/\x24(\w+)/$ENV{$1}/g
+                push @mpich_config, $a
 
         subcode: check_custom_testlist
             $global @testlist

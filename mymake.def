@@ -122,7 +122,7 @@ page: mymake_test
     $if $ENV{skip_test} eq "custom"
         $call run_tests_custom
     $else
-        $call run_tests
+        # $call run_tests
 
 # ----------------
 # print out a stage header

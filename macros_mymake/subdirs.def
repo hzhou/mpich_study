@@ -75,8 +75,12 @@ subcode: need_mpl
 
     subcode: set_config_args
         my $config_args = "--disable-versioning --enable-embedded"
+        # $if $opts{argobots}
+        #     $config_args .= " CPPFLAGS='-I$opts{argobots}/include'"
         $foreach $t in @config_args
             $if $t=~/--enable-(g|strict)/
+                $config_args.=" $t"
+            $elif $t=~/--with-(thread-package|argobots)/
                 $config_args.=" $t"
 
 #---------------------------------------- 
@@ -113,6 +117,8 @@ subcode: need_romio
     push @t_env, "master_top_srcdir=$pwd"
     push @t_env, "master_top_builddir=$pwd"
     push @t_env, "CPPFLAGS='-I$(Impl)'"
+    $if $opts{argobots}
+        $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
     # # mpl
     # &call modify, configure.ac
 

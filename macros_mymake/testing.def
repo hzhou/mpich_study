@@ -24,10 +24,22 @@ subcode: testing_config
     $call echo_system "cp $srcdir/maint/version.m4 ."
     $call echo_system "sh autogen.sh"
     $call echo_system "autoreconf -ivf"
-    my $t = join(' ', @test_config_args)
-    $call echo_system "./configure $t"
+    $call @set_config_args
+    $call echo_system "./configure $config_args"
 
     $call echo_system "cp Makefile mymake/Makefile.orig"
+
+    subcode: set_config_args
+        my $config_args = ""
+        $foreach $t in @config_args
+            $if $t=~/--(dis|en)able-.*tests/
+                $config_args .= " $t"
+            $elif $t=~/--with-device=(.*)/
+                $config_args .= " $t"
+            $elif $t=~/--(dis|en)able-(fortran|cxx|romio)/
+                $config_args .= " $t"
+            $elif $t=~/--with-(thread-package|argobots)/
+                $config_args .= " $t"
 
 subcode: echo_system(@cmd)
     my $cmd = $(cmd)

@@ -32,6 +32,8 @@ subcode: compile_mpich
     $ENV{CFLAGS}=$opts{CFLAGS}
     system "make $(Hmpl) $(Hopa)"
 
+    $call @patch_sizeof_atomic
+
     # ---------------------------
     subcode: custom_programs
         $if $t=~/mpichversion/
@@ -162,7 +164,30 @@ subcode: need_mpich_preproc
     push @CONFIGS, "src/include/mpir_cvars.h"
     $call push_autogen_rule, cvars, src/include/mpir_cvars.h
     # $call push_autogen_rule, logs, src/include/mpiallstates.h
+    $if -f "src/include/autogen.h.in"
+        push @CONFIGS, "src/include/autogen.h"
+        push @extra_make_rules, "src/include/autogen.h: src/include/autogen.h.in"
+        push @extra_make_rules, "\tperl maint/gen_init.pl"
+        push @extra_make_rules, ""
+
 
     &call add_subdir_rule_block, src/glue/romio, src/glue/romio/all_romio_symbols.c
         push @t, "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
 
+#---------------------------------------- 
+subcode: patch_sizeof_atomic
+    &call open_w, "mymake/t.c"
+        $(set:print_to=Out)
+        $print #include "mpl_atomic.h"
+        $print #include <pthread.h>
+        $print "pthread_mutex_t MPL_emulation_lock;"
+        $print "int main() { return sizeof(MPL_atomic_ptr_t); }"
+
+    system "$make_vars{CC} -Imymake/mpl/include mymake/t.c -o mymake/t"
+    system "mymake/t"
+    my $ret = $? >> 8;
+
+    &call modify_frame
+        &call modify, src/include/mpichconf.h
+            $if $l=~/^#define SIZEOF_MPL_ATOMIC_PTR_T 0/
+                $l=~s/0/$ret/

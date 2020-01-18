@@ -20,7 +20,13 @@ subcode: prepare_hydra
 
     $call need_mpl
     $call need_hwloc
+    $call @check_argobots
     $call custom_make
+
+    subcode: check_argobots
+        $if $opts{argobots}
+            $I_list .= " -I$opts{argobots}/include"
+            $L_list .= " -L$opts{argobots}/lib -labt"
 
     subcode: dump_variable_custom
         $call @filter_var_hwloc
@@ -94,6 +100,12 @@ subcode: add_rule_hydra
     push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) install )"
     push @extra_make_rules, ""
     push @extra_make_rules, "$mkfile:"
-    push @extra_make_rules, "\t\x24(DO_hydra) --prefix=\x24(PREFIX)"
+    $call set_config_args
+    push @extra_make_rules, "\t\x24(DO_hydra) $config_args"
     push @extra_make_rules, ""
+
+    subcode: set_config_args
+        my $config_args = "--prefix=\x24(PREFIX)"
+        $if $opts{argobots}
+            $config_args .= " --with-argobots=$opts{argobots}"
 

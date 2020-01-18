@@ -291,8 +291,9 @@ subcode: dump_cvars_c
         $print "    MPIR_T_cvar_value_t defaultval;"
         $print
         $print "    /* FIXME any MT issues here? */"
-        $print "    if (initialized)"
+        $print "    if (initialized) {"
         $print "        return MPI_SUCCESS;"
+        $print "    }"
         $print "    initialized = TRUE;"
         $print
         BLOCK

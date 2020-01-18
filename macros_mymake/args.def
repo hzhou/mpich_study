@@ -14,7 +14,7 @@ subcode: set_mymake
 #- cmdline, sort out options 
 subcode: parse_args
     $global %opts
-    $global @config_args, @test_config_args
+    $global @config_args
     $call @set_opts_default
     $if @ARGV == 1 && $ARGV[0] eq "V=1"
         $opts{V} = 1
@@ -82,24 +82,20 @@ subcode: parse_args
                 $elif $a=~/^--with-pm=(.*)/
                     $opts{pm}=$1
                     # push @config_args, $a
-                $elif $a=~/--(dis|en)able-.*tests/
-                    push @test_config_args, $a
                 $elif $a=~/--disable-(romio|cxx|fortran)/
                     $opts{"disable_$1"}=1
                     $opts{"enable_$1"}=0
                     push @config_args, $a
-                    push @test_config_args, $a
                 $elif $a=~/--enable-fortran=(\w+)/
                     $opts{disable_fortran}=0
                     $opts{enable_fortran}=$1
                     push @config_args, $a
-                    push @test_config_args, $a
                 $elif $a=~/--with-atomic-primitives=(.*)/
                     $opts{openpa_primitives} = $1
                 $elif $a=~/--enable-strict/
                     $opts{enable_strict} = 1
                     push @config_args, $a
-                $elif $a=~/--with-(ucx|libfabric)=(.*)/
+                $elif $a=~/--with-(ucx|libfabric|argobots)=(.*)/
                     $opts{$1}=$2
                     push @config_args, $a
                 $else

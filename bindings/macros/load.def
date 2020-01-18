@@ -1,80 +1,109 @@
+macros:
+    DIR_INTERFACE: interface
+
+#---------------------------------------- 
 subcode: load_funcs
     $global @func_list, %func_hash
     my $func
-    &call open_r, standard/mpi_functions.txt
+    &call open_r, $(DIR_INTERFACE)/mpi_functions.txt
         $if /^(\w+):/
             $call push_func
             $func = {name=>$1, params=>[]}
-        $elif $func and /\s+(\w+),\s*(\w+)(.*)/
-            my $param={name=>$1, type=>$2}
-            $call parse_param_attrs
-            push @{$func->{params}}, $param
+        $elif $func
+            $if /C-only: (.*)/
+                # must be MPI_Init/MPI_Init_thread
+                push @{$func->{params}}, {name=>"argc", type=>"int *", C_only=>1}
+                push @{$func->{params}}, {name=>"argv", type=>"char ***", C_only=>1}
+            $elif /\s+(\w+),\s*(\w+)(.*)/
+                my $param={name=>$1, type=>$2}
+                $call parse_param_attrs
+                push @{$func->{params}}, $param
     $call push_func
 
     subcode: parse_param_attrs
         my $t = $3
         $t=~s/^,\s*//
-        $while $t=~/(\w+)\s*=\s*(True|['"].*['"])/g
+        $while $t=~/(\w+)\s*=\s*(True|['"].*?['"])/g
             $param->{$1} = $2
     subcode: push_func
         $if $func and $func->{name}
-            push @func_list, $func
+            push @func_list, $func->{name}
             $func_hash{$func->{name}} = $func
-
-subcode: dump_func(name)
-    my $func = $func_hash{$(name)}
-    $print $(name):
-    $foreach $p in @{$func->{params}}
-        my $type = get_type_C($p)
-        $print "\t$p->{name}: $type"
-
-fncode: f_get_arg_types($Func)
-    my $func = $func_hash{$Func}
-    my @tlist
-    $foreach $p in @{$func->{params}}
-        push @tlist, get_type_C($p)
-    return join(", ", @tlist)
 
 #---------------------------------------- 
 subcode: load_types(lang)
-    $global $type_hash
-    $type_hash = f_load_types("$(lang)")
+    $global $$(lang)_type_hash
+    $$(lang)_type_hash = f_load_types("$(lang)")
+
+#---------------------------------------- 
+fncode: f_get_arg_types($Func, $type_hash)
+    my $func = $func_hash{$Func}
+    my @tlist
+    $foreach $p in @{$func->{params}}
+        push @tlist, f_get_type($p, $type_hash)
+    return join(", ", @tlist)
 
 fncode: f_load_types($lang)
-    my %type_hash
-    &call open_r, standard/${lang}_types.txt
+    my %type_hash = ("-lang" => $lang)
+    &call open_r, $(DIR_INTERFACE)/${lang}_types.txt
         $if /^(\w+):\s*(.*?)\s*$/ -> $k, $v
             $type_hash{$k}=$v
     return \%type_hash
 
-fncode: get_type_C($p)
-    $global $type_hash
-    my $ptype = $p->{type}
-    $if $ptype eq "VARARGS"
-        return "..."
-    $elif $ptype eq "FUNCTION"
-        # FIXME
-        return "FUNCTION"
-    $else    
-        my $type = $type_hash->{$ptype}
-        $if $p->{constant}
-            $type = "const $type"
-        $if $type !~/\*$/
-            $call @check_C_pointer
-        return $type
-
+fncode: f_get_type($p, $type_hash)
+    $if $type_hash->{"-lang"} =~ /_C$/
+        $call get_type_C
+    $else
+        return $type_hash->{$p->{type}}
     # ---------------------
+    subcode: get_type_C
+        my $ptype = $p->{type}
+        $if $ptype eq "VARARGS"
+            return "..."
+        $elif $ptype eq "FUNCTION"
+            # FIXME
+            $if $p->{name}=~/win_errhandler_fn/
+                return "MPI_Win_errhandler_function *"
+            $elif $p->{name}=~/type_(copy|delete)_attr_fn/
+                return "MPI_Type_$1_attr_function *"
+            $elif $p->{name}=~/read_conversion_fn/
+                return "MPI_Datarep_conversion_function *"
+            $else
+                return "FUNCTION"
+        $else    
+            my $type = $type_hash->{$ptype}
+            $(if:!skip_const)
+                $if $p->{constant}
+                    $type = "const $type"
+            $if $type !~/\*$/
+                $call @check_C_pointer
+
+            return $type
+
     subcode: check_C_pointer
-        my $pdir = $p->{direction}
+        my $pdir = f_strip_quote($p->{direction})
+        my $plen = f_strip_quote($p->{length})
+
         $if $ptype=~/(BUFFER|C_BUFFER|C_BUFFER[234]|STRING|EXTRA_STATE|ATTRIBUTE_VAL|ATTRIBUTE_VAL_10)/
             $type .= " *"
         $elif $ptype=~/^ATTRIBUTE_VAL/
             # no star
-        $elif $pdir=~/inout|out/
+        $elif $pdir=~/^(inout|out)$/i
             $type .= " *"
-        $elif $p->{pointer} and $p->{length} eq "None"
+        $elif $p->{pointer}
             $type .= " *"
-        $elif $ptype eq "STRING" and $p->{length} eq '*'
+        $elif $ptype eq "STRING" and $plen eq '*'
             # no star
             # no star
+        $elif $plen =~/^(\w+|\*)$/
+            # length='count', length='ndims'
+            $type .= " *"
+        $elif $plen
+            $print plen:[$plen]
+
+fncode: f_strip_quote($t)
+    $if $t=~/^['"](.*)['"]$/
+        return $1
+    $else
+        return $t
 
