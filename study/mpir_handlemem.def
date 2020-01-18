@@ -1,0 +1,64 @@
+fncode: MPIR_Handle_obj_alloc(objmem)
+    $if objmem->avail
+        ptr = objmem->avail
+        objmem->avail = objmem->avail->next
+    $else
+        $if !objmem->initialized
+            MPL_VG_CREATE_MEMPOOL(objmem, 0, 0)
+            objmem->initialized = 1
+            ptr = MPIR_Handle_direct_init(objmem->direct, objmem->direct_size, objsize, objkind)
+            #ifdef MPICH_DEBUG_HANDLEALLOC
+            MPIR_Add_finalize(MPIR_check_handles_on_finalize, objmem, MPIR_FINALIZE_CALLBACK_HANDLE_CHECK_PRIO)
+            #endif
+            MPIR_Add_finalize(MPIR_Handle_finalize, objmem, 0)
+        $else
+            ptr = MPIR_Handle_indirect_init(&objmem->indirect, &objmem->indirect_size, HANDLE_NUM_BLOCKS, HANDLE_NUM_INDICES, objsize, objkind)
+        $if ptr
+            objmem->avail = ptr->next
+    return ptr
+
+fncode: MPIR_Handle_obj_free(objmem, obj)
+    obj->next = objmem->avail
+    objmem->avail = obj
+
+fncode: MPIR_Handle_get_ptr_indirect(handle, objmem)
+    block_num = HANDLE_BLOCK(handle)
+    $if block_num >= objmem->indirect_size
+        return 0
+    index_num = HANDLE_BLOCK_INDEX(handle)
+    block_ptr = (char*) (*(objmem->indirect))[block_num]
+    block_ptr += index_num * objmem->size
+    return block_ptr
+
+fncode: MPIR_Handle_direct_init(direct, direct_size, obj_size, handle_type)
+    ptr = direct
+    $for i=0:direct_size
+        hptr = ptr
+        ptr = ptr + obj_size
+        hptr->next = ptr
+        hptr->handle = $(HANDLE_DIRECT) | $(HANDLE_TYPE) | i
+    $if hptr
+        hptr->next = 0
+    return next
+
+fncode: MPIR_Handle_indirect_init(indirect, indirect_size, num_blocks, num_indices, obj_size, handle_type)
+    $if !*indirect
+        *indirect = (void*)MPL_calloc(num_blocks, sizeof(void *), MPL_MEM_OBJECT)
+        $if !*indirect
+            return 0
+        *indirect_size = 0
+
+    $if *indirect_size >= num_block
+        return 0
+
+    block_ptr = (void*) MPL_calloc(num_indices, obj_size, MPL_MEM_OBJECT)
+    $if !block_ptr
+        return 0
+    ptr = (char*)block_ptr
+    $call @init
+    return block_ptr
+    
+macros:
+    HANDLE_DIRECT: ((unsigned)HANDLE_KIND_DIRECT<<HANDLE_KIND_SHIFT)
+    HANDLE_TYPE:   (handle_type << HANDLE_MPI_KIND_SHIFT)
+

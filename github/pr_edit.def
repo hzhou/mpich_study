@@ -1,0 +1,28 @@
+page: pr_signoff_seq
+    module: perl
+
+    my $f_in = $ARGV[0]
+    $if !-f $f_in
+        die "File $f_in not found.\n"
+    $call get_file_in_t, $f_in
+    my $n = ($t=~s/^pick /edit /mg)
+    &call open_w, $f_in
+        print Out $t
+    $print edit $n commits
+
+page: pr_signoff_commit
+    module: perl
+
+    my $f_in = $ARGV[0]
+    $if !-f $f_in
+        die "File $f_in not found.\n"
+    my $signoff=$ENV{signoff}
+    $call get_file_in_t, $f_in
+    $(if:1)
+        # add sign-off. TODO: specify which commit
+        $t=~s/^(# .*)/Signed-off-by: $signoff\n\1/m
+    $(else)
+        # fix a sign-off mistake :(
+        $t=~s/^(Signed-off-by: .*)/Signed-off-by: $signoff\n/m
+    &call open_w, $f_in
+        print Out $t

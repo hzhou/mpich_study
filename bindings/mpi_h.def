@@ -1,0 +1,141 @@
+include: macros/load.def
+include: macros/profiling.def
+
+page: t
+    module: perl
+
+    $call load_funcs
+    $(if:1)
+        $call check_mpi_h
+        # $call report
+        $call check_params
+
+macros:
+    SRC: $ENV{HOME}/work/mpich-github/src
+
+subcode: check_mpi_h
+    my (@in_h, @in_std, @in_both)
+    $(for:h in include/mpi.h.in, mpi/romio/include/mpio.h.in)
+        $call load_prototypes, $(SRC)/$(h)
+    $foreach $k in @func_list
+        my $v = $func_hash{$k}
+        $if !$v->{found}
+            push @in_std, $k
+        $else
+            push @in_both, $k
+
+subcode: report
+    @in_h = sort @in_h
+    $print Only in mpi.h.in:
+    $foreach $a in @in_h
+        $print "  $a"
+    $print All functions in standard:
+    $foreach $a in @in_both
+        $print "  $a"
+    $foreach $a in @in_std
+        $print "x $a"
+
+subcode: load_prototypes(file)
+    $global %prototypes
+    my $stage
+    my $l
+    &call open_r, $(file)
+        chomp
+        $if /\/\*\s*Begin Prototypes/
+            $stage=1
+        $elif /\/\*\s*End Prototypes/
+            $stage=0
+        $elif $stage==1
+            $if 0
+                # NOOP
+            # $call @skip_prototypes
+            # $call @skip_ifndef
+            $elif /^(\S.*?)\s+(MPIX?_\w+)\(/
+                $l = $_
+                my $func = $func_hash{$2}
+                $if !$func
+                    push @in_h, $2
+                $else
+                    push @in_both, $2
+                    $func->{found}++
+            $elif $l
+                s/^\s+//
+                $l .= " $_"
+        $if $l=~/;/
+            $l=~s/\s*MPICH_ATTR_POINTER_WITH_TYPE_TAG\(.,.\)//g
+            $l=~s/\s*MPICH_API_PUBLIC//
+            $if $l=~/(\S.*?)\s+(MPIX?_\w+)\((.*)\)/
+                $print $2: $3
+                $prototypes{$2} = $3
+            undef $l
+
+    subcode: skip_prototypes
+        # MPI_T routines are available only in C bindings
+        $elif /\/\*\s*Begin Skip Prototypes/
+            $while <In>
+                $if /\/\*\s*End Skip Prototypes/
+                    last
+    subcode: skip_ifndef
+        $elif /^#\s*ifndef\s+(\w+)/ -> $name
+            $global %skip_ndef_names
+            $if $skip_ndef_names{$name}
+                $while <In>
+                    $if /^#\s*endif/
+                        last
+
+#---------------------------------------- 
+subcode: check_params
+    $call load_types, SMALL_C
+    my $count = 0
+    $for $Func in @in_both
+        my $proto = $prototypes{$Func}
+        my $func = $func_hash{$Func}
+        my @out
+        push @out, "$Func: $proto"
+
+        my @plist = split /,\s*/, $proto
+        my $params = $func->{params}
+        my $np = @plist
+        my $n  = @$params
+
+        $if $proto eq "void" and $np == 1 and $n==0
+            next
+        $if $n < $np
+            $n = $np
+
+        $for $i=0:$n
+            $call load_plist_i_in_r
+            $call load_params_i_in_t
+            $if $r eq $t
+                # NOOP
+            $elif $r=~/int (precision|range)/
+                $r = substr($r, 0, 5)
+            $else
+                push @out, sprintf("  %d: $t", $i+1)
+        $if @out>1
+            $count++
+            $foreach $l in @out
+                $print $l
+    $print ----\n$count functions differ
+
+    subcode: load_plist_i_in_r
+        my $r = $plist[$i]
+        $r=~s/MPIO_Request/MPI_Request/
+        $if $r=~/(.+?)\s*(\w+)\[\]\s*$/
+            $r = "$1 *$2"
+        $elif $r=~/(.*?)\s*(\*+)\s+(\w+)$/
+            $r="$1 $2$3"
+
+    subcode: load_params_i_in_t
+        my $p = $params->[$i]
+        my $type
+        $if $p->{C_only}
+            $type = $p->{type}
+        $else
+            $type = f_get_type($p, $SMALL_C_type_hash)
+        my $t = "$type $p->{name}"
+        $if $type eq "..."
+            $t = "..."
+        $elif $t=~/(.*?)\s*(\*+)\s+(\w+)$/
+            $t="$1 $2$3"
+        $t=~s/\bindex\b/indx/g

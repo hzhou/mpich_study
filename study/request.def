@@ -1,0 +1,129 @@
+page: mpir_request.h
+    $: typedef enum MPIR_Request_kind_t {
+    $(for:a in undefined,send,recv,prequest_send,prequest_recv,grequest,coll,mprobe,rma)
+        $: MPIR_REQUEST_KIND__$(a:uc),
+    $: MPIR_REQUEST_KIND__LAST
+    #ifdef MPID_REQUEST_KIND_DECL
+    $:     , MPID_REQUEST_KIND_DECL
+    #endif
+    $: };
+
+    $call @fortran_generalized_requests
+
+    $call @define, MPIR_Request_extract_status(request_ptr_, status_)
+        $if _status != MPI_STATUS_IGNORE
+            # preserving .MPI_ERROR field
+            *status_ = (request_ptr_)->status
+
+    $define MPIR_Request_is_complete(req_) (MPIR_cc_is_complete((req_)->cc_ptr))
+
+    $: struct MPIR_Request {
+        # MPIR_OBJECT_HEADER; 
+        int handle;
+        Handle_ref_count ref_count;
+
+        MPIR_Request_kind_t kind;
+        MPIR_cc_t *cc_ptr;  # when it is a composite request
+        MPIR_cc_t cc;
+        $call @extra_request_fields
+        MPIR_cc_t *completion_notification; # tracking completion of mutliple requests
+        MPIR_Comm *comm;
+        MPI_Status status;
+
+        $: union {
+            $call @req_fields_grequest, ureq
+            $call @req_fields_coll, nbc
+            $call @req_fields_send, send # ifdef HAVE_DEBUGGER_SUPPORT
+            $call @req_fields_prequest, persist
+        $: } u;
+        #ifdef MPID_DEV_REQUEST_DECL
+        MPID_DEV_REQUEST_DECL
+        #endif
+    $: };
+
+    $define MPIR_REQUEST_PREALLOC 8
+    extern MPIR_Object_alloc_t MPIR_Request_mem;
+    extern MPIR_Request MPIR_Request_direct[];
+
+    $call @convenient_functions
+
+    $function MPIR_Request_create(MPIR_Request_kind_t kind): static inline MPIR_Request *
+        req = MPIR_Handle_obj_alloc(&MPIR_Request_mem)
+        $if req != NULL
+            MPIR_Object_set_ref(req, 1)
+            req->kind = kind;
+            MPIR_cc_set(&req->cc, 1)
+            req->cc_ptr = &req->cc
+            req->completion_notification = NULL
+            req->status.MPI_ERROR = MPI_SUCCESS
+            MPIR_STATUS_SET_CANCEL_BIT(req->status, FALSE)
+            req->comm=NULL
+            #ifdef MPICH_THREAD_USE_MDTA
+            req->sync=NULL
+            #endif
+            $call @req_init_kind_specific
+            MPID_Request_create_hook(req)
+        $else
+            # MPL_DBG_MSG
+        return req
+
+    $function MPIR_Request_create_complete(MPIR_Request_kind_t kind): static inline MPIR_Request *
+
+    $function MPIR_Request_free(req): void
+        $local int inuse
+        MPIR_Request_release_ref(req, &inuse)
+        MPID_Request_free_hook(req)
+        $call @MPICH_THREAD_USE_MDTA
+        $if !inuse
+            $call @MPIR_Comm_release
+            $call @Grequest_free
+            MPID_Request_destroy_hook(req)
+            MPIR_Handle_obj_free(&MPIR_Request_mem, req)
+
+    $function MPIR_Request_completion_processing_fastpath(MPI_Request * request, MPIR_Request* request_ptr):int
+
+    int MPIR_Request_completion_processing(MPIR_Request *, MPI_Status *);
+
+    # Grequest stuff
+
+    $(for:a in Test,Testall,Testany,Testsome,Wait,Waitall,Waitany,Waitsome)
+        int MPIR_$(a)_impl(...)
+    $(for:a in Test,Testall,Wait,Waitall)
+        int MPIR_$(a)(...)
+    #---------------------------------------- 
+    subcode:: extra_request_fields
+        #ifdef MPICH_THREAD_USE_MDTA
+        MPIR_Thread_sync_t *sync;
+        #endif
+
+#---------------------------------------- 
+#- ch4_impl.h
+fncode: MPIDIU_request_complete
+    $my int incomplete
+    MPIR_cc_decr(req->cc_ptr, &incomplete)
+    $if !incomplete
+        MPIR_Request_free(req)
+
+#- ofi_impl.h
+fncode: MPIDI_OFI_context_to_request(void *context)
+    char *base = (char *)context;
+    return (MPIR_Request *) MPL_container_of(base, MPIR_Request, dev.ch4.netmod)
+
+subcode: MPIDI_OFI_REQUEST_CREATE(req, kind)
+    $(req) = MPIR_Request_create(kind)
+    $call @errpop, $(req)
+    MPIR_Request_add_ref($(req))
+
+#- ofi_recv.h
+#- msg.context = (void *)&MPIDI_OFI_REQUEST(rreq, context)
+
+#- mode: 
+#-      MPIDI_OFI_ON_HEAP: MPIDI_NM_mpi_recv
+#-      MPIDI_OFI_USE_EXISTING: ..._imrecv
+#-      MPIDI_OFI_ON_HEAP: MPIDI_NM_mpi_irecv
+
+#- ofi_events.c
+fncode: MPIDI_OFI_handle_cq_entries(struct fi_cq_tagged_entry *wc, ssize_t num)
+    $for i=0:num
+        req = MPIDI_OFI_context_to_request(wc[i].op_context)
+        $fcall MPIDI_OFI_dispatch_function(&wc[i], req)

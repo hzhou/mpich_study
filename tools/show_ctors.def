@@ -1,0 +1,22 @@
+page: show_ctors
+    module: perl
+    arg: $HOME/work/pull_requests/mpich4161/_inst/lib/libmpi.so
+    # arg: $HOME/work/pull_requests/mpich4161/mymake/ucx/src/uct/.libs/libuct.a
+
+
+    my $binary = $ARGV[0]
+
+    my @addr_list
+    &call open_r, "objdump -d --section .init_array $binary |"
+        $if /^\s*[0-9a-f]+:\s*(([0-9a-f][0-9a-f] )+)/
+            my @t = split / /, $1
+            push @addr_list, $t[2].$t[1].$t[0]
+            push @addr_list, $t[10].$t[9].$t[8]
+
+    $(if:0)
+        system "addr2line -e $binary -f @addr_list"
+        $print @addr_list
+    $(else)
+        $foreach $addr in @addr_list
+            $print [$addr]
+            system "addr2line -e $binary -f $addr"

@@ -1,0 +1,12 @@
+include: macros/github.def
+page: list_open_prs
+    module: perl
+
+    $call get_github_token
+    $call get_pr_list
+    $if length($t) < 200
+        $print $t
+    my $i = 0
+    $while $t=~/^\s*"url": "https:..api.github.com\/.*pulls\/(\d+)",/mg
+        $i++
+        $print $i: PR #$1

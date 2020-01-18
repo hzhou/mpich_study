@@ -1,0 +1,14 @@
+include: c/mpi.def
+page: test, mpi_frame
+    $print Hello World
+    $print world size = $mpi_size
+
+    int err;
+    $(if:1)
+        int * p_tag_ub;
+        MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &p_tag_ub, &err);
+        $print "tag upperbound = %x", *p_tag_ub
+    $(if:1)
+        int * p_univ_size;
+        MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_UNIVERSE_SIZE, &p_univ_size, &err);
+        $print "universe size = %d", *p_univ_size

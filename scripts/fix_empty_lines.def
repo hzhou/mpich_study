@@ -1,0 +1,21 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: EMPTY_LINES
+
+subcode: grep_EMPTY_LINES
+    $call grep_all
+    my $n = @files
+    $print $n files
+
+subcode: filter_lines_EMPTY_LINES
+    $(block:_patch_local)
+        $my $prev_empty
+    $if $(l)=~/^\s*$/
+        $if $prev_empty
+            $(l)="-DELETE"
+            $cnt++
+        $else
+            $prev_empty = 1
+    $else
+        undef $prev_empty

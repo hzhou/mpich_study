@@ -1,0 +1,89 @@
+page: add_dbglog
+    module: perl
+    arg: /home/hzhou/work/mpich-github
+
+    parse_args()
+    $call process_opts
+    $call get_files
+    my $n = @files
+    $print processing $n files
+    $call add_trace
+
+fncode: parse_args
+    $global $subdir, %opts
+    my @un_recognized
+    $foreach $a in @ARGV
+        $if $a=~/^-(\w+)=(.*)/
+            $opts{$1} = $2
+        $elif $a=~/^-(\w+)/
+            $opts{$1} = 1
+        $elif -d $a
+            $subdir = $a
+        $else
+            push @un_recognized, $a
+    $if @un_recognized
+        usage()
+        die "Unrecognized options: @un_recognized\n"
+
+subcode: process_opts
+    $global $verbose = "VERBOSE"
+    $if $opts{verbose} eq "terse" or $opts{terse}
+        $verbose = "TERSE"
+
+    $if $subdir
+        $print DIR: $subdir
+        chdir $subdir or die "Can't chdir $subdir\n"
+
+fncode: usage
+    $print "Usage: $0 [-terse] [subdir]\n"
+
+subcode: get_files
+    my @files;
+    $(set:prune=-path ./examples -prune -o)
+    &call open_r, "find . $(prune) -name '*.[ch]' |"
+        chomp;
+        push @files, $_;
+
+subcode: add_trace
+    my $count = 0
+    $foreach $f in @files
+        my @lines
+        my @temp
+        my ($got_function, $stage)
+        &call open_r, $f
+            $(set:TYPE=[^#\s].*)
+            $if /^[^#\s{]/
+                # exits function when encounter a starting non-space
+                undef $got_function
+
+            $if /^$(TYPE)\s+(\w+)\s*\(.*\)\s*$/
+                $got_function = $1
+            $elif /^$(TYPE)\s+(\w+)\s*\(.*$/
+                $got_function = $1
+
+            $if /^{/ && $got_function
+                my $l = ["{\n"]
+                my $ID = uc($got_function)
+                push @$l, "    MPIR_FUNC_${verbose}_STATE_DECL($ID);\n"
+                push @$l, "    MPIR_FUNC_${verbose}_ENTER($ID);\n"
+                push @lines, $l
+                $count++
+            $elif /^(\s+)return/ && $got_function
+                my $sp = $1
+                my $ID = uc($got_function)
+                my $l = [$sp."MPIR_FUNC_${verbose}_EXIT($ID);\n"]
+                push @$l, $_
+                push @lines, $l
+            $else
+                push @lines, $_
+
+        $if @lines
+            &call open_w, $f
+                $foreach $l in @lines
+                    $if ref($l) eq "ARRAY"
+                        $foreach $ll in @$l
+                            print Out $ll
+                    $else
+                        print Out $l
+
+    $print Added tracing logs to $count functions.

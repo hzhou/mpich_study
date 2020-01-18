@@ -1,0 +1,20 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: CS_ENTER
+
+#---------------------------------------- 
+subcode: grep_CS_ENTER
+    $(if:1)
+        $call grep_l, 'MPID_THREAD_CS_'
+    $(else)
+        # none
+
+subcode: filter_lines_CS_ENTER
+    $if $(l)=~/^(.*MPID_THREAD_CS_\w+)\((\w+), (.*)\);$/ -> $cs, $name, $mutex
+        $if $name eq "VCI_GLOBAL"
+            $(l) = "$cs(GLOBAL, $mutex);\n"
+            $cnt++
+        $elif $name eq "GLOBAL"
+            $(l) = ["$cs(GLOBAL, $mutex);\n", "$cs(VCI, $mutex);\n"]
+            $cnt++

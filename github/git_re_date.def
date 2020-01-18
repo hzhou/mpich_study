@@ -1,0 +1,37 @@
+page: git_re_date
+    module: perl
+    
+    $if !$ARGV[0]
+        die "Usage: git_re_date commit\n"
+    my $commit = $ARGV[0]
+    $if $commit > 1 and length($commit) < 4
+        $commit = "HEAD~$commit"
+
+    $call do_git_re_date
+
+    subcode: do_git_re_date
+        my $P="$ENV{HOME}/bin"
+        $ENV{GIT_SEQUENCE_EDITOR}="pr_signoff_seq"
+
+        my $t = `git rebase -i $commit 2>&1`
+        my $n
+        $if $t=~/edit (\d+) commits/
+            $n = $1
+        $else
+            system "git rebase --abort"
+            die "Inconsistent rebase: $t"
+
+        my $date = time - $n *60
+        my $t
+        $for $i=0:$n
+            $print :    commit $i
+            $t = `git commit --amend --no-edit --date "$date -0500" 2>&1`
+            $t = `git rebase --continue 2>&1`
+            $date+=60
+
+        $if $t=~/Successfully rebased/
+            $print :    git_re_date successful.
+        $else
+            system "git rebase --abort"
+            die "git_re_date unsuccessful."
+            

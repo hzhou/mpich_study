@@ -1,0 +1,17 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: sockaddr
+
+#---------------------------------------- 
+subcode: grep_sockaddr
+    $(if:1)
+        $call grep_l, 'struct sockaddr_storage'
+    $(else)
+        # none
+
+subcode: filter_lines_sockaddr
+    $if $(l)=~/sockaddr_storage/
+        $if $(l) !~ /typedef/
+            $(l)=~s/struct\s+sockaddr_storage/MPL_sockaddr_t/g
+            $cnt++

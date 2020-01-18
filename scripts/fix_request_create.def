@@ -1,0 +1,18 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    patch: REQ
+
+#---------------------------------------- 
+subcode: grep_REQ
+    $call grep_l, 'MPIR_Request_create\\>'
+
+subcode: filter_lines_REQ
+    $if $(l)=~/\bMPIR_Request_create\((.*?)\)/ -> $t
+        $if $t =~ /^\w+$/
+            $(l) =~s/MPIR_Request_create\((.*?)\)/MPIR_Request_create($1, 0)/
+            $cnt++
+        $else
+            $print Weird [$(l)]
+

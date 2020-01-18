@@ -1,0 +1,7 @@
+page: git_last_merge
+    module: perl
+
+    &call open_r,  git log --oneline |
+        $if /^([0-9a-f]+) Merge pull request/
+            $print $1
+            last

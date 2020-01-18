@@ -1,0 +1,122 @@
+page: cmpare_output
+    module: perl
+    arg: out/ch4_send.h $HOME/work/mpich-github/src/mpid/ch4/src/ch4_send.h
+
+
+    my ($f1, $f2)=@ARGV
+    $call get_file_lines, $f1, @out
+    $call get_file_lines, $f2, @orig
+
+    my $n1 = @out
+    my $n2 = @orig
+    my ($i1, $i2)
+    my @new_out
+
+    $while $i1<$n1 and $i2<$n2
+        my $l = $out[$i1++]
+        $call @pre_adjustment
+        $if rough_match($orig[$i2], $l)
+            $i2++
+            push @new_out, $l
+        $elif $l=~/^\w+.* \w+\(.*\)/
+            $call @match_function_header
+        $elif length($l)>100
+            $call @match_statement_split
+        $else
+            $call @mismatch, -
+
+    subcode:: pre_adjustment
+        $if $extra_bracket>0 and $l=~/^\s*}$/
+            push @new_out, $l
+            $extra_bracket--
+            next
+
+    subcode:: pre_adjustment
+        $if $l=~/^\s*$/ and $orig[$i2]!~/^\s*$/
+            # skip an empty line
+            next
+        $elif $l!~/^\s*$/ and $orig[$i2]=~/^\s*$/
+            # insert an empty line
+            $l=""
+            $i1--
+        $elif $l=~/^\s*\*/ and $l!~/^\s*\*[\(\w]/
+            # align a comment block
+            $l=' '.$l
+        $elif $l=~/^    fn_(exit|fail):/
+            # label
+            $l = "  fn_$1:\n"
+        $elif $l=~/^(\s*if) (\(\w+ = .*\))(.*)/
+            # add double prenthesses for assignment condition
+            $l = "$1 ($2)$3\n"
+
+    subcode: match_function_header
+        my @t = split /,\s*/, $l
+        $while @t
+            $if $orig[$i2]=~/^(\s*)(.*?),$/ -> $sp, $t
+                my @t2 = split /,\s*/, $t
+                my @t3
+                $for $i=0:@t2
+                    push @t3, shift @t
+                $l = $sp . join(', ', @t3) . ",\n"
+            $elif $orig[$i2]=~/^(\s*)(.*)$/ -> $sp, $t
+                $l = $sp . join(', ', @t)
+                @t = ()
+            $else
+                $print Error parsing function header: $orig[$i2]
+                die
+            # $print [$orig[$i2]] vs. [$l]
+            $if rough_match($orig[$i2], $l)
+                $i2++
+                push @new_out, $l
+            $else
+                $call @mismatch, function header
+
+    subcode: match_statement_split
+        $while 1
+            $l=~s/^\s+//
+            $if $orig[$i2]=~/^(\s*)(.+)$/ -> $sp, $t
+                # $print [$sp][$t][$l]
+                my $n = length($t)
+                $if substr($l, 0, $n) eq $t
+                    push @new_out, $orig[$i2]
+                    $i2++
+                    $l = substr($l, $n)
+                    $if $l=~/^\s*$/
+                        break
+                $else
+                    $call @mismatch, statement split
+
+fncode: rough_match($t, $l)
+    chomp $t
+    chomp $l
+
+    $if $t eq $l
+        return 1
+
+    $if $t=~/ != MPI_SUCCESS/
+        $t=~s/ != MPI_SUCCESS//
+        $if $t eq $l
+            return 1
+    $if $l=~/MPI_Aint /
+        $t=~s/\bint /MPI_Aint /g
+        $if $t eq $l
+            return 1
+
+    $global $extra_bracket
+    $if $t=~/^\s*/ && "$t {" eq $l
+        $extra_bracket++
+        return 1
+    $elif $t=~/^(\s*)else/ && "$1} else {" eq $l
+        return 1
+    # $print [$t] vs. [$l]
+    return 0
+
+subcode: mismatch(type)
+    $i1--
+    $print Mismatch [$(type)]: 
+    $print   $i1: $l-
+    $print   orig:
+    $print   $i2: $orig[$i2]
+    die
+                
+

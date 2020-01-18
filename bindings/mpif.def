@@ -1,0 +1,1249 @@
+page: mpif
+    module: perl
+
+    $call @parse_args
+    $call load_interface, include/mpi.h.in
+    $if $opts{build_io}
+        $call load_interface, mpi/romio/include/mpio.h.in
+
+    $call @add_specials
+    $call @build_fproto_h
+    $call @build_sources
+
+subcode: parse_args
+    $global %opts
+    $call set_default
+
+    #- -noprototypes, -infile=, -noromio, -debug, -prefix=, -pattern=, -feature=, deffile=
+    $foreach $a in @ARGS
+        $if $a=~/^-(\w+)=(.*)/
+            $opts{$1}=$2
+        $elif $a=~/^-(\w+)/
+            $opts{$1}=1
+
+    $if $opts{deffile}
+        # ../mpif_h/buildiface -infile=cf90t.h -deffile=./cf90tdefs 
+        # require $opts{deffile} 
+        $if $opts{deffile} =~/cf90tdefs/
+            $call cf90tdefs
+
+    subcode: set_default
+        $opts{build_prototypes} = 1
+        $opts{prototype_header_file} = "fproto.h"
+
+    subcode: cf90tdefs
+        $opts{build_prototypes} = 1
+        $opts{prototype_header_file} = "mpif90type.h"
+
+        $buildMakefile = 0;
+        # Not *all* of MPI
+        $is_MPI = 0;
+        $build_io = 0;
+        # But we do need the the weak and profiling support
+        $do_weak = 1;
+        $do_profiling = 1;
+        $header_file = "../mpif_h/mpi_fortimpl.h";
+        $build_prototypes = 1;
+        $prototype_header_file = "mpif90type.h";
+        #$debug = 1;
+
+        %special_routines = ();
+
+#---------------------------------------- 
+subcode: load_interface(file)
+    $(if:file~.*mpio.h.in)
+        my %skipBlocks = (
+            HAVE_MPI_DARRAY_SUBARRAY=>1,
+            HAVE_MPI_INFO => 1,
+            MPICH => 1,
+        )
+    $(else)
+        my %skipBlocks
+
+    $global @mpi_routine_list, %mpi_routines
+
+    my $stage = 0
+    &call open_r, ../../../$(file)
+        $if !$stage
+            $if /\/\*\s*Begin Prototypes/
+                $stage = 1
+        $else
+            $call @skip_blocks
+            $call @check_end
+            $call @skip_ifndef
+            $call @filter_comments
+            $if /^int\s+(MPI_|MPIX_)([A-Z][a-z0-9_]*)\s*\((.*)/
+                my ($prefix, $name, $args) = ($1, $2, $3)
+                $while $args!~/;/
+                    $args.= <In>
+                $args =~ s/MPICH_ATTR[A-Z_]*\([^)]*\)//g;
+                $args =~ s/MPICH_API_PUBLIC//g;
+                $args =~ s/ROMIO_API_PUBLIC//g;
+                $args =~ s/\)\s*;//g;
+                $args =~ s/[\r\n]*//g;
+		$args =~ s/const\s//g;
+
+                $call @filter_routine_names
+
+                $mpi_routines{$name} = {prefix=>$1, name=>$name, args=>$args}
+                push @mpi_routine_list, $name
+
+    # ------------------
+    subcode: filter_routine_names
+        $if defined $special_routines{$name}
+            next
+        $if defined $mpi_routines{$name}
+            warn "duplicate $name\n"
+            next
+
+    # ------------------
+    subcode: skip_blocks
+        $if /\/\*\s*Begin Skip Prototypes/
+            $while <In>
+                $if /\/\*\s*End Skip Prototypes/
+                    last
+    subcode: check_end
+        $if /\/\*\s*End Prototypes/
+            $stage = 0
+            last
+
+    subcode: skip_ifndef
+        $if /^#\s*ifndef\s+(\w*)/
+            $if defined $skipBlocks{$1}
+                $call skip_if_block
+
+    subcode: filter_comments
+        s/\/\*.*?\*\//g
+        $if /\/\*/
+            warn "Error in processing comment in file $(file)\n"
+
+    # -------------------
+    subcode: skip_if_block
+        my $level = 1
+        $while <In>
+            $if /^#\s*endif/
+                $level--
+                $if $level <= 0
+                    last
+            $elif /^#\s*if/
+                $level++
+
+
+subcode: each_mpi_routine
+    $foreach $name in @mpi_routine_list
+        my $arg = $mpi_routines{$name}->{args}
+        my $prefix = $mpi_routines{$name}->{prefix}
+
+        $global %CtoFName
+
+        my $lcname = lc($name)
+        $if defined $CtoFName{$lcname}
+            $lcname = $CtoFName{$lcname}
+
+        my $mpi_name = "${prefix}${lcname}_" 
+        my $MPI_name = uc($prefix)."$name"
+        BLOCK
+
+#---------------------------------------- 
+subcode: _autoload
+    $(if:0)
+        $global $ret_type = "FORT_DLL_SPEC $ret_type FORT_CALL"
+    $(else)
+        $global $ret_type = "void"
+
+subcode: build_fproto_h
+    my $ret_type = "void"
+
+    $if $opts{build_prototypes}
+        &call open_W, $opts{prototype_header_file}
+            &call each_mpi_routine
+                my $proto_args = get_proto_args($args)
+
+                my @segs
+                push @segs, "extern $ret_type $mpi_name($proto_args)"
+                $(if:1) # do_weak
+                    push @segs, " FUNC_ATTRIBUTES($mpi_name)"
+
+                my $t = join('', @segs)
+                $print "$t;\n"
+
+subcode: build_sources
+    &call each_mpi_routine
+        my $proto_args = get_proto_args($args)
+        my $filename = "${lcname}f.c"
+        $call @set_err_vars
+        &call open_W, $filename
+            $call @dump_header
+            $print "$ret_type $mpi_name ($proto_args) {"
+            # specialInitClear
+            # protectMPIO #ifdef MPI_MODE_RDONLY
+            # print_special_decls($name)
+            # adjust_mpi_bottom($args)
+            my $call_args
+            $if $ChangeCall{$name}
+                my ($nameName, $extraArgs) = split /:/, $ChangeCall{$name}
+                $print "    $errparmlval = $newName-"
+                $call_args = get_call_args("$args, $extraArgs")
+            $else
+                $print "    $errparmlval = $MPI_name-"
+                $call_args = get_call_args("$args")
+            # print_post_call($name, $args)
+            # protectMPIO #else - #endif
+            # $print "    return $errparmrval"
+            $print "}"
+
+    subcode: set_err_vars
+        my $errparmtype = "MPI_Fint *"
+        my $errparm = "MPI_Fint *ierr"
+        my $errparamlval = "*ierr"
+        my $errparamrval = "*ierr"
+
+
+#---------------------------------------- 
+subcode: _autoload
+    $global %tof77, %declarg, %argsneedcast, %name_map
+    $global %special_routines, %ChangeCall, %special_args
+    %tof77 = (
+        'MPI_Datatype' => 'MPI_Fint *',
+        'MPI_Comm' => 'MPI_Fint *',
+        'MPI_File' => 'MPI_Fint *',
+        'MPI_Win' => 'MPI_Fint *',
+        'MPI_Request' => 'MPI_Fint *',
+        'MPI_Group' => 'MPI_Fint *',
+        'MPI_Op' => 'MPI_Fint *',
+        'MPI_Info' => 'MPI_Fint *',
+        'MPI_Errhandler' => 'MPI_Fint *',
+        'MPI_Message' => 'MPI_Fint *',
+        'MPI_Aint' => 'MPI_Fint *',   # Should be MPIR_FAint
+        'MPI_FAintp' => 'MPI_Aint *', # Used to force an MPI_Aint*
+        'MPI_Offset' => 'MPI_Offset *', # Should be MPIR_FOint
+        'MPI_Count' => 'MPI_Count *', # Should be MPIR_FCint?
+        'MPI_Count*' => 'MPI_Count *', # Should be MPIR_FCint?
+        'int' => 'MPI_Fint *',
+        'int[]' => 'MPI_Fint',        # no * because we'll use array form
+        'int[][3]' => 'MPI_Fint',     # no * because we'll use array form
+        'MPI_Datatype*' => 'MPI_Fint *',
+        'MPI_Datatype[]' => 'MPI_Fint', # no * because we'll use array form
+        'MPI_Comm*' => 'MPI_Fint *',
+        'MPI_File*' => 'MPI_Fint *',
+        'MPI_Win*' => 'MPI_Fint *', 
+        'MPI_Group*' => 'MPI_Fint *',
+        'MPI_Request*' => 'MPI_Fint *',
+        'MPI_Request[]' => 'MPI_Fint',
+        'MPI_Message*' => 'MPI_Fint *',
+        'MPI_Aint*' => 'MPI_Fint *',   # Should be MPIR_FAint
+        'MPI_Count*' => 'MPI_Count *',
+        'int *' => 'MPI_Fint *',
+        'int*' => 'MPI_Fint *',         # Catch missing space
+        'MPI_Op*' => 'MPI_Fint *',
+        'MPI_Status*' => 'MPI_Fint *',
+        'MPI_Status[]' => 'MPI_Fint',
+        'MPI_Info*' => 'MPI_Fint *',
+        'MPI_Info[]' => 'MPI_Fint',
+        'MPI_Errhandler*' => 'MPI_Fint *',
+    )
+
+    # declarg is special parameters for certain routines
+    %declarg = (
+        'type_extent-2' => 'MPI_Fint *',
+        'type_lb-2' => 'MPI_Fint *',
+        'type_ub-2' => 'MPI_Fint *', 
+        'type_struct-3' => 'MPI_Fint *',   # Really [], but * is easier
+        'type_hindexed-3' => 'MPI_Fint *', # As above
+        'type_hvector-3' => 'MPI_Fint *',
+        # The following are MPI-2 routines with address args.
+        # For these, the user must pass in the correct arguments
+        'file_get_type_extent-3' => 'MPI_FAint *',
+        'pack_external-6' => 'MPI_Aint *',        # Value in C call
+        'pack_external-7' => 'MPI_Aint *',
+        'pack_external_size-4' => 'MPI_Aint *',
+        'type_create_hvector-3' => 'MPI_Aint *',  # Value in C call
+        'type_create_hindexed-3' => 'MPI_Aint *',
+        'type_create_struct-3' => 'MPI_Aint *',
+        'type_get_contents-6' => 'MPI_Aint *',
+        'type_get_extent-2' => 'MPI_Aint *',
+        'type_get_extent-3' => 'MPI_Aint *',
+        'type_get_true_extent-2' => 'MPI_Aint *',
+        'type_get_true_extent-3' => 'MPI_Aint *',
+        'type_create_resized-2' => 'MPI_Aint *',  # Value in C call
+        'type_create_resized-3' => 'MPI_Aint *',  # Value in C call
+        'unpack_external-3' => 'MPI_Aint *',      # Value in C call
+        'unpack_external-4' => 'MPI_Aint *',
+        'win_create-2' => 'MPI_Aint *',
+        'accumulate-5' => 'MPI_Aint *',
+        'put-5' => 'MPI_Aint *',
+        'get-5' => 'MPI_Aint *',
+        'alloc_mem-1' => 'MPI_Aint *',
+        'win_shared_query-3' => 'MPI_Aint *',
+        'compare_and_swap-6' => 'MPI_Aint *',
+        'fetch_and_op-5' => 'MPI_Aint *',
+        'get_accumulate-8' => 'MPI_Aint *',
+        'rput-5' => 'MPI_Aint *',
+        'rget-5' => 'MPI_Aint *',
+        'raccumulate-5' => 'MPI_Aint *',
+        'rget_accumulate-8' => 'MPI_Aint *',
+        'win_attach-3' => 'MPI_Aint *',
+        'win_allocate-1' => 'MPI_Aint *',
+        'win_allocate_shared-1' => 'MPI_Aint *',
+        #'status_set_elements_x-3' => 'MPI_Count *',
+    )
+
+    %argsneedcast = (
+        'MPI_Request *' => '(MPI_Request *)(ARG)',
+        'MPI_Status *'  => '(MPI_Status *)(ARG)',
+        'MPI_Status []' => '(MPI_Status [])(ARG)',
+        'MPI_File' => 'MPI_File_f2c(ARG)',
+        'MPI_Comm' => '(MPI_Comm)(ARG)',
+        'MPI_Comm *' => '(MPI_Comm *)(ARG)',
+        'MPI_Datatype' => '(MPI_Datatype)(ARG)',
+        'MPI_Datatype *' => '(MPI_Datatype *)(ARG)',
+        'MPI_Info *' => '(MPI_Info *)(ARG)',
+        'MPI_Info' => '(MPI_Info)(ARG)',
+        'MPI_Message *' => '(MPI_Message *)(ARG)',
+        'int [][3]' => '(int (*)[3])(ARG)'
+    );
+
+    ##
+    ## For implementations other than MPICH, we'll need to consider using
+    ## MPI_C2f_<name> and MPI_F2c_<name>, as in 
+    ## 'MPI_Info' => 'MPI_F2c_info(ARG)'
+    ##
+    # name_map maps the filenames.  Most filenames are created automatically
+    # from the routine name, but some names have too many characters (15, 
+    # including the extension(.o) is a limit for ar in some systems).
+    %name_map = (
+        'add_error_class' => 'adderrclass',
+        'add_error_code' => 'adderrcode',
+        'add_error_string' => 'adderrstring',
+        'buffer_attach' => 'bufattach',
+        'buffer_detach' => 'bufdetach',
+        'comm_call_errhandler' => 'commcallerr',
+        'comm_create_errhandler' => 'commcreerr',
+        'comm_create_keyval' => 'commnewkey',
+        'comm_delete_attr' => 'commdelattr',
+        'comm_disconnect' => 'commdisc',
+        'comm_free_keyval' => 'commfreekey',
+        'comm_get_errhandler' => 'commgeterr',
+        'comm_get_name' => 'commgetnam',
+        'comm_get_parent' => 'commparent',
+        'comm_remote_group' => 'commrgroup',
+        'comm_remote_size' => 'commrsize',
+        'comm_set_errhandler' => 'commseterr',
+        'comm_spawn_multiple' => 'spawnmult',
+        'comm_test_inter' => 'commtestic',
+        'errhandler_create' => 'errhcreate',
+        'errhandler_free' => 'errhfree',
+        'errhandler_get' => 'errhget',
+        'errhandler_set' => 'errhset',
+        'file_call_errhandler' => 'filecallerr',
+        'file_create_errhandler' => 'filecreerr',
+        'file_get_errhandler' => 'filegeterr',
+        'file_set_errhandler' => 'fileseterr',
+        'get_processor_name' => 'getpname',
+        'graph_neighbors_count' => 'grfnbcount',
+        'graph_neighbors' => 'grfnbrs',
+        'grequest_complete' => 'greqcomplete',
+        'grequest_start' => 'greqstart',
+        'group_difference' => 'groupdiff',
+        'group_intersection' => 'groupinter',
+        'group_range_excl' => 'grouprexcl',
+        'group_range_incl' => 'grouprincl',
+        'group_translate_ranks' => 'grouptranks',
+        'info_get_nkeys' => 'infognk',
+        'info_get_nthkey' => 'infognthk',
+        'info_get_valuelen' => 'infovallen',
+        'intercomm_create' => 'iccreate',
+        'intercomm_merge' => 'icmerge',
+        'is_thread_main' => 'isthrmain',
+        'pack_external_size' => 'packesize',
+        'reduce_scatter' => 'redscat',
+        'request_get_status' => 'reqgetstat',
+        'sendrecv_replace' => 'sndrcvrpl',
+        'status_set_cancelled' => 'statgetcl',
+        'status_set_elements' => 'statsetel',
+        'test_cancelled' => 'testcancel',
+        'type_contiguous' => 'typecontig',
+        'type_create_darray' => 'typedarray',
+        'type_create_f90_integer' => 'typef90int',
+        'type_create_f90_real' => 'typef90real',
+        'type_create_f90_complex' => 'typef90cmplx',
+        'type_create_hindexed' => 'typechind',
+        'type_create_hvector' => 'typechvec',
+        'type_create_indexed_block' => 'typecindb',
+        'type_create_keyval' => 'typenewkey',
+        'type_create_resized' => 'typecresize', 
+        'type_create_struct' => 'typecstruct',
+        'type_create_subarray' => 'typecsubarr',
+        'type_delete_attr' => 'typedelattr',
+        'type_free_keyval' => 'typefreekey',
+        'type_get_contents' => 'typegetcnts',
+        'type_get_envelope' => 'typegetenv',
+        'type_get_extent' => 'typegetextent',  # there is already a type_extent
+        'type_get_name' => 'typegname',
+        'type_get_true_extent' => 'typegtext',
+        'type_set_attr' => 'typesetattr',
+        'type_set_name' => 'typesetname',
+        'unpack_external' => 'unpackext',
+        'unpublish_name' => 'unpubname',
+        'win_call_errhandler' => 'wincallerr',
+        'win_create_errhandler' => 'wincreerr',
+        'win_create_keyval' => 'winnewkey',
+        'win_delete_attr' => 'windelattr',
+        'win_free_keyval' => 'winfreekey',
+        'win_get_errhandler' => 'wingeterr',
+        'win_set_errhandler' => 'winseterr',
+    )
+
+    # Special routines have very different calling seqences in C and Fortran
+    # or different behavior.
+    # Init and Init thread have different arg lists (no argc, argv)
+    # Pcontrol has no varargs
+    # Address and Get_address require special integer types and
+    # possibly handling for MPI_BOTTOM
+    # Keyval routines require setting the language to Fortran (Attribute
+    # routines are handled with the special argument processing)
+
+    # The Type_create_f90_xxx routines are only available as part of the
+    # extended Fortran support, and are excluded from the f77 routines.
+    # Aint_add/diff do not have the ierror argument
+    %special_routines = (
+        'Init' => 1, 'Init_thread' => 1, 'Pcontrol' => '1',
+        'Address' => 1, 'Get_address' => 1,
+        'Keyval_create' => 1, 'Status_f2c' => 1,
+        'Status_c2f' => 1,
+        'Type_create_f90_integer' => 1,
+        'Type_create_f90_real' => 1,
+        'Type_create_f90_complex' => 1,
+        'Aint_add' => 1,
+        'Aint_diff' => 1,
+    )
+
+    # Some routines have special needs and must call a different routine.  For
+    # similicity, we make the requirement that the replacement routine take
+    # all of the arguments of the original routine, but all additional arguments
+    # at the end.  This is used with the attribute routines which must 
+    # pass an additional argument to a special attribute routine that handles
+    # the differences between C and Fortran attributes.
+    %ChangeCall = (
+        'Comm_get_attr' => 'MPII_Comm_get_attr_fort:!MPIR_ATTR_AINT' ,
+        'Type_get_attr' => 'MPII_Type_get_attr:!MPIR_ATTR_AINT',
+        'Win_get_attr'  => 'MPII_Win_get_attr:!MPIR_ATTR_AINT',
+        'Attr_get'      => 'MPII_Comm_get_attr_fort:!MPIR_ATTR_INT',
+        'Comm_set_attr' => 'MPII_Comm_set_attr:!MPIR_ATTR_AINT',
+        'Type_set_attr' => 'MPII_Type_set_attr:!MPIR_ATTR_AINT',
+        'Win_set_attr'  => 'MPII_Win_set_attr:!MPIR_ATTR_AINT',
+        'Attr_put'      => 'MPII_Comm_set_attr:!MPIR_ATTR_INT',
+    )
+
+    %special_args = (
+        #    'Allreduce' => '1:2', 'Allreduce-1' => 'in:bufptr',	
+        #		 'Allreduce-2' => 'in:bufptr', 
+        #    'Bcast' => '1', 'Bcast-1' => 'in:bufptr',		 
+        #    'Gather' => '1:4', 'Gather-1' => 'in:bufptr', 'Gather-4' => 'in:bufptr',
+        #    'Gatherv' => '1:4', 'Gatherv-1' => 'in:bufptr', 'Gatherv-4' => 'in:bufptr',
+        #    'Scatter' => '1:4', 'Scatter-1' => 'in:bufptr', 'Scatter-4' => 'in:bufptr',
+        #    'Scatterv' => '1:5', 'Scatterv-1' => 'in:bufptr', 'Scatterv-5' => 'in:bufptr',
+        #    'Allgather' => '1:4', 'Allgather-1' => 'in:bufptr', 'Allgather-4' => 'in:bufptr',
+        #    'Allgatherv' => '1:4', 'Allgatherv-1' => 'in:bufptr', 'Allgatherv-4' => 'in:bufptr',
+        #    'Alltoall' => '1:4', 'Alltoall-1' => 'in:bufptr', 'Alltoall-4' => 'in:bufptr',
+        #    'Alltoallv' => '1:5', 'Alltoallv-1' => 'in:bufptr', 'Alltoallv-5' => 'in:bufptr',
+        #    'Reduce' => '1:2', 'Reduce-1' => 'in:bufptr', 'Reduce-2' => 'in:bufptr',
+        #    'Reduce_scatter' => '1:2', 'Reduce_scatter-1' => 'in:bufptr', 
+        #		  'Reduce_scatter-2' => 'in:bufptr',
+        #    'Scan' => '1:2', 'Scan-1' => 'in:bufptr', 'Scan-2' => 'in:bufptr',
+        #
+        'Gather' => '1', 'Gather-1' => 'in:inplace', 
+        'Gatherv' => '1:5:6', 'Gatherv-1' => 'in:inplace',
+                'Gatherv-5' => 'in:fint2int_array:_commsize(*v9)',
+                'Gatherv-6' => 'in:fint2int_array:_commsize',
+        'Scatter' => '4', 'Scatter-4' => 'in:inplace',
+        'Scatterv' => '2:3:5', 
+                    'Scatterv-2' => 'in:fint2int_array:_commsize(*v9)',
+                    'Scatterv-3' => 'in:fint2int_array:_commsize',
+                    'Scatterv-5' => 'in:inplace',
+        'Allgather' => '1', 'Allgather-1' => 'in:inplace',
+        'Allgatherv' => '1:5:6', 'Allgatherv-1' => 'in:inplace',
+                    'Allgatherv-5' => 'in:fint2int_array:_commsize(*v8)',
+                    'Allgatherv-6' => 'in:fint2int_array:_commsize',
+        'Reduce' => '1', 'Reduce-1' => 'in:inplace',
+        'Allreduce' => '1', 'Allreduce-1' => 'in:inplace',
+        'Reduce_scatter' => '1:3', 
+                'Reduce_scatter-1' => 'in:inplace',
+                'Reduce_scatter-3' => 'in:fint2int_array:_commsize(*v6)',
+        'Reduce_scatter_block' => '1',
+                'Reduce_scatter_block-1' => 'in:inplace',
+        'Scan' => '1', 'Scan-1' => 'in:inplace',
+        'Exscan' => '1', 'Exscan-1' => 'in:inplace',
+        'Alltoall' => '1',
+                'Alltoall-1' => 'in:inplace',
+        'Alltoallv' => '1:2:3:6:7',
+                'Alltoallv-1' => 'in:inplace',
+                'Alltoallv-2' => 'in:fint2intinplace_array:_commsize(*v9)',
+                'Alltoallv-3' => 'in:fint2intinplace_array:_commsize',
+                'Alltoallv-6' => 'in:fint2int_array:_commsize',
+                'Alltoallv-7' => 'in:fint2int_array:_commsize',
+        'Alltoallw' => '1:2:3:4:6:7:8',
+                'Alltoallw-1' => 'in:inplace',
+                'Alltoallw-2' => 'in:fint2intinplace_array:_commsize(*v9)',
+                'Alltoallw-3' => 'in:fint2intinplace_array:_commsize',
+                'Alltoallw-6' => 'in:fint2int_array:_commsize',
+                'Alltoallw-7' => 'in:fint2int_array:_commsize',
+        # FIXME: -4 needs inplace
+                'Alltoallw-4' => 'in:handle_array:_commsize:MPI_Datatype',
+                'Alltoallw-8' => 'in:handle_array:_commsize:MPI_Datatype',
+
+        'Add_error_string' => '2', 'Add_error_string-2' => 'in:addnull',
+        'Attr_put' => '3', 'Attr_put-3' => 'in:addrint',
+        'Attr_get' => '3:4', 'Attr_get-4' => 'out:logical', 
+                    'Attr_get-3' => 'out:attrint:4',
+        'Comm_set_attr' => '3', 'Comm_set_attr-3' => 'in:addraint', 
+        'Type_set_attr' => '3', 'Type_set_attr-3' => 'in:addraint',
+        'Win_set_attr' => '3', 'Win_set_attr-3' => 'in:addraint',
+        'Comm_get_attr' => '3:4', 'Comm_get_attr-4' => 'out:logical',
+                    'Comm_get_attr-3' => 'out:attraint:4',
+        'Type_get_attr' => '3:4', 'Type_get_attr-4' => 'out:logical',
+                    'Type_get_attr-3' => 'out:attraint:4',
+        'Win_get_attr' => '3:4', 'Win_get_attr-4' => 'out:logical',		   
+                    'Win_get_attr-3' => 'out:attraint:4',
+        'Buffer_detach' => '1', 'Buffer_detach-1' => 'out:bufaddr',		 
+        'Cart_create' => '3:4:5:6', 
+                    'Cart_create-3' => 'in:fint2int_array:*v2',
+                    'Cart_create-4' => 'in:logical_array:*v2', 
+                    'Cart_create-5' => 'in:logical', 
+                    'Cart_create-6' => 'out:handle::MPI_Comm',
+        'Cart_get' => '3:4:5', 
+                    'Cart_get-3' => 'out:fint2int_array:*v2',
+                    'Cart_get-4' => 'out:logical_array:*v2',
+                    'Cart_get-5' => 'out:fint2int_array:*v2',
+        'Cart_sub' => '2:3', 
+                    'Cart_sub-2' => 'in:logical_array:_cartdim',
+                    'Cart_sub-3' => 'out:handle::MPI_Comm',
+        'Cart_coords' => '4', 
+                    'Cart_coords-4' => 'out:fint2int_array:*v3',
+        'Cart_map' => '3:4',
+                    'Cart_map-3' => 'in:fint2int_array:*v2',
+                    'Cart_map-4' => 'in:logical_array:*v2',
+        'Cart_rank' => '2',
+                    'Cart_rank-2' => ,'in:fint2int_array:_cartdim',
+        # FIXME: For cart_sub, need to update arg 2, in:finttoint_array, but 
+        # size is size of input cart 
+        'Dims_create' => '3', 
+                    'Dims_create-3' => 'inout:fint2int_array:*v2',
+        'Graph_create' => '3:4:5:6',
+                    'Graph_create-3' => 'in:fint2int_array:*v2',
+                    'Graph_create-4' => 'in:fint2int_array:v3[*v2-1]',
+                    'Graph_create-5' => 'in:logical',
+                    'Graph_create-6' => 'out:handle::MPI_Comm',
+        'Graph_get' => '4:5', 'Graph_get-4' => 'out:fint2int_array:*v2',
+                    'Graph_get-5' => 'out:fint2int_array:*v3',
+        'Graph_map' => '3:4', 'Graph_map-3' => 'in:fint2int_array:*v2',
+                    'Graph_map-4' => 'in:fint2int_array:*v2',
+        'Graph_neighbors' => '4',
+                'Graph_neighbors-4' => 'out:fint2int_array:*v3',
+        'Comm_create' => '3', 'Comm_create-3' => 'out:handle::MPI_Comm',
+        'Comm_create_group' => '4', 'Comm_create_group-4' => 'out:handle::MPI_Comm',
+        'Comm_dup' => '2', 'Comm_dup-2' => 'out:handle::MPI_Comm',
+        'Comm_dup_with_info' => '3', 
+                'Comm_dup_with_info-3' => 'out:handle::MPI_Comm',
+        'Comm_idup' => '2', 'Comm_idup-2' => 'out:handle::MPI_Comm',
+        'Comm_split' => '4', 'Comm_split-4' => 'out:handle::MPI_Comm',
+        'Comm_split_type' => '5', 'Comm_split_type-5' => 'out:handle::MPI_Comm',
+        'Comm_free' => '1', 'Comm_free-1' => 'inout:handle::MPI_Comm',
+        'Comm_accept' => '1:5', 'Comm_accept-1' => 'in:addnull',
+                    'Comm_accept-5' => 'out:handle::MPI_Comm',
+        'Comm_connect' => '1:5', 'Comm_connect-1' => 'in:addnull',
+                    'Comm_connect-5' => 'out:handle::MPI_Comm',
+        'Comm_disconnect' => '1', 'Comm_disconnect-1' => 'inout:handle::MPI_Comm',
+        'Comm_join' => '2', 'Comm_join-2' => 'out:handle::MPI_Comm',
+        'Comm_get_name' => '2', 'Comm_get_name-2' => 'out:blankpad',
+        'Comm_set_name' => '2', 'Comm_set_name-2' => 'in:addnull',
+        'Comm_spawn' => '1:2:7:8', 'Comm_spawn-1' => 'in:addnull', 
+                    'Comm_spawn-2' => 'in:chararray',
+                    'Comm_spawn-7' => 'out:handle::MPI_Comm',
+                    'Comm_spawn-8' => 'out:errcodesignore:*v3',
+        'Comm_get_parent' => '1', 
+                    'Comm_get_parent-1' => 'out:handle::MPI_Comm',
+        'Comm_test_inter' => '2', 'Comm_test_inter-2' => 'out:logical',
+        'Group_incl' => '3:4', 'Group_incl-3' => 'in:fint2int_array:*v2',
+                    'Group_incl-4' => 'out:handle::MPI_Group',
+        'Group_excl' => '3:4', 'Group_excl-3' => 'in:fint2int_array:*v2',
+                    'Group_excl-4' => 'out:handle::MPI_Group',
+        'Group_range_incl' => '3:4', 
+                    'Group_range_incl-3' => 'in:fint2int_rangearray:(*v2*3)',
+                    'Group_range_incl-4' => 'out:handle::MPI_Group',
+        'Group_range_excl' => '3:4',
+                    'Group_range_excl-3' => 'in:fint2int_rangearray:(*v2*3)',
+                    'Group_range_excl-4' => 'out:handle::MPI_Group',
+        'Group_translate_ranks' => '3:5', 
+                    'Group_translate_ranks-3' => 'in:fint2int_array:*v2',
+                    'Group_translate_ranks-5' => 'out:fint2int_array:*v2',
+        'Get_processor_name' => '1', 'Get_processor_name-1' => 'out:blankpad',
+        'Get_library_version' => '1', 'Get_library_version-1' => 'out:blankpad',
+        'Error_string' => '2', 'Error_string-2' => 'out:blankpad',
+        'Errhandler_free' => '1', 
+                'Errhandler_free-1' => 'inout:handle::MPI_Errhandler', 
+        'Keyval_free' => '1', 
+                'Keyval_free-1' => 'inout:fint2int',
+        'Intercomm_merge' => '2:3', 'Intercomm_merge-2' => 'in:logical',
+                    'Intercomm_merge-3' => 'out:handle::MPI_Comm',
+        'Intercomm_create' => '6', 'Intercomm_create-6' => 'out:handle::MPI_Comm',
+        'Info_get' => '2:4:5', 'Info_get-2' => 'in:addnull',
+                    'Info_get-4' => 'out:blankpadonflag:l5',
+                    'Info_get-5' => 'out:logical',
+        'Info_set' => '2:3', 'Info_set-2' => 'in:addnullandtrim', 
+                    'Info_set-3' => 'in:addnullandtrim',
+        'Info_get_nthkey' => '3', 'Info_get_nthkey-3' => 'out:blankpad',
+        'Info_get_valuelen' => '2:4', 'Info_get_valuelen-2' => 'in:addnull',
+                    'Info_get_valuelen-4' => 'out:logical',
+        'Info_delete' => '2', 'Info_delete-2' => 'in:addnull',
+        'Lookup_name' => '1:3', 'Lookup_name-1' => 'in:addnull', 
+                    'Lookup_name-3' => 'out:blankpad',
+        'Open_port' => '2', 'Open_port-2' => 'out:blankpad',
+        'Close_port' => '1', 'Close_port-1' => 'in:addnull',
+        'Pack_external' => '1:6', 'Pack_external-1' => 'in:addnull',
+                    'Pack_external-6' => 'in:aintToVal',
+        'Pack_external_size' => '1', 'Pack_external_size-1' => 'in:addnull',
+        'Publish_name' => '1:3', 'Publish_name-1' => 'in:addnull',
+                    'Publish_name-3' => 'in:addnull',
+        # comm spawn multiple needs slightly different routines
+        'Comm_spawn_multiple' => '2:3:4:5:8:9',
+                    'Comm_spawn_multiple-2' => 'in:chararray:*v1',
+                    'Comm_spawn_multiple-3' => 'in:chararray2:*v1',
+                    'Comm_spawn_multiple-9' => 'out:errcodesignore:_sum(v4,*v1)',
+                    'Comm_spawn_multiple-4' => 'in:fint2int_array:*v1',
+                    'Comm_spawn_multiple-5' => 'in:handle_array:*v1:MPI_Info',
+                    'Comm_spawn_multiple-8' => 'out:handle::MPI_Comm',
+        'Initialized' => '1', 'Initialized-1' => 'out:logical',
+        'Finalized' => '1', 'Finalized-1' => 'out:logical',
+        'Is_thread_main' => '1', 'Is_thread_main-1' => 'out:logical',
+        'Op_create' => '2', 'Op_create-2' => 'in:logical',
+        'Op_free' => '1', 'Op_free-1' => 'inout:handle::MPI_Op',
+        'Iprobe' => '4:5', 'Iprobe-4' => 'out:logical',
+                    'Iprobe-5' => 'out:status::l4',
+        'Probe' => '4', 'Probe-4' => 'out:status',
+        'Recv' => '7', 'Recv-7' => 'out:status',
+        'Mprobe' => '5', 'Mprobe-5' => 'out:status',
+        'Mrecv' => '5', 'Mrecv-5' => 'out:status', 
+        'Improbe' => '4:6', 'Improbe-4' => 'out:logical', 
+        'Improbe-6' => 'out:status',
+        'Sendrecv' => '12', 'Sendrecv-12' => 'out:status',
+        'Sendrecv_replace' => '9', 'Sendrecv_replace-9' => 'out:status',
+        #    'Send' => '1', 'Send-1' => 'in:bufptr',
+        #    'Ssend' => '1', 'Ssend-1' => 'in:bufptr',
+        #    'Rsend' => '1', 'Rsend-1' => 'in:bufptr',
+        #    'Bsend' => '1', 'Bsend-1' => 'in:bufptr',
+        #    'Isend' => '1', 'Isend-1' => 'in:bufptr',
+        #    'Issend' => '1', 'Issend-1' => 'in:bufptr',
+        #    'Irsend' => '1', 'Irsend-1' => 'in:bufptr',
+        #    'Ibsend' => '1', 'Ibsend-1' => 'in:bufptr',
+        #    'Irecv' => '1', 'Irecv-1' => 'in:bufptr',
+        #    'Recv' => '1', 'Recv-1' => 'in:bufptr',		  
+        #    'Send_init' => '1', 'Send_init-1' => 'in:bufptr',
+        #    'Bsend_init' => '1', 'Bsend_init-1' => 'in:bufptr',
+        #    'Ssend_init' => '1', 'Ssend_init-1' => 'in:bufptr',
+        #    'Rsend_init' => '1', 'Rsend_init-1' => 'in:bufptr',
+        #    'Recv_init' => '1', 'Recv_init-1' => 'in:bufptr',
+        #    'Sendrecv' => '1:6', 'Sendrecv-1' => 'in:bufptr', 'Sendrecv-6' => 'in:bufptr',
+        #    'Sendrecv_replace' => '1', 'Sendrecv_replace-1' => 'in:bufptr',
+        'Test_cancelled' => '1:2', 
+                    'Test_cancelled-1' => 'in:status',
+                    'Test_cancelled-2' => 'out:logical',
+        'Test' => '1:2:3', 'Test-1' => 'inout:handle::MPI_Request', 
+                    'Test-2' => 'out:logical',
+                    'Test-3' => 'out:status:::l2',
+        'Testall' => '2:3:4', 'Testall-2' => 'inout:handle_array:*v1:MPI_Request',
+                    'Testall-3' => 'out:logical', 
+                    'Testall-4' => 'out:status_array:*v1::l3',
+        'Testany' => '2:3:4:5', 'Testany-2' => 'inout:handle_array:*v1:MPI_Request',
+                    'Testany-4' => 'out:logical',
+                    'Testany-3' => 'out:index',
+                    'Testany-5' => 'out:status:::l4',
+        'Testsome' => '2:3:4:5', 
+                    'Testsome-2' => 'inout:handle_array:*v1:MPI_Request',
+                    'Testsome-3' => 'out:fint2int',
+                    'Testsome-4' => 'out:index_array:*v1:*v3',
+                    'Testsome-5' => 'out:status_array:*v1:*v3:l3>0',
+        'Get_count' => '1', 'Get_count-1' => 'in:status',
+        'Request_get_status' => '2:3',
+        'Request_get_status-2' => 'out:logical',
+        'Request_get_status-3' => 'out:status',
+        'Status_set_cancelled' => '1:2',
+        'Status_set_cancelled-1' => 'in:status',
+        'Status_set_cancelled-2' => 'in:logical',
+        'Status_set_elements' => '1',
+        'Status_set_elements-1' => 'out:status',
+        'Status_set_elements_x' => '1', 
+        'Status_set_elements_x-1' => 'out:status',
+        'Type_contiguous' => '2:3', 
+                    'Type_contiguous-2' => 'in:handle::MPI_Datatype',
+                    'Type_contiguous-3' => 'out:handle::MPI_Datatype',
+        'Type_vector' => '4:5', 
+                    'Type_vector-4' => 'in:handle::MPI_Datatype',
+                    'Type_vector-5' => 'out:handle::MPI_Datatype',
+        'Type_hvector' => '3:4:5', 
+                    'Type_hvector-3' => 'in:intToAint',
+                    'Type_hvector-4' => 'in:handle::MPI_Datatype',
+                    'Type_hvector-5' => 'out:handle::MPI_Datatype',
+        'Type_indexed' => '2:3:4:5',
+                    'Type_indexed-2' => 'in:fint2int_array:*v1',
+                    'Type_indexed-3' => 'in:fint2int_array:*v1',
+                    'Type_indexed-4' => 'in:handle::MPI_Datatype',
+                    'Type_indexed-5' => 'out:handle::MPI_Datatype',
+        'Type_hindexed' => '2:3:4:5',
+                    'Type_hindexed-2' => 'in:fint2int_array:*v1',
+                    'Type_hindexed-3' => 'in:intToAintArr:*v1',
+                    'Type_hindexed-4' => 'in:handle::MPI_Datatype',
+                    'Type_hindexed-5' => 'out:handle::MPI_Datatype',
+        'Type_struct' => '2:3:4:5',
+                    'Type_struct-2' => 'in:fint2int_array:*v1',
+                    'Type_struct-3' => 'in:intToAintArr:*v1',
+                    'Type_struct-4' => 'in:handle_array:*v1:MPI_Datatype',
+                    'Type_struct-5' => 'out:handle::MPI_Datatype',
+
+        'Type_commit' => '1', 
+                    'Type_commit-1' => 'inout:handle::MPI_Datatype',
+        'Type_free' => '1',
+                    'Type_free-1' => 'inout:handle::MPI_Datatype',
+        'Type_dup' => '2', 
+                    'Type_dup-2' => 'out:handle::MPI_Datatype',
+        'Type_match_size' => '3', 'Type_match_size-3' => 'out:handle::MPI_Datatype',
+        'Get_elements' => 1, 
+                    'Get_elements-1' => 'in:status',
+        'Get_elements_x' => 1,
+                    'Get_elements_x-1' => 'in:status',
+
+        'Type_create_hvector' => '3:5', 'Type_create_hvector-3' => 'in:aintToVal',
+                    'Type_create_hvector-5' => 'out:handle::MPI_Datatype',
+        'Type_create_hindexed' => '2:4:5', 
+                    'Type_create_hindexed-2' => 'in:fint2int_array:*v1',
+                    'Type_create_hindexed-4' => 'in:handle::MPI_Datatype',
+                    'Type_create_hindexed-5' => 'out:handle::MPI_Datatype',
+        'Type_create_indexed_block' => '3:4:5',
+                    'Type_create_indexed_block-3' => 'in:fint2int_array:*v1',
+                    'Type_create_indexed_block-4' => 'in:handle::MPI_Datatype',
+                    'Type_create_indexed_block-5' => 'out:handle::MPI_Datatype',
+        'Type_create_resized' => '2:3:4', 
+                    'Type_create_resized-2' => 'in:aintToVal', 
+                    'Type_create_resized-3' => 'in:aintToVal',
+                    'Type_create_resized-4' => 'out:handle::MPI_Datatype',
+        'Type_create_struct' => '2:4:5', 
+                    'Type_create_struct-2' => 'in:fint2int_array:*v1',
+                    'Type_create_struct-4' => 'in:handle_array:*v1:MPI_Datatype',
+                    'Type_create_struct-5' => 'out:handle::MPI_Datatype',
+        'Type_create_subarray' => '2:3:4:7',
+                    'Type_create_subarray-2' => 'in:fint2int_array:*v1',
+                    'Type_create_subarray-3' => 'in:fint2int_array:*v1',
+                    'Type_create_subarray-4' => 'in:fint2int_array:*v1',
+                    'Type_create_subarray-7' => 'out:handle::MPI_Datatype',
+        'Type_create_darray' => '4:5:6:7:10',
+                    'Type_create_darray-4' => 'in:fint2int_array:*v3',
+                    'Type_create_darray-5' => 'in:fint2int_array:*v3',
+                    'Type_create_darray-6' => 'in:fint2int_array:*v3',
+                    'Type_create_darray-7' => 'in:fint2int_array:*v3',
+                    'Type_create_darray-10' => 'out:handle::MPI_Datatype',
+        'Type_get_name' => '2', 'Type_get_name-2' => 'out:blankpad',
+        'Type_set_name' => '2', 'Type_set_name-2' => 'in:addnull',
+        'Type_get_contents' => '5:7',
+                    'Type_get_contents-5' => 'out:fint2int_array:*v2',
+                    'Type_get_contents-7' => 'out:handle_array:*v4:MPI_Datatype',
+        'Type_extent' => '2', 'Type_extent-2' => 'out:aintToInt',	      
+        'Type_lb' => '2', 'Type_lb-2' => 'out:aintToInt',	      
+        'Type_ub' => '2', 'Type_ub-2' => 'out:aintToInt',	      
+        # also need
+        'Unpack_external' => '1:3', 'Unpack_external-1' => 'in:addnull',
+                    'Unpack_external-3' => 'in:aintToVal',
+        'Unpublish_name' => '1:3', 'Unpublish_name-1' => 'in:addnull',
+                    'Unpublish_name-3' => 'in:addnull',
+        'Win_create' => '2', 'Win_create-2' => 'in:aintToVal', 
+        'Accumulate' => '5', 'Accumulate-5' => 'in:aintToVal',
+        'Put' => '5', 'Put-5' => 'in:aintToVal', 
+        'Get' => '5', 'Get-5' => 'in:aintToVal',
+        'Alloc_mem' => '1', 'Alloc_mem-1' => 'in:aintToVal', 
+        'Compare_and_swap' => '6', 'Compare_and_swap-6' => 'in:aintToVal',
+        'Fetch_and_op' => '5', 'Fetch_and_op-5' => 'in:aintToVal',
+        'Get_accumulate' => '8', 'Get_accumulate-8' => 'in:aintToVal',
+        'Rput' => '5', 'Rput-5' => 'in:aintToVal',
+        'Rget' => '5', 'Rget-5' => 'in:aintToVal',
+        'Raccumulate' => '5', 'Raccumulate-5' => 'in:aintToVal',
+        'Rget_accumulate' => '8', 'Rget_accumulate-8' => 'in:aintToVal',
+        'Win_attach' => '3', 'Win_attach-3' => 'in:aintToVal',
+        'Win_allocate' => '1', 'Win_allocate-1' => 'in:aintToVal',
+        'Win_allocate_shared' => '1', 'Win_allocate_shared-1' => 'in:aintToVal',
+        'Win_get_name' => '2', 'Win_get_name-2' => 'out:blankpad',
+        'Win_set_name' => '2', 'Win_set_name-2' => 'in:addnull',		  
+        'Win_test' => '2', 'Win_test-2' => 'out:logical',
+        'Wait' => '1:2', 'Wait-1' => 'inout:handle::MPI_Request', 
+                    'Wait-2' => 'out:status',
+        'Waitall' => '2:3', 'Waitall-2' => 'inout:handle_array:*v1:MPI_Request', 
+                    'Waitall-3' => 'out:status_array:*v1',		 
+        'Waitany' => '2:3:4', 'Waitany-2' => 'inout:handle_array:*v1:MPI_Request',
+                    'Waitany-3' => 'out:index',
+                    'Waitany-4' => 'out:status',
+        'Waitsome' => '2:3:4:5', 
+                    'Waitsome-2' => 'inout:handle_array:*v1:MPI_Request',
+                    'Waitsome-3' => 'out:fint2int',
+                    'Waitsome-4' => 'out:index_array:*v1:*v3',
+                    'Waitsome-5' => 'out:status_array:*v1:*v3',
+        'Startall' => '2',
+                    'Startall-2' => 'in:handle_array:*v1:MPI_Request',
+        # File routines are separate
+        'File_open' => '2:5', 'File_open-2' => 'in:addnull',
+                    'File_open-5' => 'out:FileToFint',
+        'File_close' => '1', 'File_close-1', 'inout:FileToFint',
+        'File_delete' => '1', 'File_delete-1' => 'in:addnull',
+        'File_set_view' => '5', 'File_set_view-5' => 'in:addnull',
+        'File_get_view' => '3:4:5', 
+                    'File_get_view-3' => 'out:handle::MPI_Datatype',
+                    'File_get_view-4' => 'out:handle::MPI_Datatype',
+                    'File_get_view-5' => 'out:blankpad',
+        'File_set_atomicity' => '2', 'File_set_atomicity-2' => 'in:logical',
+        'File_get_atomicity' => '2', 'File_get_atomicity-2' => 'out:logical',
+        'File_read' => '5', 
+                    'File_read-5' => 'out:status',
+        'File_read_shared' => '5', 
+                    'File_read_shared-5' => 'out:status',
+        'File_read_ordered' => '5', 
+                    'File_read_ordered-5' => 'out:status',
+        'File_read_ordered_end' => '3', 
+                    'File_read_ordered_end-3' => 'out:status',
+        'File_read_at' => '6', 
+                    'File_read_at-6' => 'out:status',
+        'File_read_all' => '5', 
+                    'File_read_all-5' => 'out:status',
+        'File_read_at_all' => '6', 
+                    'File_read_at_all-6' => 'out:status',
+        'File_read_at_all_end' => '3', 
+                    'File_read_at_all_end-3' => 'out:status',
+        'File_read_all_end' => '3', 
+                    'File_read_all_end-3' => 'out:status',
+        'File_write' => '5', 
+                    'File_write-5' => 'out:status',
+        'File_write_shared' => '5', 
+                    'File_write_shared-5' => 'out:status',
+        'File_write_ordered' => '5', 
+                    'File_write_ordered-5' => 'out:status',
+        'File_write_ordered_end' => '3', 
+                    'File_write_ordered_end-3' => 'out:status',
+        'File_write_at' => '6', 
+                    'File_write_at-6' => 'out:status',
+        'File_write_all' => '5', 
+                    'File_write_all-5' => 'out:status',
+        'File_write_at_all' => '6', 
+                    'File_write_at_all-6' => 'out:status',
+        'File_write_at_all_end' => '3', 
+                    'File_write_at_all_end-3' => 'out:status',
+        'File_write_all_end' => '3', 
+                    'File_write_all_end-3' => 'out:status',
+        'Register_datarep' => '1:2:3', 'Register_datarep-1' => 'in:addnull',
+                    'Register_datarep-2' => 'in:checkdatarep',
+                    'Register_datarep-3' => 'in:checkdatarep',
+        # MPI-2.2 Functions
+        'Op_commutative' => '2', 'Op_commutative-2' => 'out:logical',
+        'Dist_graph_create_adjacent' => '3:4:6:7:9:10',
+                'Dist_graph_create_adjacent-3' => 'in:fint2int_array:*v2',
+                'Dist_graph_create_adjacent-4' => 'in:unweighted:*v2',
+                'Dist_graph_create_adjacent-6' => 'in:fint2int_array:*v5',
+                'Dist_graph_create_adjacent-7' => 'in:unweighted:*v5',
+                'Dist_graph_create_adjacent-9' => 'in:logical',
+                'Dist_graph_create_adjacent-10' => 'out:handle::MPI_Comm',
+        'Dist_graph_create' => '3:4:5:6:8:9',
+                'Dist_graph_create-3' => 'in:fint2int_array:*v2',
+                'Dist_graph_create-4' => 'in:fint2int_array:*v2',
+                'Dist_graph_create-5' => 'in:fint2int_array:_sum(v4,*v2)',
+                'Dist_graph_create-6' => 'in:unweighted:_ssize',
+                'Dist_graph_create-8' => 'in:logical',
+                'Dist_graph_create-9' => 'out:handle::MPI_Comm',
+        'Dist_graph_neighbors_count' => '4',
+                'Dist_graph_neighbors_count-4' => 'out:logical',
+        'Dist_graph_neighbors' => '3:4:6:7',
+                'Dist_graph_neighbors-3' => 'out:fint2int_array:*v2',
+                'Dist_graph_neighbors-4' => 'out:unweighted:*v2',
+                'Dist_graph_neighbors-6' => 'out:fint2int_array:*v5',
+                'Dist_graph_neighbors-7' => 'out:unweighted:*v5',
+        # MPI 3.0 functions
+        'Igather' => '1', 'Igather-1' => 'in:inplace', 
+        'Igatherv' => '1:5:6', 'Igatherv-1' => 'in:inplace',
+                'Igatherv-5' => 'in:fint2int_array:_commsize(*v9)',
+                'Igatherv-6' => 'in:fint2int_array:_commsize',
+        'Iscatter' => '4', 'Iscatter-4' => 'in:inplace',
+        'Iscatterv' => '2:3:5', 
+                    'Iscatterv-2' => 'in:fint2int_array:_commsize(*v9)',
+                    'Iscatterv-3' => 'in:fint2int_array:_commsize',
+                    'Iscatterv-5' => 'in:inplace',
+        'Iallgather' => '1', 'Iallgather-1' => 'in:inplace',
+        'Iallgatherv' => '1:5:6', 'Iallgatherv-1' => 'in:inplace',
+                    'Iallgatherv-5' => 'in:fint2int_array:_commsize(*v8)',
+                    'Iallgatherv-6' => 'in:fint2int_array:_commsize',
+        'Ireduce' => '1', 'Ireduce-1' => 'in:inplace',
+        'Iallreduce' => '1', 'Iallreduce-1' => 'in:inplace',
+        'Ireduce_scatter' => '1:3', 
+                'Ireduce_scatter-1' => 'in:inplace',
+                'Ireduce_scatter-3' => 'in:fint2int_array:_commsize(*v6)',
+        'Ireduce_scatter_block' => '1',
+                'Ireduce_scatter_block-1' => 'in:inplace',
+        'Iscan' => '1', 'Iscan-1' => 'in:inplace',
+        'Ialltoall' => '1',
+                'Ialltoall-1' => 'in:inplace',
+        'Ialltoallv' => '1:2:3:6:7',
+                'Ialltoallv-1' => 'in:inplace',
+                'Ialltoallv-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Ialltoallv-3' => 'in:fint2int_array:_commsize',
+                'Ialltoallv-6' => 'in:fint2int_array:_commsize',
+                'Ialltoallv-7' => 'in:fint2int_array:_commsize',
+        'Ialltoallw' => '1:2:3:4:6:7:8',
+                'Ialltoallw-1' => 'in:inplace',
+                'Ialltoallw-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Ialltoallw-3' => 'in:fint2int_array:_commsize',
+                'Ialltoallw-6' => 'in:fint2int_array:_commsize',
+                'Ialltoallw-7' => 'in:fint2int_array:_commsize',
+                'Ialltoallw-4' => 'in:handle_array:_commsize:MPI_Datatype',
+                'Ialltoallw-8' => 'in:handle_array:_commsize:MPI_Datatype',
+        'Neighbor_allgatherv' => '5:6', 
+                'Neighbor_allgatherv-5' => 'in:fint2int_array:_commsize(*v8)',
+                'Neighbor_allgatherv-6' => 'in:fint2int_array:_commsize',
+        'Neighbor_alltoallv' => '2:3:6:7',
+                'Neighbor_alltoallv-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Neighbor_alltoallv-3' => 'in:fint2int_array:_commsize',
+                'Neighbor_alltoallv-6' => 'in:fint2int_array:_commsize',
+                'Neighbor_alltoallv-7' => 'in:fint2int_array:_commsize',
+        'Neighbor_alltoallw' => '2:4:6:8',
+                'Neighbor_alltoallw-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Neighbor_alltoallw-4' => 'in:handle_array:_commsize:MPI_Datatype',
+                'Neighbor_alltoallw-6' => 'in:fint2int_array:_commsize',
+                'Neighbor_alltoallw-8' => 'in:handle_array:_commsize:MPI_Datatype',
+        'Ineighbor_allgatherv' => '5:6', 
+                'Ineighbor_allgatherv-5' => 'in:fint2int_array:_commsize(*v8)',
+                'Ineighbor_allgatherv-6' => 'in:fint2int_array:_commsize',
+        'Ineighbor_alltoallv' => '2:3:6:7',
+                'Ineighbor_alltoallv-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Ineighbor_alltoallv-3' => 'in:fint2int_array:_commsize',
+                'Ineighbor_alltoallv-6' => 'in:fint2int_array:_commsize',
+                'Ineighbor_alltoallv-7' => 'in:fint2int_array:_commsize',
+        'Ineighbor_alltoallw' => '2:4:6:8',
+                'Ineighbor_alltoallw-2' => 'in:fint2int_array:_commsize(*v9)',
+                'Ineighbor_alltoallw-4' => 'in:handle_array:_commsize:MPI_Datatype',
+                'Ineighbor_alltoallw-6' => 'in:fint2int_array:_commsize',
+                'Ineighbor_alltoallw-8' => 'in:handle_array:_commsize:MPI_Datatype',
+        'Type_create_hindexed_block' => '4:5', 
+                    'Type_create_hindexed_block-4' => 'in:handle::MPI_Datatype',
+                    'Type_create_hindexed_block-5' => 'out:handle::MPI_Datatype',
+
+    )
+    # 
+    # These give special post processing after the MPI routine is called.  
+    # The named routine is invoked with the argument number, e.g., 
+    # &"setF90keyval"( FD,  1 );
+    %specialPost = (
+        'Type_create_keyval' => 3,
+        'Type_create_keyval-3' => 'setF90Type_keyval',
+        'Comm_create_keyval' => 3,
+        'Comm_create_keyval-3' => 'setF90Comm_keyval',
+        'Win_create_keyval' => 3,
+        'Win_create_keyval-3' => 'setF90Win_keyval', 
+        'Grequest_start' => 5,
+        'Grequest_start-5' => 'setF77greq',
+    )
+
+#---------------------------------------- 
+# Print the arguments for the routine DEFINITION.
+fncode: get_proto_args($arg)
+    my @parms = split(/\s*,\s*/, $arg );
+    my @segs
+
+    my $count = 1;
+    my $last_args = "";
+    my $prototype_only = $_[2];
+    my $routine = $_[3];
+
+    # Clear the @arg_addresses and $arg_qualifiers array.
+    $#arg_addresses = -1;
+    $#arg_qualifiers = -1;
+
+    # Special case: if the only parm is "void", remove it from the list
+    print STDERR "Nparms = $#parms, parms = " . join(',',@parms) . "\n" if $debug;
+    if ($#parms == 0 && $parms[0] eq "void") {
+	$#parms = -1;
+    }
+    # argsep is used to add a comma before every argument, except for the 
+    # first
+    $argsep = "";
+    push @segs, "( ";
+    foreach $parm (@parms) {
+	# Match type to replacement
+	print "parm = :$parm:\n" if $debug;
+	# Remove qualifiers from the parm
+	$arg_qualifiers[$count] = "";
+	if ($parm =~ /^const\s+/) {
+	    $parm =~ s/^const\s+//;
+	    $arg_qualifiers[$count] .= "const ";
+	}
+	if ($parm =~ /^restrict\s+/) {
+	    $parm =~ s/restrict\s+//;
+	    $arg_qualifiers[$count] .= "restrict ";
+	}
+	# Remove arg names from array types
+	if ($parm =~ /(\w+)\s+(\w+)\s*\[\]/) {
+	    # Assume that this is <type> <name>[]; convert to
+	    # <type>[]
+	    print "    Removing argname $2 from parm array $parm\n" if $debug;
+	    $parm = "$1" . "[]";
+	}
+	# Remove arg names from pointer types
+	elsif ($parm =~ /(.*\*)\s+(\w+)/) {
+	    print "    Removing argname $2 from parm pointer\n" if $debug;
+	    $parm = $1;
+	}
+	# Remove blanks from the parm
+	$parm =~ s/\s+//;
+	$arg_addresses[$count] = 0;
+
+	# This handles routines that have special declaration requirements
+	# for particular arguments
+	if (defined($declarg{"$routine-$count"})) {
+	    print "    Using declarg{$routine-$count} for this parameter ($parm)\n" if $debug;
+	    $parm = $declarg{"$routine-$count"};
+	    if ($prototype_only) {
+		push @segs, "$argsep$parm";
+	    }
+	    else {
+		push @segs, "$argsep$parm v$count";
+	    }
+	}
+	elsif ($parm =~ /char\s*\*/ || $parm =~ /char\s*\[\s*\]/) {
+	    # char's go out at char *v FORT_MIXED_LEN(d) 
+	    # and FORT_END_LEN(d) at the end
+	    # (even if an array, because at the Fortran level, it
+	    # is still a pointer to a character variable; the length
+	    # of each entry in the array is the "d" value).
+	    # FORT_END_LEN and FORT_MIXED_LEN contain the necessary comman
+	    # if they are prsent at all.
+	    print "    parm is a character string\n" if $debug;
+	    if ($prototype_only) {
+		push @segs, "${argsep}char * FORT_MIXED_LEN_DECL";
+		$last_args .= "FORT_END_LEN_DECL ";
+	    }
+	    else {
+		push @segs, "${argsep}char *v$count FORT_MIXED_LEN(d$count)";
+		$last_args .= "FORT_END_LEN(d$count) ";
+	    }
+	}
+	elsif ($parm =~/\[/) {
+	    # Argument type is array, so we need to 
+	    #  a) mark as containing a star
+	    #  b) place parameter correctly
+	    $star_count = 1;
+	    $arg_addresses[$count] = $star_count;
+	    # Split into raw type and []
+            # Use \S* instead of the equivalent [^\s]*.
+            # (\S is not-a-space)
+            # perl 5.8 is known to mishandle the latter, leading to
+	    # an empty basetype
+	    if ($parm =~ /\s*(\S*)\s*(\[\s*\])/) {
+		$basetype = $1;
+	    }
+	    else {
+		print STDERR "Internal error.  Could not find basetype\n";
+		print STDERR "This may be a bug in perl in the handling of certain expressions\n";
+	    }
+	    print "\tparm $parm is array of >$basetype<\n" if $debug;
+	    #$foundbrack = $2;
+	    if (defined($tof77{$parm})) {
+		# This is a special case; the full type is defined.
+		# This is used, for example, for int [][3] in the
+		# routines that specify a range.
+		print "Matched to full type $parm with replacement $tof77{$parm}\n" if $debug;
+		# We use the replacement type
+		$basetype = $tof77{$parm};
+		$star_count = 0;
+		$arg_addresses[$count] = $star_count;
+	    }
+	    elsif ($basetype eq "int") {
+		# Do nothing because the [] added to the arg below
+		# is all that is necessary.
+		$star_count = 0;
+		$arg_addresses[$count] = $star_count;
+	    }
+	    elsif (defined($tof77{"$basetype\[\]"})) {
+		# Use the code for handling array parameters if
+		# mapping code is provided.
+		print "Match to array type $basetype\[\]\n" if $debug;
+		$star_count = 0;
+		$arg_addresses[$count] = $star_count;
+		$basetype = $tof77{"$basetype\[\]"};
+	    }
+	    elsif (defined($tof77{$basetype})) {
+		# FIXME: This code (now commented out) is not correct
+		print STDERR "Using fall through for $basetype in $routine\n" if $debug;
+# 		if ($useOldCode eq "yes") {
+# 		$nstar_before = ($basetype =~ /\*/);
+# 		$basetype = $tof77{$basetype};
+# 		# The following fixes the case where the underlying type 
+# 		# is a simple int.
+# 		if ($basetype eq "int") {
+# 		    $arg_addresses[$count] = 0;
+# 		}
+# 		print "\tparm has defined type of $basetype\n" if $debug;
+# 		$nstar_after = ($basetype =~ /\*/);
+# 		if ($nstar_before != $nstar_after) {
+# 		    $star_count++;
+# 		}
+		# If we have an array, and a type mapping to fortran
+		# we want to simply pretend that all is well (like int
+		# above)
+		$star_count = 0;
+		$arg_addresses[$count] = $star_count;
+	    }
+	    if ($prototype_only) {
+		push @segs, "$argsep$basetype \[\]";
+	    }
+	    else {
+		push @segs, "$argsep$basetype v$count\[\]";
+	    }
+	}
+	else {
+	    $nstar_before = ($parm =~ /\*/);
+	    $nstar_after = $nstar_before;
+	    print "Nstar = $nstar_after\n" if $debug;
+	    if (defined($tof77{$parm})) {
+		$parm = $tof77{$parm};
+		$nstar_after = ($parm =~ /\*/);
+	    }
+	    $leadspace = "";
+	    if ($parm =~ /\w$/) {
+		$leadspace = " ";
+	    }
+	    if ($prototype_only) {
+		push @segs, "${argsep}${parm}";
+	    }
+	    else {
+		push @segs, "${argsep}${parm}${leadspace}v$count";
+	    }
+	    $star_count = 0;
+	    if ($nstar_before != $nstar_after) {
+		$star_count = 1;
+	    }
+	    $arg_addresses[$count] = $star_count;
+	}
+	$count++;
+	$argsep = ", ";
+    }
+    # Add the new error return code if necessary
+    $tmpargs= $errparm;
+    $tmpargs =~ s/\s*//g;
+    if ($tmpargs ne "") {
+	if ($prototype_only) {
+	    push @segs, "$argsep$errparmtype";
+	}
+	else {
+	    push @segs, "$argsep$errparm";
+	}
+    }
+    push @segs, " $last_args";
+    push @segs, ")";
+    return join('', @segs)
+
+# Print the arguments for the routine CALL.  
+# Handle the special arguments
+fncode: get_call_args($arg)
+    my @parms = split(/\s*,\s*/, $arg );
+    my @segs
+
+    my $fintFix = 0;
+    my $count = 1;
+    my $first = 1;
+    if (defined($_[1])) { $fintFix = 1; }
+    push @segs, "( ";
+    # Special case: if the only parm is "void", remove it from the list
+    if ($#parms == 0 && $parms[0] eq "void") {
+	$#parms = -1;
+    }
+
+    foreach $parm (@parms) {
+	$parm =~ s/^const\s+//;  # Remove const if present
+	# Remove variable name if present in an array arg
+	if ($parm =~ /(.*)\s+(\w+)\[\]/) {
+	    $parm = "$1 \[\]";
+	}
+	# Compress multiple spaces
+	$parm =~ s/\s\s/ /g;
+	if (!$first) { push @segs, ", "; } else { $first = 0; }
+
+	if (defined($special_args{"${routine_name}-$count"})) {
+	    # We must handle this argument specially
+	    &print_special_call_arg( $routine_name, $count, $parm );
+	}
+	elsif ($parm =~ /!/) {
+	    # This parameter is a special case; the exclamation point
+	    # is used to say "call with this argument as is"
+	    $parm =~ s/!//;
+	    push @segs, $parm;
+	}
+	else {
+	    print "Processing parameter $count: $parm ($fintFix)\n" if $debug;
+	    # Convert to/from object type as required.  
+	    #print "TMP: parm = $arg_qualifiers[$count]$parm\n";
+	    $fullparm="$arg_qualifiers[$count]$parm";
+	    print "Full param is $fullparm\n" if $debug;
+	    if (!$fintFix && defined($argsneedcast{$fullparm})) {
+		$argval = "v$count";
+		if ($arg_addresses[$count] > 0) {
+		    $argval = "*$argval";
+		}
+		$callparm = $argsneedcast{$fullparm};
+		$callparm =~ s/ARG/$argval/;
+		push @segs, "$callparm";
+		print "Param $parm needs cast to $callparm\n" if $debug;
+	    }
+	    elsif ($fintFix && $parm =~ /^\s*([\w_]+)\s*\*\s*$/) {
+		$parmtype = $1;
+		print "parm = $parm and parmtype = $parmtype\n" if $debug;
+		if (defined($fintToHandle{$parmtype})) {
+		    push @segs, "\&l$count";
+		}
+		else {
+		    if ($arg_addresses[$count] > 0) {
+			push @segs, "*";
+		    }
+		    push @segs, "v$count";
+		}
+	    }
+	    elsif ($fintFix && defined($argsneedcast{$fullparm})) {
+		# We expect to have only value types here
+		$argval = "v$count";
+		if ($arg_addresses[$count] > 0) {
+		    $argval = "*$argval";
+		}
+		$callparm = $argsneedcast{$fullparm};
+		$callparm =~ s/ARG/$argval/;
+		push @segs, "$callparm";
+		print "Param $parm needs cast to $callparm\n" if $debug;
+	    }
+	    else {
+		#print "$routine_name ( $parm )\n";
+		# Since MPICH objects are ints (except for MPI_File), 
+		# we don't need to do 
+		# anything unless MPI_Fint and int are different.
+		# print STDERR "XXX $count $#arg_addresses XXX\n";
+		print "Parm = :$parm:\n" if $debug;
+		if ($parm =~ /^MPI_File$/) {
+		    push @segs, "MPI_File_f2c(*v$count)";
+		}
+		else {
+            if ($parm =~ /^MPI_Aint$/) {
+            print STDERR "Warning: Found a cast to MPI_Aint in $routine_name\n";
+            print STDERR "This usually means that a conversion from MPI_Aint* to an MPI_Aint value is missing\n";
+            }
+		    if ($arg_addresses[$count] > 0) {
+			print "Adding ($parm) for $parm\n" if $debug;
+			push @segs, "($parm)";
+			push @segs, "*";
+		    }
+		    push @segs, "v$count";
+		}
+	    }
+	}
+	$count++;
+    }
+    push @segs, " );\n";
+    return join('', @segs)
+
