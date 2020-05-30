@@ -1,0 +1,27 @@
+subcode: filter_define_args
+    $elif $a=~/--(with-posix-mutex)=(.*)/
+        $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_".uc($2)
+
+subcode: define_config_h(config_h)
+    my (@lines, $cnt)
+    &call open_r, $(config_h)
+        $if /^\/\* #undef (\w+)/ && $config_defines{$1}
+            push @lines, "#ifndef $1\n"
+            push @lines, "#define $1 $config_defines{$1}\n"
+            push @lines, "#endif\n"
+            $cnt++
+        $elif /^#define (\w+) (.*)/ && $config_defines{$1}
+            push @lines, "#define $1 $config_defines{$1}\n"
+            $cnt++
+        $else
+            push @lines, $_
+
+    $if $cnt>0
+        &call open_w, $(config_h)
+            $foreach $l in @lines
+                print Out $l
+
+
+
+
+

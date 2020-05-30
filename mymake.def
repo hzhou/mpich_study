@@ -1,4 +1,5 @@
 include: macros_mymake/args.def
+include: macros_mymake/defines.def
 include: macros_mymake/custom_make.def
 include: macros_mymake/subdirs.def
 include: macros_mymake/mpich.def
@@ -13,26 +14,15 @@ page: mymake
     module: perl
 
     $call set_mymake
-
-    $if -d "pm"
-        system "perl $mymake\_hydra.pl @ARGV"
-        exit(0)
-
+    $call @short_circuits
     $call parse_args
-
-    $if $opts{do}
-        system "perl $mymake\_$opts{do}.pl"
-        exit(0)
     $call setup_mymake
     $call set_mymake_DO
 
     $call save_last_ARGV
     $call @dump_args
 
-    $if $opts{pm} eq "gforker"
-        $call add_rule_gforker
-    $else
-        $call add_rule_hydra
+    $call add_rule_pm
     # $call add_rule_testing
     $call compile_mpich
 
@@ -55,7 +45,7 @@ page: mymake
 
     subcode: set_mymake_DO
         $(for:stage,clean,errmsg,cvars,logs,hydra,test,mpi_h)
-            push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
+            push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
         push @extra_make_rules, ""
         push @extra_make_rules, ".PHONY: test cvars errmsg"
         $(for:test,cvars,errmsg)
@@ -66,31 +56,69 @@ page: mymake
         push @extra_make_rules, "\t\x24(DO_$(name))"
         push @extra_make_rules, ""
 
+    subcode: add_rule_pm
+        $if $opts{pm} eq "gforker"
+            $call add_rule_gforker
+        $elif $opts{pm} eq "remshell"
+            $call add_rule_remshell
+        $else
+            $call add_rule_hydra, hydra
+            $if $opts{pm} eq "hydra2"
+                $call add_rule_hydra, hydra2
+
     subcode: dump_args
         $(for:srcdir,moddir,prefix)
             $print $1: $$1
         $if $opts{device}
             $print device: $opts{device}
 
+subcode: short_circuits
+    $if -d "pm"
+        system "perl $opts{mymake}_hydra.pl @ARGV"
+        exit(0)
+
+    $foreach $a in @ARGV
+        $if $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
+            system "perl $opts{mymake}_$1.pl"
+            exit(0)
+
+#---------------------------------------- 
 include: macros_mymake/errmsgs.def
 page: mymake_errmsg
     module: perl
 
-    $call parse_args
+    $call load_opts
     $call defmsg_h
 
-include: macros_mymake/cvars.def
 page: mymake_cvars
     module: perl
 
-    $call parse_args
-    $call extractcvars
+    $use Cwd
+    my $pwd = getcwd()
+
+    $if !-f "$pwd/maint/extractcvars.in"
+        die "File not found: $pwd/maint/extractcvars.in\n"
+
+    my $dirs
+    &call open_r, maint/cvardirs.in
+        chomp
+        s/\@abs_srcdir\@/$pwd\/maint/g
+        $dirs = $_
+        last
+
+    &call open_W, mymake/extractcvars.pl
+        &call open_r, maint/extractcvars.in
+            s/\@abs_srcdir\@/$pwd\/maint/g
+            $print $_-
+
+    $print "    extractcvars..."
+    system "perl mymake/extractcvars.pl --dirs=\"$dirs\""
 
 include: macros_mymake/logstates.def
 page: mymake_logs
     module: perl
 
-    $call parse_args
+    $call load_opts
     $call logging_states
 
 # ----------------
@@ -98,7 +126,7 @@ include: macros_mymake/mpi_h.def
 page: mymake_mpi_h
     module: perl
 
-    $call parse_args
+    $call load_opts
     $call get_mpi_h
 
 # ----------------
@@ -109,15 +137,19 @@ page: mymake_hydra
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
     $(for:stage,clean)
-        push @extra_make_rules, "DO_$1 = perl $mymake\_$1.pl"
+        push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
     push @extra_make_rules, ""
     $call parse_args
+    $if -f "mymake/CFLAGS"
+        &call open_r, mymake/CFLAGS
+            $if /(.+)/
+                $ENV{CFLAGS} = $1
     $call prepare_hydra
 
 page: mymake_test
     module: perl
 
-    $call parse_args
+    $call load_opts
     $call prepare_testing
     $if $ENV{skip_test} eq "custom"
         $call run_tests_custom
@@ -135,7 +167,7 @@ page: mymake_stage
 page: mymake_clean
     module: perl
 
-    $call parse_args
+    $call load_opts
 
     my @realclean_list
     $(for:a in $(mpich_configure_deps))

@@ -14,8 +14,8 @@ subcode: custom_make
 
     $call parse_Makefile, mymake/Makefile.orig
     &call open_W, mymake/Makefile.custom
-        $print "export MODDIR=$moddir"
-        $print "PREFIX=$prefix"
+        $print "export MODDIR=$opts{moddir}"
+        $print "PREFIX=$opts{prefix}"
         $print
         $call dump_custom_make
     system "rm -f Makefile"
@@ -233,7 +233,7 @@ subcode: dump_custom_make
         $if @$t1 or @$t2 or @$t3
             $foreach $t in @$t1, @$t2, @$t3
                 $t=~s/use_mpi_f08/use_mpi/
-                $dst_hash{$t} = "$prefix/include"
+                $dst_hash{$t} = "$opts{prefix}/include"
 
         my (%dirs, @install_list, @install_deps, @lns_list)
         $foreach %dst_hash
@@ -285,7 +285,7 @@ subcode: dump_custom_make
     subcode: P(@line)
         $(if:line!=$l)
             my $l = $(line)
-        $l=~s/$moddir/\x24(MODDIR)/g
+        $l=~s/$opts{moddir}/\x24(MODDIR)/g
         $print $l
 
     subcode: dump_variable(key)

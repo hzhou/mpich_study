@@ -25,7 +25,7 @@ subcode: preproc_bindings
             chdir "src/binding/cxx"
             system "perl buildiface -nosep -initfile=./cxx.vlist"
             chdir $pwd
-        $dst_hash{"src/binding/cxx/mpicxx.h"}="$prefix/include"
+        $dst_hash{"src/binding/cxx/mpicxx.h"}="$opts{prefix}/include"
 
     subcode: need_fortran
         $(set:D=src/binding/fortran)
@@ -41,7 +41,7 @@ subcode: preproc_bindings
                 $call buildiface, use_mpi_f08/wrappers_c
             $call add_extra_use_mpi_f08
 
-        $dst_hash{"$(D)/mpif_h/mpif.h"}="$prefix/include"
+        $dst_hash{"$(D)/mpif_h/mpif.h"}="$opts{prefix}/include"
 
         subcode: buildiface(dir)
             $print : buildiface - $(dir)

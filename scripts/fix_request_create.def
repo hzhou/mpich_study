@@ -3,6 +3,7 @@ include: macros/patch.def
 page: t, patch_frame
     module: perl
     patch: REQ
+    FIND: find src/mpid/ch4 -name '*.[ch]'
 
 #---------------------------------------- 
 subcode: grep_REQ
@@ -11,7 +12,7 @@ subcode: grep_REQ
 subcode: filter_lines_REQ
     $if $(l)=~/\bMPIR_Request_create\((.*?)\)/ -> $t
         $if $t =~ /^\w+$/
-            $(l) =~s/MPIR_Request_create\((.*?)\)/MPIR_Request_create($1, 0)/
+            $(l) =~s/MPIR_Request_create\((.*?)\)/MPIR_Request_create_pool($1, 0)/
             $cnt++
         $else
             $print Weird [$(l)]

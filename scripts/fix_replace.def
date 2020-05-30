@@ -5,11 +5,10 @@ page: t, patch_frame
 
 #---------------------------------------- 
 subcode: grep_REPLACE
-    $call grep_l, 'MPI_AINT_FMT_.*_SPEC'
+    $call grep_l, 'MPIR_ERR_COLL_CHECKANDCONT'
 
 subcode: filter_lines_REPLACE
-    $if $(l)=~/MPI_AINT_FMT_(.*)_SPEC/
+    $if $(l)=~/MPIR_ERR_COLL_CHECKANDCONT\(mpi_errno\)/
         $cnt++
-        $(l) =~s/MPI_AINT_FMT_DEC_SPEC/MPIR_FMT_AINT_d/g
-        $(l) =~s/MPI_AINT_FMT_HEX_SPEC/MPIR_FMT_AINT_x/g
+        $(l) =~s/mpi_errno/mpi_errno, *errflag/
 

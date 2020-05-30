@@ -1,26 +1,24 @@
 subcode: _autoload
-    my $pwd=`pwd`
-    chomp $pwd
+    $use Cwd
+    my $pwd=getcwd()
 
 #- findout mymake directory
 subcode: set_mymake
-    my $mymake
     $if $0=~/^(\/.*)\//
-        $mymake = $1
+        $opts{mymake} = $1
     $elif $0=~/^(.*)\//
-        $mymake .= "$pwd/$1"
-    $mymake .="/mymake"
+        $opts{mymake} .= "$pwd/$1"
+    $opts{mymake} .="/mymake"
 
 #- cmdline, sort out options 
 subcode: parse_args
-    $global %opts
+    $global %opts, %defines
     $global @config_args
     $call @set_opts_default
-    $if @ARGV == 1 && $ARGV[0] eq "V=1"
-        $opts{V} = 1
-        @ARGV=()
+    $call @filter_ARGV
     $call @load_last_ARGV
     $call parse_ARGV
+    $call filter_define_args
     $map opt_set, srcdir, moddir, prefix
     $call set_prefix
     $call set_moddir
@@ -36,13 +34,13 @@ subcode: parse_args
             $mod_tarball = "mymake/modules.tar.gz"
         # --------------
         $if $ENV{MODDIR}
-            $moddir = $ENV{MODDIR}
+            $opts{moddir} = $ENV{MODDIR}
         $elif -d "mymake/hwloc"
-            $moddir = "$pwd/mymake"
+            $opts{moddir} = "$pwd/mymake"
         $elif -e $mod_tarball
-            $moddir = "$pwd/mymake"
-            $call do_cmd, mkdir -p $moddir
-            $call do_cmd, tar -C $moddir -xf $mod_tarball
+            $opts{moddir} = "$pwd/mymake"
+            $call do_cmd, mkdir -p $opts{moddir}
+            $call do_cmd, tar -C $opts{moddir} -xf $mod_tarball
         $else
             die "moddir not set\n"
 
@@ -55,9 +53,9 @@ subcode: parse_args
             die "srcdir not set\n"
 
     subcode: set_prefix
-        $if !$prefix
-            $prefix="$pwd/_inst"
-            system "mkdir -p $prefix"
+        $if !$opts{prefix}
+            $opts{prefix}="$pwd/_inst"
+            system "mkdir -p $opts{prefix}"
 
     subcode: opt_set(name)
         $global $$(name)
@@ -95,17 +93,32 @@ subcode: parse_args
                 $elif $a=~/--enable-strict/
                     $opts{enable_strict} = 1
                     push @config_args, $a
+                $elif $a=~/--enable-izem-queue/
+                    $opts{enable_izem}=1
+                    push @config_args, $a
                 $elif $a=~/--with-(ucx|libfabric|argobots)=(.*)/
                     $opts{$1}=$2
                     push @config_args, $a
+                $call @filter_defines
                 $else
                     push @config_args, $a
-            $elif $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
-                $opts{do}=$1
 
         $(for:CC,CXX,F77,FC)
             $if $opts{$1}
                 $ENV{$1}=$opts{$1}
+
+#----------------------
+subcode: filter_ARGV
+    my $cnt_else = 0
+    $foreach $a in @ARGV
+        $if $a=~/V=1/
+            $opts{V} = 1
+        $call @filter_config_defines
+        $else
+            $cnt_else++
+
+    $if !$cnt_else
+        @ARGV = ()
 
 #----------------------
 subcode: load_last_ARGV
@@ -124,6 +137,20 @@ subcode: save_last_ARGV
         my $t = join(' ', @ARGV)
         &call open_w, mymake/args
             print Out $t, "\n"
+        # TODO: only if non-trivial args
         system "rm -f mymake/Makefile.orig"
         system "rm -f $(Hmpl) $(Hopa)"
+
+        $call save_opts
+
+subcode: save_opts
+    &call open_w, mymake/opts
+        $foreach $k in sort keys %opts
+            print Out "$k: $opts{$k}\n"
+
+subcode: load_opts
+    $global %opts
+    &call open_r, mymake/opts
+        if /^(\w+): (.*)/
+            $opts{$1} = $2
 

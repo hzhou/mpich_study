@@ -6,8 +6,15 @@ macros:
 
 #---- mymake_hydra.pl -------------------- 
 subcode: prepare_hydra
+    $global $do_hydra2
+    $if $opts{pm} eq "hydra2"
+        $print "Building hydra2..."
+        $do_hydra2 = 1
+
     $if $srcdir
         my $dir="$srcdir/src/pm/hydra"
+        $if $do_hydra2
+            $dir="$srcdir/src/pm/hydra2"
         chdir $dir or die "Can't chdir $dir\n"
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
@@ -53,6 +60,33 @@ subcode: hydra_config
             die "hydra: missing version.m4\n"
 
     &call modify_frame, temporary
+        $if $do_hydra2
+            $call modify_hydra2_configure
+        $else
+            $call modify_hydra_configure
+        &call modify, Makefile.am
+            $if $l=~/ACLOCAL_AMFLAGS/
+                $l ="ACLOCAL_AMFLAGS = -I confdb\n"
+
+        my $hwloc_mk = "tools/topo/hwloc/Makefile.mk"
+        $if $do_hydra2
+            $hwloc_mk = "libhydra/topo/hwloc/Makefile.mk"
+        &call modify, $hwloc_mk
+            $if $l=~/if\s+HYDRA_USE_EMBEDDED_HWLOC/i
+                $flag_skip=1
+                next
+            $elif $l=~/endif/
+                $flag_skip=0
+                next
+        system "autoreconf -ivf"
+    system "rm -f Makefile"
+    system "./configure"
+    &call modify_frame, temporary
+        $call patch_libtool
+    system "mv Makefile mymake/Makefile.orig"
+
+    # ------------------------------
+    subcode: modify_hydra_configure
         &call modify, configure.ac
             $if $l=~/^\s*hwloc\)/
                 print Out $l
@@ -71,33 +105,30 @@ subcode: hydra_config
             $elif $l=~/^(\s*)PAC_SUBDIR_HWLOC/
                 $l = $1."AM_CONDITIONAL([HAVE_HWLOC], [true])\n"
                 $flag_skip=0
-        &call modify, Makefile.am
-            $if $l=~/ACLOCAL_AMFLAGS/
-                $l ="ACLOCAL_AMFLAGS = -I confdb\n"
-        &call modify, tools/topo/hwloc/Makefile.mk
-            $if $l=~/if\s+HYDRA_USE_EMBEDDED_HWLOC/i
+
+    subcode: modify_hydra2_configure
+        &call modify, configure.ac
+            $if $l=~/^PAC_CHECK_PREFIX\(hwloc\)/
                 $flag_skip=1
                 next
-            $elif $l=~/endif/
+            $elif $l=~/^(HWLOC_DO_AM_CONDITIONALS)/
                 $flag_skip=0
+                print Out $1, "have_hwloc=yes\n"
+                print Out $1, "hydra_use_embedded_hwloc=no\n" # we handles it
                 next
-        system "autoreconf -ivf"
-    system "rm -f Makefile"
-    system "./configure"
-    &call modify_frame, temporary
-        $call patch_libtool
-    system "mv Makefile mymake/Makefile.orig"
+            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/ # mpl
+                $l = "$1: \x23 $2\n"
 
 #---- rules in mpich Makefile ------------------ 
-subcode: add_rule_hydra
-    my $mkfile="src/pm/hydra/Makefile"
+subcode: add_rule_hydra(name)
+    my $mkfile="src/pm/$(name)/Makefile"
     my $add="$(Lmpl) $(Lhwloc)"
-    push @extra_make_rules, ".PHONY: hydra hydra-install"
-    push @extra_make_rules, "hydra: $mkfile $add"
-    push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) )"
+    push @extra_make_rules, ".PHONY: $(name) $(name)-install"
+    push @extra_make_rules, "$(name): $mkfile $add"
+    push @extra_make_rules, "\t(cd src/pm/$(name) && \x24(MAKE) )"
     push @extra_make_rules, ""
-    push @extra_make_rules, "hydra-install: $mkfile"
-    push @extra_make_rules, "\t(cd src/pm/hydra && \x24(MAKE) install )"
+    push @extra_make_rules, "$(name)-install: $mkfile"
+    push @extra_make_rules, "\t(cd src/pm/$(name) && \x24(MAKE) install )"
     push @extra_make_rules, ""
     push @extra_make_rules, "$mkfile:"
     $call set_config_args
@@ -108,4 +139,6 @@ subcode: add_rule_hydra
         my $config_args = "--prefix=\x24(PREFIX)"
         $if $opts{argobots}
             $config_args .= " --with-argobots=$opts{argobots}"
+        $(if:name=hydra2)
+            $config_args .= " --with-pm=hydra2"
 

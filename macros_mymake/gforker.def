@@ -1,4 +1,10 @@
+subcode: add_rule_remshell
+    $call add_rule_pm_simple, remshell
+
 subcode: add_rule_gforker
+    $call add_rule_pm_simple, gforker
+
+subcode: add_rule_pm_simple(name)
     push @extra_make_rules,  "libmpiexec_la_OBJECTS = \\"
     $foreach $a in qw(cmnargs process ioloop pmiserv labelout env newsession rm pmiport dbgiface)
         push @extra_make_rules,  "    src/pm/util/$a.lo \\"
@@ -10,17 +16,18 @@ subcode: add_rule_gforker
     push @extra_make_rules,  "\t\@echo LTLD \$\@ && \x24(LTLD) -o \$\@ $objs"
     push @extra_make_rules, ""
 
-    my $objs = "src/pm/gforker/mpiexec.o libmpiexec.la"
-    push @extra_make_rules,  "mpiexec.gforker: $objs"
+    my $objs = "src/pm/$(name)/mpiexec.o libmpiexec.la"
+    push @extra_make_rules,  "mpiexec.$(name): $objs"
     push @extra_make_rules,  "\t\@echo LTLD \$\@ && \x24(LTLD) -o \$\@ $objs"
     push @extra_make_rules, ""
 
-    push @extra_make_rules,  ".PHONY: gforker-install"
-    push @extra_make_rules,  "gforker-install: mpiexec.gforker"
+    push @extra_make_rules,  ".PHONY: $(name)-install"
+    push @extra_make_rules,  "$(name)-install: mpiexec.$(name)"
     my $bin = "\x24(PREFIX)/bin"
-    push @extra_make_rules,  "\t/bin/sh ./libtool --mode=install --quiet install mpiexec.gforker $bin"
-    push @extra_make_rules,  "\trm -f $bin/mpiexec  && ln -s $bin/mpiexec.gforker $bin/mpiexec"
-    push @extra_make_rules,  "\trm -f $bin/mpirun  && ln -s $bin/mpiexec.gforker $bin/mpirun"
+    push @extra_make_rules,  "\tinstall -d $bin"
+    push @extra_make_rules,  "\t/bin/sh ./libtool --mode=install --quiet install mpiexec.$(name) $bin"
+    push @extra_make_rules,  "\trm -f $bin/mpiexec  && ln -s $bin/mpiexec.$(name) $bin/mpiexec"
+    push @extra_make_rules,  "\trm -f $bin/mpirun  && ln -s $bin/mpiexec.$(name) $bin/mpirun"
     push @extra_make_rules, ""
 
     # hack

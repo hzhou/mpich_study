@@ -7,6 +7,13 @@ page: git_re_date
     $if $commit > 1 and length($commit) < 4
         $commit = "HEAD~$commit"
 
+    my @commits
+    my $t = `git log -n 100 --format=\"%h %s\"`
+    $while $t=~/^(\S+) (.*)$/mg -> $hash, $title
+        $if $title=~/^Merge /
+            last
+        push @commits, "$1 $2"
+
     $call do_git_re_date
 
     subcode: do_git_re_date
@@ -17,6 +24,8 @@ page: git_re_date
         my $n
         $if $t=~/edit (\d+) commits/
             $n = $1
+            $if $n != @commits
+                die "Number of commits mismatch\n"
         $else
             system "git rebase --abort"
             die "Inconsistent rebase: $t"
@@ -24,7 +33,8 @@ page: git_re_date
         my $date = time - $n *60
         my $t
         $for $i=0:$n
-            $print :    commit $i
+            my $msg = pop @commits
+            $print :    commit $i\t$msg
             $t = `git commit --amend --no-edit --date "$date -0500" 2>&1`
             $t = `git rebase --continue 2>&1`
             $date+=60

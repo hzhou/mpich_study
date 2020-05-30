@@ -1,7 +1,9 @@
+include: macros_mymake/dependency.def
 
 subcode: compile_mpich
     # push @config_args, "--enable-izem=atomic --with-zm-prefix=yes"
-    # $call need_izem
+    $if $opts{enable_izem}
+        $call need_izem
 
     $(for:mpl,opa)
         $call copy_subdir_module, $1
@@ -11,17 +13,22 @@ subcode: compile_mpich
     $call @post_mpich_configure
 
     $call add_rule_cpi
+    $call @add_rule_dep
 
     $call need_mpich_preproc # cvar, errmsg, etc.
-    $(for:mpl,opa,hwloc)
+    $if -d "src/openpa"
+        $call need_opa
+    $(for:mpl,hwloc,yaksa)
         $call need_$1
+
+    $call need_jsonc
 
     $if !$opts{disable_romio}
         $call need_romio
 
     $if $opts{device}=~/ch4:ucx/
         $call need_ucx
-    $if $opts{device}=~/ch4:ofi/
+    $if $opts{device}=~/:ofi/
         $call need_ofi
 
     $if $ENV{EXTRA_LIB}
@@ -32,7 +39,13 @@ subcode: compile_mpich
     $ENV{CFLAGS}=$opts{CFLAGS}
     system "make $(Hmpl) $(Hopa)"
 
+    # post filtering config defines
     $call @patch_sizeof_atomic
+    $call patch_atomic_nolocal
+    $call patch_ticketlock
+    $if %defines
+        $call define_config_h, mymake/mpl/include/mplconfig.h
+        $call define_config_h, src/include/mpichconf.h
 
     # ---------------------------
     subcode: custom_programs
@@ -51,10 +64,18 @@ subcode: compile_mpich
     subcode: set_libs_custom
         $(if:which=ltlibs)
             $if $add!~/mpi(fort|cxx)/
-                $call filter_lib_mpl_etc
-                $call filter_lib_ucx
-                $call filter_lib_ofi
-                $t.= $L_list
+                $call filter_lib_romio
+                $if $add=~/_libmpi_la_/ && $opts{have_weak}
+                    $call filter_lib_mpl_etc
+                    $call filter_lib_ucx
+                    $call filter_lib_ofi
+                    $t.= $L_list
+                $elif $add=~/_libpmpi_la_/
+                    # !$opts{have_weak}
+                    $call filter_lib_mpl_etc
+                    $call filter_lib_ucx
+                    $call filter_lib_ofi
+                    $t.= $L_list
     # ---------------------------
     subcode: post_mpich_configure
         &call open_r, src/include/mpichconf.h
@@ -69,6 +90,8 @@ subcode: compile_mpich
         &call open_r, mymake/Makefile.orig
             $if /^CFLAGS *= *(.*)/
                 $opts{CFLAGS}=$1
+                &call open_W, mymake/CFLAGS
+                    $print $1
 
         $if !$opts{have_weak}
             $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
@@ -78,7 +101,7 @@ subcode: compile_mpich
         $(for:p in mpicc,mpicxx,mpif77,mpifort)
             $if -f "src/env/$(p).bash"
                 $call get_file_lines, src/env/$(p).bash
-                my %tmp=(PREFIX=>$prefix, EXEC_PREFIX=>"$prefix/bin", SYSCONFDIR=>"$prefix/etc", INCLUDEDIR=>"$prefix/include", LIBDIR=>"$prefix/lib")
+                my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")
                 &call open_w, mymake/$(p)
                     $foreach $l in @lines
                         $l=~s/__(\w+)_TO_BE_FILLED_AT_INSTALL_TIME__/$tmp{$1}/e
@@ -93,6 +116,9 @@ subcode: compile_mpich
         push @extra_make_rules, "\t\x24(CC) -o examples/cpi examples/cpi.c lib/.libs/libmpi.a $opts{WRAPPER_LIBS}"
         push @extra_make_rules, ""
         
+    subcode: add_rule_dep
+        $if $opts{device} =~/ch4/
+            $call add_ch4_dep
 #---------------------------------------- 
 macros:
     mpich_configure_deps:: subsys_include.m4
@@ -187,7 +213,17 @@ subcode: patch_sizeof_atomic
     system "mymake/t"
     my $ret = $? >> 8;
 
-    &call modify_frame
-        &call modify, src/include/mpichconf.h
-            $if $l=~/^#define SIZEOF_MPL_ATOMIC_PTR_T 0/
-                $l=~s/0/$ret/
+    $config_defines{SIZEOF_MPL_ATOMIC_PTR_T} = $ret
+
+subcode: patch_atomic_nolocal
+    my $lock_based_atomics
+    &call open_r, "mymake/mpl/include/mplconfig.h"
+        $if /^#define MPL_USE_LOCK_BASED_PRIMITIVES/  
+            $lock_based_atomics = 1
+            last
+    $if $lock_based_atomics
+        $config_defines{ENABLE_NO_LOCAL} = 1
+
+subcode: patch_ticketlock
+    $if $opts{device}=~/ch4:/
+        $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_TICKETLOCK"

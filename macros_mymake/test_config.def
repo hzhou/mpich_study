@@ -1,39 +1,57 @@
 subcode: test_mymake_config
-    $global %config_hash
     $global @mpich_config, @testmpi_config
     $call parse_config
     $call parse_trigger_phrase
-    $call @set_missing_default
+    $call parse_param
     $call filter_config
+    $call @set_missing_default
+    $call @set_custom_testlist
 
+    # -- used in warnings tests with "config" axis
     subcode: parse_config
-        my $config = $ENV{config}
-        $print parsing config: [$config]...
-        $config=~s/[\/-]/:/g
-        $if $config=~/^(default|ch3:tcp)/
-            $config = "ch3:nemesis"
-            push @mpich_config, "--with-device=$config"
-        $elif $config=~/^ch[34]/
-            push @mpich_config, "--with-device=$config"
+        $if $ENV{config}
+            my $config = $ENV{config}
+            $print parsing config: [$config]...
+            $config=~s/[\/-]/:/g
+            $if $config=~/^(default|ch3:tcp)/
+                $config = "ch3:nemesis"
+                push @mpich_config, "--with-device=$config"
+            $elif $config=~/^ch[34]/
+                push @mpich_config, "--with-device=$config"
 
+    # -- used with commandline trigger
+    subcode: parse_param
+        $if $ENV{param}
+            $ENV{test_script}="test_quick"
+            my @plist = split /\s+/, $ENV{param}
+            $foreach $t in @plist
+                $if $t=~/(--(enable|disable|with|without)-\S+)/g
+                    push @mpich_config, $1
+                $elif $t=~/^(\w+)=(.+)/
+                    $ENV{$1}=$2
+                $elif $t=~/^testlist:(.+)/g
+                    push @testlist, $1
+
+    # -- used in ghprb PR comment
     subcode: parse_trigger_phrase
-        my $trigger_phrase = $ENV{ghprbCommentBody}
-        $trigger_phrase=~s/\\r\\n/\n/g
-        $trigger_phrase=~s/\n\s*:/ /g
+        $if $ENV{ghprbCommentBody}
+            my $trigger_phrase = $ENV{ghprbCommentBody}
+            $trigger_phrase=~s/\\r\\n/\n/g
+            $trigger_phrase=~s/\n\s*:/ /g
 
-        $call check_test_script
-        $call check_mpich_config
+            $call check_test_script
+            $call check_mpich_config
 
-        $while $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree)\s*[:=]\s*([\w\-\.]+)/mg -> $key, $val
-            $if $val=~/(yes|1)/
-                $val = "true"
-            $ENV{$key}=$val
+            $while $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree)\s*[:=]\s*([\w\-\.]+)/mg -> $key, $val
+                $if $val=~/(yes|1)/
+                    $val = "true"
+                $ENV{$key}=$val
 
-        $while $trigger_phrase=~/^env:\s*(\w+)\s*=\s*(.*?)\s*$/mg
-            $ENV{$1}=$2
+            $while $trigger_phrase=~/^env:\s*(\w+)\s*=\s*(.*?)\s*$/mg
+                $ENV{$1}=$2
 
-        $if !$ENV{skip_test}
-            $call check_custom_testlist
+            $if !$ENV{skip_test}
+                $call check_custom_testlist
 
         # ------------------------
         subcode: check_test_script
@@ -49,15 +67,19 @@ subcode: test_mymake_config
                 push @mpich_config, $a
 
         subcode: check_custom_testlist
-            $global @testlist
             $while $trigger_phrase=~/^testlist:\s*(.+)/mg
                 $print testlist [$1]
                 push @testlist, $1
-            $if @testlist
-                &call open_W, test/mpi/testlist.custom
-                    $foreach $l in @testlist
-                        $print $l
-                $ENV{skip_test}="custom"
+
+    #---------------------------------------- 
+    subcode: set_custom_testlist
+        $global @testlist
+        $if @testlist
+            &call open_W, test/mpi/testlist.custom
+                $foreach $l in @testlist
+                    $l=~s/#/ /g
+                    $print $l
+            $ENV{skip_test}="custom"
 
     #---------------------------------------- 
     subcode: set_missing_default
@@ -73,39 +95,19 @@ subcode: test_mymake_config
 
     #---------------------------------------- 
     subcode: filter_config
-        # FIXME: temporary measure...
-        $if $ENV{test_script} eq "test_quick"
-            # push @mpich_config, "--disable-cxx"
-            # push @mpich_config, "--disable-fortran"
-            # push @mpich_config, "--disable-romio"
-
-        my @config_devices
+        $global %config_hash
         $if @mpich_config
             $foreach $t in @mpich_config
-                $if $t=~/--with-device=(.*)/
-                    push @config_devices, $1
                 $call filter_config_hash # remove duplicate
                 $call filter_test_config
 
+        $call check_mpich_device
         $call @post_filters
 
         $if @mpich_config
             $ENV{mpich_config}= join(' ', @mpich_config)
         $if @testmpi_config
             $ENV{testmpi_config} = join(' ', @testmpi_config)
-
-        $if $config_hash{device}=~/^(ch\d:\w+)/
-            # for xfail filters
-            $ENV{mpich_device}=$1
-
-        $if $config=~/(ch\d+:\w+)/ -> $t
-            $foreach $dev in @config_devices
-                $if $dev !~ /$t/
-                    $config_hash{conflict} = "config: $config and option: --with-device=$dev are in conflict"
-
-        $if $config=~/(ch3:\w+)/ -> $t
-            $if $config_hash{pmix}
-                $config_hash{conflict} = "config: $config and option: --with-pmix=$config_hash{pmix} are in conflict"
 
         # ----------------------
         subcode: filter_config_hash
@@ -127,6 +129,14 @@ subcode: test_mymake_config
                 next
             $elif $t=~/--disable-(romio|fortran|cxx)/
                 push @testmpi_config, $t
+
+        subcode: check_mpich_device
+            $if $config_hash{device}=~/^(ch\d:\w+)/
+                $ENV{mpich_device}=$1
+
+            $if !$ENV{mpich_device}
+                $ENV{mpich_device} = "ch4:ofi"
+                push @mpich_config, "--with-device=ch4:ofi"
 
         subcode: post_filters
             push @testmpi_config, "--disable-perftest"
