@@ -1,0 +1,16 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    patch: vciglobal
+    root: /home/hzhou/work/mpich-github/src
+
+#---------------------------------------- 
+subcode: grep_vciglobal
+    $call grep_l, 'VCI.*MPIR_THREAD_VCI_GLOBAL_MUTEX'
+
+subcode: filter_lines_vciglobal
+    $if $(l)=~/^(\s+)(MPID_THREAD_CS_\w+)\(VCI, MPIR_THREAD_VCI_GLOBAL_MUTEX\);/ -> $sp, $func
+        $(l)="-DELETE"
+        $cnt++
+

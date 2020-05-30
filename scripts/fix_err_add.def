@@ -1,0 +1,31 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: ERRADD
+
+#---------------------------------------- 
+subcode: grep_ERRADD
+    $call grep_l, 'MPIR_ERR_ADD.mpi_errno_ret'
+
+subcode: filter_lines_ERRADD
+    $global $flag, $confirmed
+    $if $(l)=~/^\s*if\s+\(mpi_errno\)/
+        $flag = 1
+        $confirmed = 0
+    $elif $flag
+        $flag++
+        $if $(l)=~/MPIR_ERR_ADD\(mpi_errno_ret/
+            $confirmed = 1
+        $elif $(l)=~/^(\s+)\}\s*else/
+            $flag = 0
+            $confirmed = 0
+        $elif $(l)=~/^(\s+)\}\s*$/ -> $sp
+            $if $confirmed
+                $cnt++
+                $for $j=1:$flag
+                    $(L:-$j) = "-DELETE"
+                my $call = "MPIR_ERR_COLL_CHECKANDCONT(mpi_errno);"
+                $(l) = "$sp$call\n"
+            $flag = 0
+            $confirmed = 0
+

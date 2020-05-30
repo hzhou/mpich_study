@@ -1,0 +1,13 @@
+page: git_commit_ok
+    my $F = "/tmp/git-pre-commit/summary.txt"
+    my @stat = stat($F)
+    my $now = time()
+    my $age = $now - $stat[9]
+    $if $age >=0 && $age < 60
+        $if -e ".git/hooks/pre-commit"
+            system "sh -xe $F"
+        $else
+            die "Wrong context!\n"
+    $else
+        die "File $F stale!\n"
+

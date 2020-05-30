@@ -1,0 +1,22 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    patch: remove
+    root: /home/hzhou/work/mpich-github/src
+
+#---------------------------------------- 
+subcode: grep_remove
+    $call grep_l, 'MPIR_FUNC_'
+
+subcode: filter_lines_remove
+    $if $(l)=~/^\s*MPIR_FUNC_(VERBOSE|TERSE)_\w*(STATE_DECL|ENTER|EXIT)(?:_FRONT|_BACK|_BOTH)?\s*(.*)/ ->$verbose, $type, $tail
+	$if $tail=~/^\(\w+\);(\s*\\)?/
+	    $(l) = "-DELETE";
+	$elif $tail=~/^$/ && $(L:1)=~/^\s*\(\w+\);\s*$/
+	    $(l) = "-DELETE";
+	    $(L:1) = "-DELETE";
+	$else
+	    warn "mismatch: $(l)";
+	$cnt++
+

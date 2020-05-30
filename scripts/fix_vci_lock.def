@@ -1,0 +1,16 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: vci_lock
+
+#---------------------------------------- 
+subcode: grep_vci_lock
+    $(if:1)
+        $call grep_l, 'MPID_THREAD_CS_.*vci_lock'
+    $(else)
+        # none
+
+subcode: filter_lines_vci_lock
+    $if $(l)=~/^(.*MPID_THREAD_CS_\w+)\(VCI, MPIDI_global\.vci_lock\);/ -> $cs
+        $(l) =~s/MPIDI_global\.vci_lock/MPIDI_VCI(0).lock/
+        $cnt++

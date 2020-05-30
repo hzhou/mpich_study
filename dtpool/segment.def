@@ -1,0 +1,69 @@
+subcode: segment_manipulate
+    $call segment_load_local_values
+    $call @check_trivial
+
+    $if first != stream_off
+        $if first < stream_off
+            $call segment_reset_values
+            stream_off = 0
+        $if first > 0
+            segment_seek(segp, first, sizefn)
+
+        $call segment_load_local_values
+
+    $while 1
+        $if !has_child
+            $if cur_elmp->curcount == 0
+                SEGMENT_POP_AND_MAYBE_EXIT
+            $call @seet_piecefn
+            $if last != MPIR_SEGMENT_IGNORE_LAST && stream_off + $(curstep) > last
+                myblocks = (last-stream_off) / stream_el_size
+            $call @call_piecefn
+            $if myblocks <= cur_elmp->curblock
+                SEGMENT_SAVE_LOCAL_VALUES
+                return
+            $else
+                $call @switch_and_pop
+        $elif curblock == 0
+            $call get_orig_block
+        $else
+            $call @push_cur_elmp
+
+
+    subcode: check_trivial
+        $if first == *lastp
+            return
+
+subcode: segment_seek(segp, position, sizefn)
+    $if segp->stream_off > 0 || sizefn || MPIR_CVAR_DATALOOP_FAST_SEEK == 0
+        goto fallback_path
+
+    # stream_off==0, sizefn=NULL, FAST_SEEK=1
+    cur_elmp->orig_offset = 0
+    cur_elmp->curoffset = 0
+    $while 1
+        $switch cur_elmp->loop_p->kind
+            $of CONTIG
+                num_elems = (position - stream_off) / el_size
+                $if num_elems > blocksize
+                    num_elems = blocksize
+                stream_off += num_elems * el_size
+
+                cur_elmp->curcount = (num_elems == blocksize ? 0 : 1)
+                cur_elmp->curoffset = orig_offset + num_elems * el_extent
+                $if has_child
+                    next_elmp = &segp->stackelm[cur_sp+1]
+                    next_elmp->orig_offset = cur_elmp->curoffset
+                    cur_elmp->curoffset = cur_elmp->orig_offset
+                    cur_elmp->curblock--
+                    segp->cur_sp++
+                    $call SEGMENT_PUSH
+                    continue
+                $else
+                    goto fn_exit
+            ...
+    goto fn_exit
+
+    fallback_path:
+        $my MPI_Aint tmp_last = position
+        MPII_Segment_manipulate(segp, stream_off, &tmp_last, NULL, NULL, NULL, NULL, sizefn, NULL)

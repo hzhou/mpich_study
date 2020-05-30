@@ -1,0 +1,23 @@
+page: gh_rate_limit
+    module: perl
+
+
+    my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
+    my $curl = "curl -H \"Authorization: token $gh_token\""
+    my $url = "https://api.github.com/rate_limit"
+
+    my $t = `$curl --silent $url`
+    # $print $t
+
+    my ($limit, $remaining, $reset)
+    #  "limit": 5000, "remaining": 4999, "reset": 1586209037
+    $if $t=~/"limit":\s*(\d+)/
+        $limit = $1
+    $if $t=~/"remaining":\s*(\d+)/
+        $remaining = $1
+    $if $t=~/"reset":\s*(\d+)/
+        $reset = $1 - time()
+
+    $print
+    $print Github Rate Limit: $remaining / $limit, reset in $reset seconds 
+

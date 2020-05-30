@@ -1,0 +1,269 @@
+include: macros/common.def
+include: macros/create_idx.def
+
+page: dtpools.c, from template/dtpools.c
+    output_dir: ./dtp_out
+    module: c
+
+page: dtpools_custom.c, from template/dtpools_custom.c
+    output_dir: ./dtp_out
+    module: c
+
+macros:
+    # debug: 1
+
+#---------------------------------------- 
+subcode: DTP_obj_create_custom
+    &call func, DTP_obj_create_custom, DTP_pool_s dtp, DTP_obj_s * obj, const char *desc
+        $my DTPI_pool_s *dtpi = dtp.priv
+        DTPI_ERR_ARG_CHECK(!dtpi, rc)
+
+        $call dtp_obj_init
+        $if desc == NULL
+            $(attr) = NULL
+            $(datatype) = dtp.DTP_base_type
+            $(count) = dtpi->base_type_count
+        $else
+            $call parse_desc
+            # $print "DTP_obj_create_custom: %s", desc
+            $DTP_call DTPI_custom_datatype, dtp, &$(attr), &$(datatype), &$(count), desc_parts, num_parts
+            $DTP_call MPI_Type_commit, &obj->DTP_datatype
+
+        $call set_bufsize_offset
+
+    # -----------------------
+    subcode: check_empty_desc
+
+    subcode: parse_desc
+        const char *desc_parts[10];
+        int num_parts;
+        rc = DTPI_parse_desc(desc, desc_parts, &num_parts, 10)
+
+    subcode: dtp_obj_init
+        DTPI_ALLOC_OR_FAIL(obj->priv, sizeof(DTPI_obj_s), rc);
+        $my DTPI_obj_s *obj_priv = obj->priv
+        obj_priv->dtp = dtp
+        $(export:attr=obj_priv->attr_tree)
+        $(export:datatype=obj->DTP_datatype)
+        $(export:count=obj->DTP_type_count)
+
+    subcode: set_bufsize_offset
+        $my true_lb, true_extent, lb, extent: MPI_Aint
+
+        $DTP_call MPI_Type_get_true_extent, obj->DTP_datatype, &true_lb, &true_extent
+        $DTP_call MPI_Type_get_extent, obj->DTP_datatype, &lb, &extent
+
+        obj->DTP_bufsize = (extent * obj->DTP_type_count) + true_extent - extent;
+        /* if the true_lb occurs after the actual buffer start, make
+        * sure we allocate some additional bytes to accommodate for
+        * the data.  if the true_lb occurs before the actual buffer
+        * start, we need to give an offset to the user to start
+        * sending or receiving from. */
+        $if true_lb > 0
+            obj->DTP_bufsize += true_lb;
+            obj->DTP_buf_offset = 0;
+        $else
+            obj->DTP_buf_offset = -true_lb;
+
+        # $print "count: %ld, DTP_bufsize: %ld, DTP_buf_offset: %ld", $(count), obj->DTP_bufsize, obj->DTP_buf_offset
+
+#---------------------------------------- 
+subcode: DTPI_parse_desc
+    &call func, DTPI_parse_desc, const char *s, const char **parts, int *num_parts, int max_parts
+        $my int i = 0
+        $while *s
+            EXPECT_DIGIT;
+            # check atoi(s) == i+1
+            SKIP_DIGIT;
+            EXPECT_CHAR(':'); s++;
+            EXPECT_ALPHA;
+
+            parts[i++] = s;
+            DTPI_ERR_ASSERT(i < max_parts, rc)
+
+            SKIP_ALPHA;
+            EXPECT_CHAR('[');
+            SKIP_UNTIL(']');
+            s++;
+            SKIP_SPACE;
+        *num_parts = i;
+
+macros:
+    arg_A: DTP_pool_s dtp, DTPI_Attr_s ** attr_tree, MPI_Datatype * newtype, MPI_Aint * new_count
+    arg_B: DTP_pool_s dtp, DTPI_Attr_s * attr, MPI_Datatype * newtype, MPI_Aint * new_count
+    arg_type_count: MPI_Datatype type, MPI_Aint count
+    
+
+subcode: DTPI_custom_datatype
+    &call func, DTPI_custom_datatype, $(arg_A), const char **desc_list, int depth
+        $call @check_depth_0
+
+        $call alloc_attr
+
+        $my $(arg_type_count)
+        $DTP_call DTPI_custom_datatype, dtp, &attr->child, &type, &count, desc_list + 1, depth - 1
+
+        $my const char *s = desc_list[0]
+        $call @parse_custom_s
+        $else
+            DTPI_ERR_ASSERT(0, rc)
+
+        $if depth > 1
+            $DTP_call, MPI_Type_free, &type
+
+    subcode: check_depth_0
+        $if depth == 0
+            $my DTPI_pool_s *dtpi = dtp.priv
+            *attr_tree = NULL
+            *newtype = dtp.DTP_base_type
+            *new_count = dtpi->base_type_count
+            goto fn_exit
+
+    subcode: alloc_attr
+        $my DTPI_Attr_s *attr
+        DTPI_ALLOC_OR_FAIL(attr, sizeof(DTPI_Attr_s), rc)
+        *attr_tree = attr
+
+    subcode: parse_custom_s
+        $(for:a in $(dt_list))
+            $case s $eq "$(a)"
+                $DTP_call custom_$(a), dtp, attr, newtype, new_count, s + $(a:strlen), type, count
+
+subcode: static_custom_routines
+    $(for:a in $(dt_list))
+        &call func, custom_$(a), $(arg_B), const char *desc, $(arg_type_count)
+            $call init_attr
+            $DTP_call MPI_Type_get_extent, type, &tmp_lb, &attr->child_type_extent
+            const char *s = desc;
+            # $print custom_$(a): $s
+            EXPECT_CHAR('['); s++;
+
+            $(set:P=attr->u.$(a).$1)
+            $(if:a=struct)
+                $(set:P=attr->u.structure.$1)
+            $call @create_$(a)
+
+            *new_count = count
+
+    subcode: init_attr
+        attr->kind = DTPI_DATATYPE_KIND__$(a:uc);
+        $my MPI_Aint tmp_lb
+
+#---------------------------------------- 
+subcode: create_contig
+    $call scan, 1, "blklen %d", &$(P:blklen)
+    $DTP_call MPI_Type_contiguous, $(P:blklen), type, newtype
+    $call divide_count, $(P:blklen)
+
+subcode: create_dup
+    $DTP_call, MPI_Type_dup, type, newtype
+    
+subcode: create_resized
+    $call scan, 2, "lb %zd, extent %zd", &$(P:lb), &$(P:extent)
+    $DTP_call, MPI_Type_create_resized, type, $(P:lb), $(P:extent), newtype
+
+# ----
+subcode: create_vector_(name, stride_fmt)
+    $call scan, 3, "numblks %d, blklen %d, stride $(stride_fmt)", &$(P:numblks), &$(P:blklen), &$(P:stride)
+    $DTP_call, MPI_Type_$(name), $(P:numblks), $(P:blklen), $(P:stride), type, newtype
+    $call divide_count, ($(P:numblks) * $(P:blklen))
+
+subcode: create_vector
+    $call create_vector_, vector, %d
+
+subcode: create_hvector
+    $call create_vector_, hvector, %zd
+
+# ----
+subcode: create_blkidx_(name, disp_type)
+    $call scan, 2, "numblks %d, blklen %d", &$(P:numblks), &$(P:blklen)
+    $call scan_array, $(P:numblks), $(P:array_of_displs), $(disp_type)
+
+    $DTP_call, MPI_Type_create_$(name), $(P:numblks), $(P:blklen), $(P:array_of_displs), type, newtype
+    $call divide_count, ($(P:numblks) * $(P:blklen))
+
+subcode: create_blkindx
+    $call create_blkidx_, indexed_block, int
+
+subcode: create_blkhindx
+    $call create_blkidx_, hindexed_block, MPI_Aint
+
+# ----
+subcode: create_indexed_(name, disp_type)
+    $call scan, 1, "numblks %d", &$(P:numblks)
+    $call scan_array, $(P:numblks), $(P:array_of_blklens), int
+    $call scan_array, $(P:numblks), $(P:array_of_displs), $(disp_type)
+
+    $DTP_call, MPI_Type_$(name), $(P:numblks), $(P:array_of_blklens), $(P:array_of_displs), type, newtype
+
+    $my int total_blklen = 0
+    $for i=0:$(P:numblks)
+        total_blklen += $(P:array_of_blklens)[i]
+    $call divide_count, total_blklen
+
+subcode: create_indexed
+    $call create_indexed_, indexed, int
+
+subcode: create_hindexed
+    $call create_indexed_, hindexed, MPI_Aint
+
+# ----
+subcode: create_subarray
+    $call scan, 1, "ndims %d", &$(P:ndims)
+    $call scan_array, $(P:ndims), $(P:array_of_sizes), int
+    $call scan_array, $(P:ndims), $(P:array_of_subsizes), int
+    $call scan_array, $(P:ndims), $(P:array_of_starts), int
+    SKIP_UNTIL('o')
+    $if s $eq "order MPI_ORDER_C"
+        $(P:order) = MPI_ORDER_C
+    $elif s $eq "order MPI_ORDER_FORTRAN"
+        $(P:order) = MPI_ORDER_FORTRAN
+    $else
+        DTPI_ERR_ASSERT(0, rc)
+
+    $DTP_call MPI_Type_create_subarray, $(P:ndims), $(P:array_of_sizes), $(P:array_of_subsizes), $(P:array_of_starts), $(P:order), type, newtype
+
+    $my int total_blklen = 1
+    $for i=0:$(P:ndims)
+        total_blklen *= $(P:array_of_sizes)[i]
+    $call divide_count, total_blklen
+
+subcode: create_struct
+    $call scan, 1, "numblks %d", &$(P:numblks)
+    $call scan_array, $(P:numblks), $(P:array_of_blklens), int
+    $call scan_array, $(P:numblks), $(P:array_of_displs), MPI_Aint
+    $my MPI_Datatype *array_of_types
+    DTPI_ALLOC_OR_FAIL(array_of_types, $(P:numblks) * sizeof(MPI_Datatype), rc)
+    $for i=0:$(P:numblks)
+        array_of_types[i] = type
+    $DTP_call MPI_Type_create_struct, $(P:numblks), $(P:array_of_blklens), $(P:array_of_displs), array_of_types, newtype
+    DTPI_FREE(array_of_types)
+
+    $my int total_blklen = 0
+    $for i=0:$(P:numblks)
+        total_blklen += $(P:array_of_blklens)[i]
+    $call divide_count, total_blklen
+
+# -------------------------
+subcode: scan(n, @fmt)
+    $my int n
+    n = sscanf(s, $(fmt))
+    $(if:debug)
+        $if n != $(n)
+            $print Scanning error ($n / $(n)): $s
+    DTPI_ERR_ASSERT(n == $(n), rc)
+
+subcode: scan_array(n, array, type)
+    DTPI_ALLOC_OR_FAIL($(array), $(n) * sizeof($(type)), rc)
+    SKIP_UNTIL('('); s++;
+    $for i=0:$(n)
+        $if i > 0
+            EXPECT_CHAR(','); s++;
+        EXPECT_DIGIT;
+        $(array)[i] = atoi(s)
+        SKIP_DIGIT;
+
+subcode: divide_count(n)
+    DTPI_ERR_ASSERT(count % $(n) == 0, rc)
+    count /= $(n)
+

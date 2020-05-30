@@ -1,0 +1,35 @@
+page: pr_author_check
+    module: perl
+
+    $(if:0)
+        my $pr_author = $ENV{ghprbTriggerAuthorLogin}
+    $(else)
+        my $pr_author = "shintaro-iwasaki"
+    $if !$pr_author
+        die "Author's github username not set.\n"
+    my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
+    my $curl = "curl -H \"Authorization: token $gh_token\""
+
+    $print Checking PR author [$pr_author]\n\n
+
+    my $check_result
+    # my @teams = ("pmodels-core", "mpich-intel", "mpich-cray", "mpich-mellanox", "mpich-riken")
+    my @teams = ("pmodels-core", "mpich-collab")
+    $foreach $a in @teams
+        $print "  checking in team $a ..."
+        my $url = "https://api.github.com/orgs/pmodels/teams/$a/members"
+        my $t = `$curl --silent $url`
+        $print $t
+        $while $t=~/"login": "(\S+)"/g
+            $print "   ... $1"
+            $if $pr_author eq $1
+                $check_result = "Found in team $a"
+                goto result
+    result:
+    $print
+    $if !$check_result
+        die "Author not found.\n"
+    $else
+        $print Author found.
+
+

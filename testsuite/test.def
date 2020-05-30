@@ -1,0 +1,112 @@
+#  test/mpi/f77/pt2pt/sendf.f
+
+page: t
+    module: c
+    skiprun: 1
+
+    &call mtest_frame
+        &call loop_intra_comm, 2
+            $call test_pair_ssend
+
+    subcode: test_pair_ssend
+        $call init_next_prev
+
+        $my int tag = 1789
+        $define(TEST_SIZE) 2000
+        $my int count = TEST_SIZE / 3
+
+        $my send_buf, recv_buf: float *
+        clear_test_data(recv_buf, TEST_SIZE)
+        $if rank == 0
+            init_test_data(send_buf, TEST_SIZE)
+            $my int flag, MPI_Status status
+            $mpi_call Iprobe(MPI_ANY_SOURCE, tag, comm, &flag, &status)
+            $if flag
+                $print "Ssend: Iprobe succedded! source = %d, tag = %d\n", status.MPI_SOURCE, status.MPI_TAG
+            $mpi_call Ssend(send_buf, count, MPI_REAL, next, tag, comm)
+            $while !flag
+                $mpi_call Iprobe(MPI_ANY_SOURCE, tag, comm, &flag, &status)
+            $call @check, source, status.MPI_SOURCE, next
+            $call @check, tag, status.MPI_TAG, tag
+
+            $my got_count: int
+            $mpi_call Get_count(status, MPI_REAL, &got_count)
+            $call @check, count, got_count, count
+
+            $mpi_call Recv(recv_buf, TEST_SIZE, MPI_REAL, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status)
+            errs += msg_check(recv_buf, next, tag, count, &status, TEST_SIZE, "ssend and recv")
+        $elif prev == 0
+            $mpi_call Recv(recv_buf, TEST_SIZE, MPI_REAL, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status)
+            errs += msg_check(recv_buf, next, tag, count, &status, TEST_SIZE, "ssend and recv")
+            $mpi_call Ssend(recv_buf, count, MPI_REAL, prev, tag, comm)
+
+        subcode: check(name, got, expect)
+            $if $(got) != $(expect)
+                $print "Ssend: Incorrect $(name), expected %d, got %d\n", $(expect), $(got)
+                errs++
+            
+
+subcode: mtest_frame
+    MTest_Init(&argc, &argv);
+
+    $local rank, size: int
+    $local int errs = 0
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    BLOCK
+
+    MTest_Finalize(errs);
+    return MTestReturnValue(errs)
+
+    # -------------------------------- 
+    subcode: loop_intra_comm(min_size)
+        $local MPI_Comm comm
+        $while MTestGetIntracommGeneral(&comm, $(min_size), 1)
+            $if comm == MPI_COMM_NULL
+                continue
+            BLOCK
+            MTestFreeComm(&comm)
+
+    subcode: loop_intra_comm_all(min_size)
+        $local MPI_Comm comm
+        $while MTestGetIntracommGeneral(&comm, $(min_size), 0)
+            BLOCK
+            MTestFreeComm(&comm)
+
+    subcode: loop_inter_comm(min_size)
+        $local int isLeftGroup
+        $while MTestGetIntercomm(&comm, &isLeftGroup, $(min_size))
+            BLOCK
+            MTestFreeComm(&comm)
+
+    # -------------------------------- 
+    subcode: init_next_prev
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+        $local next, prev: int
+        next = rank + 1
+        $if next == size
+            next = 0
+        prev = rank - 1
+        $if prev < 0
+            prev = size - 1
+
+subcode: mpi_call(@F)
+    MPI_$(F);
+
+subcode: _autoload
+    $(block:frame_init)
+        $call copyright
+    $include "mpi.h"
+    $include "mpitest.h"
+
+    $plugin mpi_call
+
+subcode: copyright
+    $: /*
+    $:  * Copyright (C) by Argonne National Laboratory
+    $:  *     See COPYRIGHT in top-level directory
+    $:  */
+
+

@@ -1,0 +1,38 @@
+page: get_mpich_pr
+    module: perl
+
+    $global $group = "pmodels"
+    $global $repo = "mpich"
+    $global $me = "hzhou"
+
+    my $pr = $ARGV[0]
+    $if $pr !~ /^\d+$/
+        die "Usage: $0 [PR #]"
+
+    my ($author, $branch)
+    &call open_r, "curl -s https://api.github.com/repos/$group/$repo/pulls/$pr |"
+        $if /^\s*"label":\s*"(\w+):(\S+)",/
+            $if $1 ne $group
+                ($author, $branch) = ($1, $2)
+    $if !$author
+        die "Failed to get remote PR branch\n"
+
+    my $mpich_github = "https://github.com/$group/$repo"
+    $(set:A="$ENV{HOME}/mpich-github")
+    $(set:B="$ENV{HOME}/work/mpich-github")
+    $if $ENV{MPICH_GITHUB}
+        $mpich_github = $ENV{MPICH_GITHUB}
+    $elif $author eq $me
+        $if -d $(A)
+            $mpich_github = $(A)
+        $elif -d $(B)
+            $mpich_github = $(B)
+
+    system "git clone $mpich_github --branch master mpich$pr"
+    chdir "mpich$pr"
+
+    system "git remote add gh-$author https://github.com/$author/mpich"
+    system "git fetch gh-$author"
+    system "git checkout -b $branch gh-$author/$branch"
+
+

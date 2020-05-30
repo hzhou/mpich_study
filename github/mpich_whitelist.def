@@ -1,0 +1,172 @@
+include: macros/github.def
+
+page: get_author_list
+    module: perl
+    whitelist: mpich.whitelist
+
+    my $whitelist = "$(whitelist)"
+    load_whitelist($whitelist)
+
+    $global $curl = "curl"
+    $curl = "curl -H \"Authorization: token c8b0114b02e8c313e17e6c9317077839394cd1c9\""
+
+    my @teams = ("pmodels-core", "mpich-intel", "mpich-cray", "mpich-mellanox", "mpich-riken")
+    $foreach $a in @teams
+        $print "\n## $a"
+        my $url = "https://api.github.com/orgs/pmodels/teams/$a/members?per_page=50"
+        my $t = `$curl --silent $url`
+        my @list
+        $while $t=~/"login": "(\S+)"/g
+            push @list, $1
+            get_user($1)
+        merge_team($a, \@list)
+
+    dump_whitelist($whitelist)
+    $if $list_changed
+        die "Whitelist was updated.\n"
+
+fncode: merge_team($team, $list)
+    $global $list_changed = 0
+    $if !$teams{$team} 
+        $teams{$team} = $list
+        $list_changed++
+    $else
+        my $tlist = $teams{$team}
+        $if $#$tlist != $#$list
+            $list_changed++
+        my %h
+        $foreach $id in @$tlist
+            $h{$id}=1
+        $foreach $id in @$list
+            $if !$h{$id}
+                push @$tlist, $id
+                $list_changed++
+
+fncode: load_whitelist($whitelist)
+    $global %teams, %users
+    my $tlist=[]
+    $if -e "$whitelist"
+        &call open_r, $whitelist
+            $if /^## (.*)/
+                my $t = $1
+                $t=~s/\s+$//
+                $if !$teams{$t}
+                    $teams{$t} = []
+                $tlist = $teams{$t}
+            $elif /^[\s\*]*(\S+):\s*(.*?)\s*<(\S*)>/
+                $users{$1} = {name=>$2, email=>$3, from_team=>0}
+                push @$tlist, $1
+
+fncode: get_user($user_id)
+    $global %users
+    $if !$users{$user_id}
+        $print checking github user: $user_id ...
+        my $url = "https://api.github.com/users/$user_id"
+        my $t = `$curl --silent $url`
+        my ($email, $name)
+        $if $t=~/"email":\s*"(.+)"/
+            $email = $1
+        $if $t=~/"name":\s*"(.+)"/
+            $name = $1
+        $users{$user_id} = {name=>$name, email=>$email}
+    $users{$user_id}->{from_team} = 1
+
+fncode: dump_whitelist($whitelist)
+    &call open_W, $whitelist
+        $foreach $team in sort keys %teams
+            my $tlist = $teams{$team}
+            $print "## $team"
+            $foreach $id in sort @$tlist
+                my $user = $users{$id}
+                $if $user->{from_team}
+                    $print "  * -"
+                $else
+                    $print "    -"
+
+                my $n_sp = 24-length($id)
+                $while $n_sp <=0
+                    $n_sp += 8
+                my $sp = ' ' x $n_sp
+
+                $print "$id:$sp$user->{name} <$user->{email}>"
+            $print
+
+#----------------------------------------             
+page: pr_author_check_whitelist
+    module: perl
+    arg: mpich.whitelist /home/hzhou/temp/mpich
+
+    my $whitelist_file = $ARGV[0]
+    load_whitelist($whitelist_file)
+
+    $if $ARGV[1]
+        chdir $ARGV[1] or die "Can't chdir $ARGV[1]\n"
+    $call @sanity_check
+
+    system "git remote add pmodels git://github.com/pmodels/mpich.git"
+    system "git fetch pmodels"
+    my $base = `git merge-base pmodels/master HEAD`
+    chomp $base
+
+    $print Merge base: $base
+
+    $call @dump_commits
+
+    $call check_init
+    &call open_r, "git log $base..HEAD |"
+        $if /^Author:\s*(.*?)\s*<(\S+)>/
+            $call check_author, $1, $2
+        $elif /^\s*Co-authored-by:\s*(.*?)\s*<(\S+)>/
+            $call check_author, $1, $2
+
+    $call report
+
+    #---------------------------------------- 
+    subcode: sanity_check
+        $if !-d ".git"
+            die "Not a git repository"
+
+    subcode: dump_commits
+        my @commits
+        &call open_r, "git log --oneline $base..HEAD |"
+            push @commits, $_
+        $print \nCommits:
+        $while my $l =  pop @commits
+            print "    $l"
+    #---------------------------------------- 
+    subcode: load_whitelist
+        my %whitelist
+        $whitelist{'hzhou321@anl.gov'} = 1
+
+    subcode: check_init
+        my @extra_authors
+        my @whitelisted_authors
+        my %checked_authors
+
+    subcode: check_author(name, email)
+        $if !$checked_authors{$(email)}
+            $checked_authors{$(email)} = 1
+            $if !$whitelist{$(email)}
+                push @extra_authors, "$(name) <$(email)>"
+            $else
+                push @whitelisted_authors, "$(name) <$(email)>"
+
+    subcode: report
+        $if @whitelisted_authors
+            $print \nWhitelisted author(s):
+            $foreach $author in @whitelisted_authors
+                $print "    $author"
+        $if @extra_authors
+            $print \nFollowing author(s) are not whitelisted and need check MPICH Contribution Agreement:
+            $foreach $author in @extra_authors
+                $print "    $author"
+            exit 1
+
+fncode: load_whitelist($whitelist)
+    $global %whitelist
+    &call open_r, $whitelist
+        $if /^\s*#/
+            # skip
+        $elif /^[\s\*]*(\S+):\s*(.*?)\s*<(\S*)>/
+            # id, name, email
+            $whitelist{$3} = 1

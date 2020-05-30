@@ -1,0 +1,65 @@
+page: jenkins
+    module: perl
+
+    parse_args()
+    jenkins_build($opts{job})
+
+
+fncode: parse_args
+    $global %opts
+    $foreach $a in @ARGV
+        $if $a=~/^$(job_pat)$/
+            $opts{job}.="$a,"
+        $else
+            $opts{param}.="$a "
+
+    $if !$opts{job}
+        $opts{job}="warnings"
+    $else
+        $opts{job}=~s/,$//
+
+    $if $opts{param}
+        $opts{param}=~s/\s$//
+        $opts{param}=~s/\s/+/g
+
+macros:
+    job_pat: (ofi|ucx|tcp|sock|warnings|custom)
+
+subcode: _autoload
+    $global $TOKEN = "2GryedsEud"
+    $global $BRANCH
+    $global $mpich_root
+
+    my $pwd = $ENV{PWD}
+    $if $pwd=~/(.*mpich-github)/
+        $mpich_root=$1
+    $else
+        die "Not inside mpich-github\n"
+
+    $BRANCH = `git rev-parse --abbrev-ref HEAD`
+    chomp $BRANCH
+
+    $if !$BRANCH
+        die "Git branch not found\n"
+
+fncode: jenkins_build($job)
+    my %job_hash
+
+    $while $job =~/\b$(job_pat)\b/g ->$a
+        $if $a=~/(ofi|ucx)/
+            $a = "hzhou-ch4-$1"
+        $elif $a=~/(tcp|sock)/
+            $a = "hzhou-ch3-$1"
+        $else
+            $a = "hzhou-$a"
+        $job_hash{$a} = 1
+
+    my $url="https://jenkins-pmrs.cels.anl.gov/view/private/job"
+    my $leaf="buildWithParameters?token=$TOKEN&gitBranch=$BRANCH"
+    $if $opts{param}
+        $leaf.="&param=$opts{param}"
+
+    $foreach $a in keys %job_hash
+        $print [$url/$a/$leaf]
+        system "curl -s \"$url/$a/$leaf\""
+

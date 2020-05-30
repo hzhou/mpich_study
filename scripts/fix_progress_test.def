@@ -1,0 +1,16 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: t
+
+#---------------------------------------- 
+subcode: grep_t
+    $(if:1)
+        $call grep_l, 'MPID_Progress_test()'
+    $(else)
+        # none
+
+subcode: filter_lines_t
+    $if $(l)=~/^.*MPID_Progress_test\(\)/
+        $(l) =~s/\(\)/(NULL)/
+        $cnt++
