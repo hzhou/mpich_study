@@ -44,11 +44,11 @@ page: mymake
 
 
     subcode: set_mymake_DO
-        $(for:stage,clean,errmsg,cvars,logs,hydra,test,mpi_h)
+        $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
             push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
         push @extra_make_rules, ""
         push @extra_make_rules, ".PHONY: test cvars errmsg"
-        $(for:test,cvars,errmsg)
+        $(for:testing,cvars,errmsg)
             $call push_autogen_rule, $1, $1
 
     subcode: push_autogen_rule(name, file)
@@ -145,16 +145,6 @@ page: mymake_hydra
             $if /(-fsanitize=\w+)/
                 $ENV{LDFLAGS} = $1
     $call prepare_hydra
-
-page: mymake_test
-    module: perl
-
-    $call load_opts
-    $call prepare_testing
-    $if $ENV{skip_test} eq "custom"
-        $call run_tests_custom
-    $else
-        # $call run_tests
 
 # ----------------
 # print out a stage header

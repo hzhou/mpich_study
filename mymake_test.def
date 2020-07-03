@@ -1,3 +1,14 @@
+include: macros_mymake/args.def
+
+output_dir: ./mymake
+
+page: mymake_testing
+    module: perl
+
+    $call load_opts
+    $call prepare_testing
+
+#---------------------------------------- 
 subcode: prepare_testing
     my $dir = "test/mpi"
     my $srcdir="../.."
