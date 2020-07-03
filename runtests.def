@@ -1,5 +1,69 @@
 output_dir: ./mymake
 
+page: runtests_asan
+    module: perl
+    arg: -dir=$HOME/work/mpich-test/test/mpi -tests=testlist -root=comm
+
+    $global %config
+    $config{mpiexec} = "mpirun"
+    $config{np_arg} = "-n"
+    $config{root} = "."
+    $config{tests} = "testlist,testlist.dtp,testlist.cvar"
+
+    $call load_cmdline
+    $call set_srcdir
+
+    my @alltests
+    LoadTests($config{root}, \@alltests)
+
+    $print "Building test programs..."
+    build_alltests(\@alltests)
+
+    $print "Running all tests..."
+    $call run_alltests
+
+    subcode: load_cmdline
+        $foreach $a in @ARGV
+            $if $a=~/^--?dir=(.*)/
+                chdir $1 or die "Can't chdir $1\n";
+            $elif $a=~/^--?root=(.*)/
+                $config{root} = $1
+            $elif $a=~/^--?tests=(.*)/
+                $config{tests} = $1
+
+    subcode: set_srcdir
+        $use Cwd
+        $config{srcdir} = getcwd()
+        $if $config{srcdir}=~/(.*)\/test\/mpi/ and -e "$1/_inst/bin/mpirun"
+            $ENV{PATH} = "$1/_inst/bin:$ENV{PATH}"
+            $ENV{LD_LIBRARY_PATH} = "$1/_inst/lib:$ENV{LD_LIBRARY_PATH}"
+
+    subcode: run_alltests
+        $foreach $test in @alltests
+            my $prog = "$test->{dir}/$test->{prog}"
+            $if -e $prog
+                my $cmd = get_test_cmd($test)
+                $if $test->{dir} ne "."
+                    $cmd = "cd $test->{dir} && $cmd"
+                $print [$cmd]
+                &call setup_env
+                    system $cmd
+            $else
+                warn "[$prog] doesn't exist!\n"
+        # -----------------
+        subcode: setup_env
+            my %saveEnv
+            $if $test->{env}
+                %saveEnv = %ENV;
+                $call @debug_env
+                $foreach $val in split /\s+/, $test->{env}
+                    $if $val =~ /([^=]+)=(.*)/
+                        $ENV{$1} = $2;
+            BLOCK
+            $if $test->{env}
+                %ENV = %saveEnv
+
+#---------------------------------------- 
 page: runtests
     module: perl
     arg: -help
@@ -25,11 +89,11 @@ page: runtests
 
     $global @alltests
     $if !@alltests
-        LoadTests(".")
+        LoadTests(".", \@alltests)
         $call @debug_load
 
     $print "Building test programs..."
-    $call build_alltests
+    $call build_alltests(\@alltests)
 
     $print "Running tests..."
     $call @init_time_start
@@ -45,9 +109,9 @@ page: runtests
 
     # --------------------
     subcode: set_cwd
+        $use Cwd
         $global $cwd
-        $cwd = `pwd`
-        chomp $cwd;
+        $cwd = getcwd()
 
     subcode: check_mpiexec
         my $test = {prog=>"date", np=>1, resultTest=>"TestStatusZero"}
@@ -270,13 +334,13 @@ fncode: load_commandline
 
 
 #---------------------------------------- 
-fncode: LoadTests($dir)
+fncode: LoadTests($dir, $alltests)
     my $srcdir = $config{srcdir}
-    my @include_list=split /\s+/, $config{tests}
+    my @include_list=split /[, ]+/, $config{tests}
     my %loaded_listfile
     $while my $f=shift @include_list
         $if -d $f
-            LoadTests($f)
+            LoadTests($f, $alltests)
             next
 
         my $listfile
@@ -347,8 +411,8 @@ fncode: LoadTests($dir)
             $else
                 $test->{dir} = $dir
             $test->{line} = $_
-            push @alltests, $test
-            $test->{id}=@alltests # 1-based
+            push @$alltests, $test
+            $test->{id} = $#$alltests + 1 # 1-based
 
 fncode: parse_testline($line)
     my %test = (line=> $line)
@@ -378,7 +442,7 @@ fncode: parse_testline($line)
                     $test{env} .= " $value"
                 $else
                     warn "Environment value not in a=b form: $line"
-            $elif $key=~/^(resultTest|init|timeLimit|arg|env|mpiexecarg|xfail|mpiversion|strict|mpix)$/
+            $elif $key=~/^(resultTest|init|timeLimit|arg|env|mpiexecarg|xfail|mpiversion|strict|mpix|mem)$/
                 $if exists $test{$key}
                     $test{$key}.=" $value";
                 $else
@@ -442,7 +506,7 @@ fncode: BuildMPIProgram($test)
     my $prog = $test->{prog}
     my $dir = $test->{dir}
     my $cmd = "make -C $dir $prog";
-    $if $verbose
+    $if $config{verbose}
         $print "  $cmd ...\n"
     my $output = `$cmd 2>&1`
     $if ! -x "$dir/$prog"
@@ -451,9 +515,9 @@ fncode: BuildMPIProgram($test)
         $test->{output} = $output
         $test->{found_error} = "Failed to build $prog"
 
-subcode: build_alltests
+fncode: build_alltests($alltests)
     $my @dirs, %dirs, %dir_test_count
-    $foreach $test in @alltests
+    $foreach $test in @$alltests
         my $d = $test->{dir}
         $if !$dirs{$d}
             push @dirs, $d
@@ -468,14 +532,13 @@ subcode: build_alltests
         my $make="make"
         $if $d ne "."
             $make.=" -C $d"
-        $if $config{j}
-            $make.=" -j $config{j}"
 
         my $t = join ' ', @prog_list
-        `$make clean 2>&1`
-        $if $config{verbose}
-            $print "    $make $t..."
-        `$make $t 2>&1`
+        my $cmd = "$make clean && $make $t"
+        $(if:1)
+            system($cmd)
+        $(else)
+            system($cmd)==0 or die "Failed [$cmd]\n"
 
 #---------------------------------------- 
 fncode: RunMPIProgram($test)
@@ -502,7 +565,7 @@ fncode: RunMPIProgram($test)
         # presummably, build error
         return
     my $cmd = get_test_cmd($test)
-    $if $verbose
+    $if $config{verbose}
         $print "\n---- TEST $test->{id} ----\n"
         $print "  [$test->{dir}] $cmd" 
     &call setup_env
@@ -524,7 +587,7 @@ fncode: RunMPIProgram($test)
         $call check_TestStatusNoErrors
 
     done:
-    $if $verbose
+    $if $config{verbose}
         $if $test->{found_error}
             $print "Failed: [$test->{line}] - $test->{found_error}"
         $else
@@ -589,7 +652,7 @@ fncode: RunMPIProgram($test)
         my ($hydra_err)
         $while <$MPIOUT>
             push @output, $_
-            $if $verbose
+            $if $config{verbose}
                 print $_
             $if /FORTRAN STOP/
                 next
@@ -775,11 +838,11 @@ subcode: dump_summary_output
 
 #---------------------------------------- 
 subcode: debug_loading_list
-    $if $verbose
+    $if $config{verbose}
         print "Looking in $dir/$f\n"
 
 subcode: debug_env
-    $if $verbose
+    $if $config{verbose}
         print "  ENV: $test->{env}\n"
 
 subcode: debug_load

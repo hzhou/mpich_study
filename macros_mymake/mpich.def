@@ -5,8 +5,9 @@ subcode: compile_mpich
     $if $opts{enable_izem}
         $call need_izem
 
-    $(for:mpl,opa)
-        $call copy_subdir_module, $1
+    $call copy_subdir_module, mpl
+    $if -d "src/openpa"
+        $call copy_subdir_module, opa
 
     $call @preproc_bindings
     $call mpich_configure
@@ -36,14 +37,21 @@ subcode: compile_mpich
 
     $call custom_make
 
-    $ENV{CFLAGS}=$opts{CFLAGS}
-    system "make $(Hmpl) $(Hopa)"
+    $call load_dump_CFLAGS
+    $call patch_mpicc_etc
 
-    # post filtering config defines
-    $call @patch_sizeof_atomic
+    $ENV{CFLAGS}=$opts{CFLAGS}
+    $if -d "src/openpa"
+        system "make $(Hmpl) $(Hopa)"
+    $else
+        system "make $(Hmpl)"
+
+    # post filtering config_defines
+    $if -f "src/mpl/include/mpl_atomic.h"
+        $call @patch_sizeof_atomic
     $call patch_atomic_nolocal
     $call patch_ticketlock
-    $if %defines
+    $if %config_defines
         $call define_config_h, mymake/mpl/include/mplconfig.h
         $call define_config_h, src/include/mpichconf.h
 
@@ -53,6 +61,9 @@ subcode: compile_mpich
             # mpichversion include mpiimpl.h
             # pgcc won't ignore static inline functions
             # causing undefined reference to `fi_strerror` etc.
+            next
+        $elif $t=~/mpivars/
+            # not working for clang asan yet
             next
     # ---------------------------
     subcode: dump_variable_custom
@@ -87,11 +98,6 @@ subcode: compile_mpich
         &call open_r, config.status
             $if /S\["WRAPPER_LIBS"\]="(.*)"/
                 $opts{WRAPPER_LIBS}=$1
-        &call open_r, mymake/Makefile.orig
-            $if /^CFLAGS *= *(.*)/
-                $opts{CFLAGS}=$1
-                &call open_W, mymake/CFLAGS
-                    $print $1
 
         $if !$opts{have_weak}
             $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
@@ -99,16 +105,30 @@ subcode: compile_mpich
         # install mpicc etc.
         my $bin="\x24(PREFIX)/bin"
         $(for:p in mpicc,mpicxx,mpif77,mpifort)
+             $dst_hash{"mymake/$(p)"}=$bin
+        $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
+        $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
+
+    subcode: load_dump_CFLAGS
+        &call open_r, mymake/Makefile.custom
+            $if /^CFLAGS *= *(.*)/
+                $opts{CFLAGS}=$1
+                &call open_W, mymake/CFLAGS
+                    $print $1
+
+    subcode: patch_mpicc_etc
+        $(for:p in mpicc,mpicxx,mpif77,mpifort)
             $if -f "src/env/$(p).bash"
                 $call get_file_lines, src/env/$(p).bash
                 my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")
-                &call open_w, mymake/$(p)
+                &call open_W, mymake/$(p)
                     $foreach $l in @lines
-                        $l=~s/__(\w+)_TO_BE_FILLED_AT_INSTALL_TIME__/$tmp{$1}/e
+                        $if $l=~/_TO_BE_FILLED_AT_INSTALL_TIME__/
+                            $l=~s/__(\w+)_TO_BE_FILLED_AT_INSTALL_TIME__/$tmp{$1}/e
+                        $elif $l=~/^final_(c|cxx|f|fc)flags="(.*)"/ -> $c, $flags
+                            $if $opts{CFLAGS}=~/-fsanitize=(address|undefined)/
+                                $l = "final_${c}flags=\"$flags -fsanitize=$1\"\n"
                         print Out $l
-                $dst_hash{"mymake/$(p)"}=$bin
-        $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
-        $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
 
     # --------------------
     subcode: add_rule_cpi
@@ -182,6 +202,19 @@ subcode: mpich_configure
         $if $opts{device}=~/ofi/
             $call patch_configure_ofi
 
+        $if -f "src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4"
+            $call hack_configure_xpmem
+
+        subcode: hack_configure_xpmem
+            my $skip_xpmem=1
+            $foreach $a in @config_args
+                $if $a=~/--with-xpmem/
+                    $skip_xpmem = 0
+            $if $skip_xpmem
+                &call modify, src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4
+                    $if $l=~/AM_CONDITIONAL.*BUILD_SHM_IPC_XPMEM.*build_ch4_shm_ipc_xpmem/
+                        $l=~s/test .* ".*"/false/
+
 subcode: need_mpich_preproc
     $(set:errhan=src/mpi/errhan/$1)
     push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
@@ -225,5 +258,5 @@ subcode: patch_atomic_nolocal
         $config_defines{ENABLE_NO_LOCAL} = 1
 
 subcode: patch_ticketlock
-    $if $opts{device}=~/ch4:/
+    $if $opts{device}=~/ch4:/ && !$config_defines{MPL_POSIX_MUTEX_NAME}
         $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_TICKETLOCK"

@@ -10,6 +10,10 @@ fncode: parse_args
     $foreach $a in @ARGV
         $if $a=~/^$(job_pat)$/
             $opts{job}.="$a,"
+        $elif $a=~/^-dryrun/
+            $opts{dryrun} = 1
+        $elif $a=~/^$(label_pat)$/
+            $opts{label} = $a
         $else
             $opts{param}.="$a "
 
@@ -23,7 +27,8 @@ fncode: parse_args
         $opts{param}=~s/\s/+/g
 
 macros:
-    job_pat: (ofi|ucx|tcp|sock|warnings|custom)
+    job_pat: (ofi|ucx|tcp|sock|warnings|custom|quick)
+    label_pat: .*(centos|freebsd|solaris|osx).*
 
 subcode: _autoload
     $global $TOKEN = "2GryedsEud"
@@ -54,12 +59,15 @@ fncode: jenkins_build($job)
             $a = "hzhou-$a"
         $job_hash{$a} = 1
 
-    my $url="https://jenkins-pmrs.cels.anl.gov/view/private/job"
+    my $url="https://jenkins-pmrs.cels.anl.gov/view/private-hzhou/job"
     my $leaf="buildWithParameters?token=$TOKEN&gitBranch=$BRANCH"
     $if $opts{param}
         $leaf.="&param=$opts{param}"
+    $if $opts{label}
+        $leaf.="&label=$opts{label}"
 
     $foreach $a in keys %job_hash
         $print [$url/$a/$leaf]
-        system "curl -s \"$url/$a/$leaf\""
+        $if !$opts{dryrun}
+            system "curl -s \"$url/$a/$leaf\""
 

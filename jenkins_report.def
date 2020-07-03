@@ -1,0 +1,158 @@
+output_dir: ./mymake
+
+page: report_make_log
+    module: perl
+
+    my ($make_log_file, $compiler, $dur) = @ARGV
+
+    my @make_log
+    my %got_hash  # to skip duplicate warnings
+    &call open_r, $make_log_file
+        $call @parse_LeakSanitizer
+        $if $compiler=~/intel|icc/
+            $call parse_make_log_icc
+        $elif $compiler=~/pgi/
+            $call parse_make_log_pgi
+        $elif $compiler=~/sun/
+            $call parse_make_log_sun
+        $else
+            $call parse_make_log
+
+    dump_report(\@make_log, $dur)
+
+    # --------------------
+    subcode: parse_LeakSanitizer
+        $if /Direct leak of /
+            my @t
+            push @t, $_
+            $while <In>
+                s/^Unexpected[^:]*://;
+                $if /^\s*$/
+                    last
+                push @t, $_
+            push @make_log, \@t
+            next
+
+    subcode: parse_make_log
+        # ./src/mpid/ch4/src/ch4r_proc.h:170:93: warning: declaration of ‘index’ shadows a global declaration [-Wshadow]
+        $if /^(\S+:\d+:\s*(error|warning):\s*.*)/ -> $t
+            push @make_log, $t
+
+    subcode: parse_make_log_icc
+        # ./src/mpid/ch3/include/mpid_coll.h(26): warning #177: label "fn_exit" was declared but never referenced
+        $if /^(\S+\(\d+\): (error|warning) #\d+:\s*.*)/ -> $t
+            push @make_log, $t
+
+    subcode: parse_make_log_pgi
+        # PGC-W-0114-More than one type specified (/var/lib/jenkins-slave/workspace/hzhou-warnings-more/compiler/pgi/config/ch3-tcp/label/centos64/modules/mpl/include/uthash.h: 90)
+        $if /^(PGC-W-\d+-.*)/ -> $t
+            push @make_log, $t
+
+    subcode: parse_make_log_sun
+        # "src/include/mpir_handlemem.h", line 120: warning: null dimension: indirect
+        $if /^(".*",\s*line \d+:\s*warning:.*)/ -> $t
+            $if $t=~/opa_gcc_intel_32_64_ops/
+                $if !$got_hash{opa_asm}
+                    push @make_log, $t
+                    $got_hash{opa_asm}=1
+            $else
+                push @make_log, $t
+
+
+fncode: parse_warning($t)
+    my $o
+    $if $t=~/^(\S+):(\d+):/ # gcc
+        $o = { file=>$1, line=>$2 }
+    $elif $t=~/^(\S+)\((\d+)\):/ # icc
+        $o = { file=>$1, line=>$2 }
+    $elif $t=~/^PGC-.*\((.*):\s*(\d+)\)/ # pgi
+        $o = { file=>$1, line=>$2 }
+    $elif $t=~/"(.*)", line (\d+): warning:/ # suncc
+        $o = { file=>$1, line=>$2 }
+    $elif $t=~/(\S+), line (\d+): warning:/ # suncc
+        $o = { file=>$1, line=>$2 }
+
+    $if $o
+        $if $o->{file}=~/^.*\/mymake\/(.*)/g
+            $o->{file}="~$1"
+            $if $o->{file}=~/^~(ucx|libfabric)/
+                $o->{skip}="external module: $1"
+        $if $t=~/warning #177:/
+            # icc: label "xxx" was declared but never referenced
+            $o->{skip}="icc: warning #177: unused label"
+        $elif $compiler eq "gcc-4" and $t=~/\[(-Wmaybe-uninitialized)\]/
+            $o->{skip}="gcc-4: $1"
+        return $o
+    $else
+        return undef
+
+fncode: parse_sanitizer($t)
+    my $o = {}
+    $foreach $l in @$t
+        $if $l=~/^Unexpected output in (\w+): (Direct leak of.*)/
+            $l = "$2\n"
+            $o->{name}=$1
+            $o->{msg}=$2
+            $o->{msg}=~s/ allocated from://
+            last
+        $elif $l=~/^Direct leak of.*/
+            $o->{name}="cpi"
+            $o->{msg}=$l
+            $o->{msg}=~s/ allocated from://
+    return $o
+
+fncode: dump_report($warning_list, $dur)
+    my $n_fails = @$warning_list
+    $(set:LIMIT=10000)
+    $if $n_fails>=$(LIMIT)
+        $n_fails = $(LIMIT)
+    my $n_tests = $n_fails+1
+    &call open_W, summary.junit.xml
+        $print <testsuites>
+        $print <testsuite failures="$n_fails" errors="0" skipped="0" tests="$n_tests" name="warning">
+        $if $dur > 0
+            $print <testcase name="1 - build" time="$dur"></testcase>
+        my $i = 1
+        $foreach $t in @$warning_list
+            $if $i>$(LIMIT)
+                last
+            $i++
+            $if ref($t) eq "ARRAY"
+                $call dump_sanitizer
+            $else
+                $call dump_warning
+                
+        $print </testsuite>
+        $print </testsuites>
+
+    subcode: dump_sanitizer
+        my $o = parse_sanitizer($t)
+        $if $o
+            $print <testcase name="$o->{name}">
+        $else
+            $print <testcase name="$i">
+        $print <failure message="$o->{msg}">
+        $print "<![CDATA[@$t]]>"
+        $print </failure>
+
+        $print </testcase>
+        
+    subcode: dump_warning
+        $t=~s/"//g
+        $t=~s/</&lt;/g
+        $t=~s/>/&gt;/g
+        my $o = parse_warning($t)
+        $if $o
+            $print <testcase name="$o->{file}:$o->{line}">
+        $else
+            $print <testcase name="$i">
+        $if $o->{skip}
+            $print <skipped type="TodoTestSkipped" message="$o->{skip}">
+            $print <![CDATA[$t]]>
+            $print </skipped>
+        $else
+            $print <failure message="$t">
+            $print Build details are in make.log.
+            # $print <![CDATA[$t]]>
+            $print </failure>
+        $print </testcase>

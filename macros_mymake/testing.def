@@ -5,6 +5,8 @@ subcode: prepare_testing
     $if !-d "mymake"
         mkdir "mymake" or die "Can't mkdir mymake\n"
 
+    system "which mpicc"
+
     $call @testing_config
     $call echo_system, "cp Makefile mymake/Makefile.orig"
 
@@ -31,7 +33,7 @@ subcode: testing_config
 
     subcode: set_config_args
         my $config_args = ""
-        $foreach $t in @config_args
+        $foreach $t in split /\s+/, $opts{config_args}
             $if $t=~/--(dis|en)able-.*tests/
                 $config_args .= " $t"
             $elif $t=~/--with-device=(.*)/
@@ -44,4 +46,4 @@ subcode: testing_config
 subcode: echo_system(@cmd)
     my $cmd = $(cmd)
     $print ": $cmd"
-    system $cmd
+    system($cmd) == 0 or die "    Command failed.\n"

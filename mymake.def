@@ -67,10 +67,8 @@ page: mymake
                 $call add_rule_hydra, hydra2
 
     subcode: dump_args
-        $(for:srcdir,moddir,prefix)
-            $print $1: $$1
-        $if $opts{device}
-            $print device: $opts{device}
+        $(for:srcdir,moddir,prefix,device)
+            $print $1: $opts{$1}
 
 subcode: short_circuits
     $if -d "pm"
@@ -144,6 +142,8 @@ page: mymake_hydra
         &call open_r, mymake/CFLAGS
             $if /(.+)/
                 $ENV{CFLAGS} = $1
+            $if /(-fsanitize=\w+)/
+                $ENV{LDFLAGS} = $1
     $call prepare_hydra
 
 page: mymake_test
@@ -175,11 +175,12 @@ page: mymake_clean
     $(for:a in $(subdir_list))
         $if -d "$(D$(a))"
             push @realclean_list, "$(H$(a))"
-    push @realclean_list, "src/pm/hydra/mymake/Makefile.orig"
+    push @realclean_list, "src/pm/hydra/mymake"
     push @realclean_list, "src/mpi/errhan/defmsg.h"
     push @realclean_list, "src/include/mpir_cvars.h"
     $foreach $t in @realclean_list
-        system "rm -fv $t"
+        $print "rm -rf $t"
+        system "rm -rf $t"
 
 #---------------------------------------- 
 #---- stages ---------------------------- 

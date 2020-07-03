@@ -290,6 +290,10 @@ subcode: dump_custom_make
 
     subcode: dump_variable(key)
         my $t = get_object("$(key)")
+        $(if:key=CFLAGS)
+            $call @modify_cflags, $t
+        $(if:key=LDFLAGS)
+            $call @modify_ldflags, $t
         $call @dump_variable_custom
         $(if:key=DEFS)
             $global @extra_DEFS

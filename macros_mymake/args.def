@@ -1,6 +1,10 @@
 subcode: _autoload
     $use Cwd
-    my $pwd=getcwd()
+    my $pwd
+    $if $ENV{PWD}
+        $pwd = $ENV{PWD}
+    $else
+        $pwd=getcwd()
 
 #- findout mymake directory
 subcode: set_mymake
@@ -12,14 +16,14 @@ subcode: set_mymake
 
 #- cmdline, sort out options 
 subcode: parse_args
-    $global %opts, %defines
+    $global %opts
     $global @config_args
+    $call init_config_defines
     $call @set_opts_default
     $call @filter_ARGV
     $call @load_last_ARGV
     $call parse_ARGV
-    $call filter_define_args
-    $map opt_set, srcdir, moddir, prefix
+    # $map opt_set, srcdir, moddir, prefix
     $call set_prefix
     $call set_moddir
     $call probe_srcdir
@@ -45,12 +49,13 @@ subcode: parse_args
             die "moddir not set\n"
 
     subcode: probe_srcdir
-        NOOP
+        my $srcdir = $opts{srcdir}
         $(for:.,..,../..,../../..)
             $case -f "$1/maint/version.m4"
                 $srcdir = "$1"
         $if !$srcdir
             die "srcdir not set\n"
+        $opts{srcdir} = $srcdir
 
     subcode: set_prefix
         $if !$opts{prefix}
@@ -99,7 +104,7 @@ subcode: parse_args
                 $elif $a=~/--with-(ucx|libfabric|argobots)=(.*)/
                     $opts{$1}=$2
                     push @config_args, $a
-                $call @filter_defines
+                $call filter_config_defines
                 $else
                     push @config_args, $a
 
@@ -111,12 +116,14 @@ subcode: parse_args
 subcode: filter_ARGV
     my $cnt_else = 0
     $foreach $a in @ARGV
+        $print [$a]
         $if $a=~/V=1/
             $opts{V} = 1
-        $call @filter_config_defines
+        $call filter_config_defines
         $else
             $cnt_else++
 
+    $print [filter_ARGV] $cnt_else ARGS
     $if !$cnt_else
         @ARGV = ()
 
@@ -144,6 +151,7 @@ subcode: save_last_ARGV
         $call save_opts
 
 subcode: save_opts
+    $opts{config_args} = join(' ', @config_args)
     &call open_w, mymake/opts
         $foreach $k in sort keys %opts
             print Out "$k: $opts{$k}\n"
@@ -151,6 +159,6 @@ subcode: save_opts
 subcode: load_opts
     $global %opts
     &call open_r, mymake/opts
-        if /^(\w+): (.*)/
+        $if /^(\w+): (.*)/
             $opts{$1} = $2
 

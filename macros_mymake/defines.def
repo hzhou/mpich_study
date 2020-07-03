@@ -1,27 +1,149 @@
-subcode: filter_define_args
-    $elif $a=~/--(with-posix-mutex)=(.*)/
-        $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_".uc($2)
+subcode: init_config_defines
+    $(if:_pagename=mymake)
+        $global %hash_defines, %hash_undefs, %hash_define_val
+        $hash_defines{"disable-ch4-ofi-ipv6"} = "MPIDI_CH4_OFI_SKIP_IPV6"
+        $hash_defines{"enable-ofi-domain"} = "MPIDI_OFI_VNI_USE_DOMAIN"
+        $hash_defines{"enable-legacy-ofi"} = "MPIDI_ENABLE_LEGACY_OFI"
+        $hash_defines{"enable-ch4-am-only"} = "MPIDI_ENABLE_AM_ONLY"
+
+        $hash_define_val{"with-ch4-max-vcis"} = "MPIDI_CH4_MAX_VCIS"
+
+        $hash_undefs{"disable-ofi-domain"} = "MPIDI_OFI_VNI_USE_DOMAIN"
+
+subcode: filter_config_defines
+    $(if:_pagename=mymake)
+        $elif $a=~/--enable-thread-cs=(.*)/
+            my $cs = "GLOBAL"
+            $if $1 eq "per-object" or $1 eq "per_object"
+                $cs = "POBJ"
+            $elif $1 eq "per-vci" or $1 eq "per_vci"
+                $cs = "VCI"
+            $config_defines{MPICH_THREAD_GRANULARITY} = "MPICH_THREAD_GRANULARITY__$cs"
+        $elif $a=~/--with-posix-mutex=(.*)/
+            $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_".uc($1)
+        $elif $a=~/--enable-ch4-vci-method=(.*)/
+            $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__".uc($1)
+            $if $1 eq "communicator"
+                $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
+        $elif $a=~/--enable-ch4-mt=(\w+)/
+            $if $1 eq "direct"
+                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = 1
+            $elif $1 eq "handoff"
+                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = undef
+                $config_defines{MPIDI_CH4_USE_MT_HANDOFF} = 1
+            $elif $1 eq "runtime"
+                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = undef
+                $config_defines{MPIDI_CH4_USE_MT_RUNTIME} = 1
+        $elif $a=~/--enable-nolocal/
+            $config_defines{ENABLE_NO_LOCAL} = 1
+            # $config_defines{MPIDI_CH4_DIRECT_NETMOD} = 1
+        # ------------------------------------------------------------
+        $elif $a=~/--((with|enable)-.*)=(.*)/ && $hash_define_val{$1}
+            $config_defines{$hash_define_val{$1}} = $3
+            $if $1 eq "with-ch4-max-vcis"
+                $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
+        $elif $a=~/--((disable|enable)-.*)/ && ($hash_defines{$1} || $hash_undefs{$1})
+            $if $hash_defines{$1}
+                $config_defines{$hash_defines{$1}} = 1
+            $else
+                $config_defines{$hash_undefs{$1}} = undef
+        # ------------------------------------------------------------
+        $elif $a=~/--enable-g=(\S+)/ -> $g
+            $if $1 eq "most"
+                $g="dbg,log,mem,meminit,mutex,handle,handlealloc"
+            $elif $1 eq "all"
+                $g="dbg,log,mem,meminit,mutex,handle,handlealloc,memarena"
+            $foreach $t in split /,/, $g
+                $if $t eq "dbg" || $t eq "debug"
+                    $config_cflags{"-g"} = 1
+                $elif $t eq "log"
+                    $config_defines{MPL_USE_DBG_LOGGING} = 1
+                $elif $t eq "mem" or $t eq "memarena"
+                    $config_defines{MPL_USE_MEMORY_TRACING} = 1
+                    $config_defines{USE_MEMORY_TRACING} = 1
+                    $if $t eq "memarena"
+                        $config_defines{MPICH_DEBUG_MEMARENA} = 1
+                $elif $t eq "meminit"
+                    $config_defines{MPICH_DEBUG_MEMINIT} = 1
+                $elif $t eq "mutex"
+                    $config_defines{MPICH_DEBUG_MUTEX} = 1
+                $elif $t eq "handle"
+                    $config_defines{MPICH_DEBUG_HANDLES} = 1
+                $elif $t eq "handlealloc"
+                    $config_defines{MPICH_DEBUG_HANDLEALLOC} = 1
+                $elif $t eq "asan"
+                    $config_cflags{O}=1
+                    $(for:-g, -fsanitize=address, -fno-omit-frame-pointer)
+                        $config_cflags{"$1"} = 1
+                    $config_ldflags{"-fsanitize=address"} = 1
+                $elif $t eq "usan" or $t eq "ubsan"
+                    $(for:-fsanitize=undefined)
+                        $config_cflags{"$1"} = 1
+                    $config_ldflags{"-fsanitize=undefined"} = 1
+        # ------------------------------------------------------------
+        $elif $a=~/--enable-fast=(\S+)/ -> $g
+            $if $g =~ /O(\S)/
+                $config_cflags{O} = $1
+            $if $g=~/ndebug/
+                $config_cflags{-DNDEBUG} = 1
+            $elif $g=~/all|yes/
+                $config_cflags{-DNDEBUG} = 1
+                $config_cflags{O} = 2
+            $elif $g=~/no|none/
+                $config_cflags{O} = 0
 
 subcode: define_config_h(config_h)
-    my (@lines, $cnt)
-    &call open_r, $(config_h)
-        $if /^\/\* #undef (\w+)/ && $config_defines{$1}
-            push @lines, "#ifndef $1\n"
-            push @lines, "#define $1 $config_defines{$1}\n"
-            push @lines, "#endif\n"
-            $cnt++
-        $elif /^#define (\w+) (.*)/ && $config_defines{$1}
-            push @lines, "#define $1 $config_defines{$1}\n"
-            $cnt++
-        $else
-            push @lines, $_
+    $(if:_pagename=mymake)
+        $global %config_defines
+        my (@lines, $cnt)
+        &call open_r, $(config_h)
+            $if /^\/\* #undef (\w+)/ && exists $config_defines{$1}
+                $call define_it
+            $elif /^#define (\w+) (.*)/ && exists $config_defines{$1}
+                $call define_it
+            $else
+                push @lines, $_
 
     $if $cnt>0
         &call open_w, $(config_h)
             $foreach $l in @lines
                 print Out $l
 
+    subcode: define_it
+        $if defined $config_defines{$1}
+            $print "  -- define $1 $config_defines{$1}"
+            push @lines, "#define $1 $config_defines{$1}\n"
+        $else
+            $print "  -- undef $1"
+            push @lines, "\x2f* #undef $1 */\n"
+        $cnt++
 
+#---------------------------------------- 
+subcode: modify_cflags(t)
+    $global %config_cflags, %config_ldflags
+    $if %config_cflags
+        my @tlist = split /\s+/, $(t)
+        $foreach $a in @tlist
+            $if $a=~/-O(\d+)/
+                $if !defined $config_cflags{O}
+                    $config_cflags{O} = $1
+            $elif !$config_cflags{$a}
+                $config_cflags{$a} = 1
+        my @tlist
+        $foreach $a in keys %config_cflags
+            $if $a eq "O"
+                push @tlist, "-O$config_cflags{O}"
+            $else
+                push @tlist, $a
+        $(t) = join(' ', @tlist)
+        print(STDOUT "  -->  CFLAGS = $(t)\n");
 
-
+subcode: modify_ldflags(t)
+    $if %config_ldflags
+        my @tlist = split /\s+/, $(t)
+        $foreach $a in @tlist
+            $if !$config_ldflags{$a}
+                $config_ldflags{$a} = 1
+        $(t) = join ' ', keys %config_ldflags
+        print(STDOUT "  -->  LDFLAGS = $(t)\n");
 

@@ -1,6 +1,7 @@
 subcode: test_mymake_config
     $global @mpich_config, @testmpi_config
     $call parse_config
+    $call parse_configOption
     $call parse_trigger_phrase
     $call parse_param
     $call filter_config
@@ -18,6 +19,11 @@ subcode: test_mymake_config
                 push @mpich_config, "--with-device=$config"
             $elif $config=~/^ch[34]/
                 push @mpich_config, "--with-device=$config"
+
+    # -- used in job scripts
+    subcode: parse_configOption
+        $if $ENV{configOption}
+            push @mpich_config, split(/\s+/, $ENV{configOption})
 
     # -- used with commandline trigger
     subcode: parse_param
@@ -42,10 +48,13 @@ subcode: test_mymake_config
             $call check_test_script
             $call check_mpich_config
 
-            $while $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree)\s*[:=]\s*([\w\-\.]+)/mg -> $key, $val
+            $while $trigger_phrase=~/^\s*(compiler|skip_test|out_of_tree|default)\s*[:=]\s*([\w\-\.]+)/mg -> $key, $val
                 $if $val=~/(yes|1)/
                     $val = "true"
                 $ENV{$key}=$val
+
+            $if $ENV{default} eq "true"
+                @mpich_config = grep !/--enable-strict/, @mpich_config
 
             $while $trigger_phrase=~/^env:\s*(\w+)\s*=\s*(.*?)\s*$/mg
                 $ENV{$1}=$2

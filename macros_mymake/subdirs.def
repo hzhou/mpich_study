@@ -122,8 +122,8 @@ subcode: need_romio
     system "cp maint/version.m4 $(Dromio)/"
     my @t_env 
     push @t_env, "FROM_MPICH=yes"
-    push @t_env, "master_top_srcdir=$pwd"
-    push @t_env, "master_top_builddir=$pwd"
+    push @t_env, "main_top_srcdir=$pwd"
+    push @t_env, "main_top_builddir=$pwd"
     push @t_env, "CPPFLAGS='-I$(Impl)'"
     $if $opts{argobots}
         $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
@@ -204,6 +204,10 @@ subcode: need_ucx
             system "$ucxdir/libtool --mode=install --quiet install $ucxdir/src/$m/lib$m.la $opts{prefix}/lib"
         my @tlist = glob("$ucxdir/modules/*.la")
         $foreach $m in @tlist
+            &call open_r, $m
+                $if /relink_command="\(cd \S+ucx.src.uct.(\S+);/
+                    my $dir = "src/uct/$1"
+                    $m=~s/modules/$dir/
             system "$ucxdir/libtool --mode=install --quiet install $m $opts{prefix}/lib/ucx"
         unlink "$ucxdir/need_sed"
 
