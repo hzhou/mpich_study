@@ -1,0 +1,60 @@
+include: macros_mymake/args.def
+include: macros_mymake/custom_make.def
+include: macros_mymake/subdirs.def
+include: macros_mymake/mpich.def
+include: macros_mymake/bindings.def
+include: macros_mymake/hydra.def
+include: macros_mymake/gforker.def
+include: macros_mymake/testing.def
+
+include: macros_mymake/cvars.def
+page: mymake_cvars_new
+    module: perl
+
+    $call load_opts
+    $call extractcvars
+
+#---- stages ---------------------------- 
+subcode: stage(@name)
+    $print ---------------------------\n
+    $print -     $(name)
+    $print ---------------------------\n
+
+#---- proprocess utils ---------------- 
+macros:
+    mpi_src_dirs: mpi mpi_t nameserv util binding include mpid pmi
+
+subcode: find_files(dir, name)
+    &call open_r, find $(dir) -name '$(name)' |
+        chomp
+        push @files, $_
+
+subcode: each_ch_file
+    my @files
+    $foreach $dir in qw($(mpi_src_dirs))
+        $call find_files, src/$dir, *.[ch]
+    $foreach $f in @files
+        BLOCK
+
+subcode: each_name_file(name)
+    my @files
+    $call find_files, ., $(name)
+    $foreach $f in @files
+        BLOCK
+
+#---------------------------------------- 
+subcode: hdr_guard(name)
+    $print "#ifndef $(name:uc)_H_INCLUDED"
+    $print "#define $(name:uc)_H_INCLUDED"
+    $print
+    BLOCK
+    $print "#endif /* $(name:uc)_H_INCLUDED */"
+
+subcode: do_cmd(@cmd)
+    $(if:cmd~")
+        my $cmd = $(cmd)
+    $(else)
+        my $cmd = "$(cmd)"
+    $print $cmd
+    system $cmd
+
