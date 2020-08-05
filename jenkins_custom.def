@@ -1,0 +1,246 @@
+output_dir: ./mymake
+
+page: jenkins_custom
+    module: perl
+    run: param="--enable-strict" perl mymake/jenkins_custom.pl && cat custom_import.sh
+
+    $call init
+    $call check_jenkins_env
+
+    $if $ENV{ghprbCommentBody}
+        $call parse_ghprb
+    $elif $ENV{param}
+        $call parse_param
+
+    $global @mymake_args
+    set_netmod()
+    # set_config()
+    set_compiler()
+    set_label()
+
+    $(if:0)
+        $call run_test_worker
+    $(else)
+        $call dump_custom
+
+subcode: init
+    $global @config_args, %custom_env
+    my %cmdline_options
+    $foreach $a in @ARGV
+        $if $a=~/-(\w+)=(.*)/
+            $cmdline_options{$1}=$2
+        $else
+            $cmdline_options{$1}=1
+
+    $global %jenkins_options
+
+    my %opt_list = (
+        compiler => "compiler",
+        jenkins_configure => "config",
+        config => "config",
+        label => "label",
+        queue => "label",
+        netmod => "netmod",
+        device => "netmod",
+    );
+
+subcode: check_jenkins_env
+    my @jenkins_env = qw(GIT_BRANCH WORKSPACE label)
+    $foreach $k in @jenkins_env
+        $if $ENV{$k}
+            $jenkins_options{$k} = $ENV{$k}
+
+subcode: parse_ghprb
+    # triggered by PR comment, eg `test:mpich/custom ...`
+    my $t = $ENV{ghprbCommentBody};
+    $t=~s/\\r\\n/\n/g;
+
+    # env: MPIR_CVAR_CH4_ROOTS_ONLY_PMI=1
+    while ($t =~ /^env:\s*(\w+)\s*=\s*(.*?)\s*$/mg) {
+        $custom_env{$1} = $2;
+    }
+
+    # testlist: f08/pt2pt/ssendf08 2
+    while ($t=~/^testlist:\s*(.+?)\s*$/mg) {
+        add_testlist($1);
+    }
+    dump_testlist();
+
+    # --enable-thread-cs=global
+    while ($t=~/(--(with|without|enable|disable)-\S+)/g) {
+        push @config_args, $1
+    }
+
+    # ** All other options **
+    # compiler=intel
+    $while $t =~/^(\w+)\s*[:=]\s*(\S+)/mg
+        $if $1 eq "HOSTS"
+            $custom_env{HYDRA_HOST_FILE}="$ENV{PMRS}/hosts.$2";
+        $elif $1 eq "config"
+            $jenkins_options{config} = $2
+            set_config($2)
+        $elif $opt_list{$1}
+            $jenkins_options{$opt_list{$1}} = $2;
+
+subcode: parse_param
+    # triggered by commandline or direct param, eg `$ jenkins custom ...`
+    my @tlist = split /\s+/, $ENV{param};
+    
+    $foreach $t in @tlist
+        # TODO: decode spaces
+        $if $t =~ /^env:(\w+)=(.*)/
+            $custom_env{$1} = $2;
+        $elif $t=~/testlist[:=](.+)$/
+            add_testlist($1)
+        $elif $t=~/(--(with|without|enable|disable)-\S+)/
+            push @config_args, $1
+        $elif $t =~/^(\w+)[:=](\S+)/
+            $if $1 eq "HOSTS"
+                $custom_env{HYDRA_HOST_FILE}="$ENV{PMRS}/hosts.$2";
+            $elif $opt_list{$1}
+                $jenkins_options{$opt_list{$1}} = $2;
+                $if $1 eq "config"
+                    set_config($2)
+    dump_testlist()
+
+subcode: parse_config
+    # $ENV{config}) {
+    # triggered by jenkins pipeline matrix config
+
+subcode: run_test_worker
+    my $cmd = "@ARGV";
+    my %opt_char=(
+        GIT_BRANCH=>"b",
+        WORKSPACE=>"h",
+        label=>"q",
+        compiler=>"c",
+        config=>"o",
+        netmod=>"m",
+    );
+    $foreach %opt_char
+        $if $jenkins_options{$k}
+            $cmd .= " -$v $jenkins_options{$k}"
+
+    $if @config_args
+        $cmd .= " -E \"@config_args\""
+
+    $foreach %custom_env
+        $ENV{$k} = $v
+
+    #---- Run custom $cmd
+    print "custom command: [$cmd]\n";
+    system "$cmd";
+
+subcode: dump_custom
+    &call open_W, custom_import.sh
+        $foreach $k in keys %jenkins_options
+            $print "export $k=$jenkins_options{$k}"
+        $foreach $k in sort keys %custom_env
+            $print "export $k=$custom_env{$k}"
+        $if @mymake_args
+            $print "export mymake_args=\"@mymake_args\""
+        $if @config_args
+            $print "export config_args=\"@config_args\""
+
+#---- jenkins_options_to mymake_args ----
+fncode: set_netmod
+    my $netmod = $jenkins_options{netmod}
+    $netmod=~s/-/:/
+    $if !$netmod 
+        push @mymake_args, "--with-device=ch3:nemesis:tcp"
+    $elif $netmod=~/ch3:(tcp|ofi|mxm|portals4)/
+        push @mymake_args, "--with-device=ch3:nemesis:$1"
+    $else
+        push @mymake_args, "--with-device=$netmod"
+
+subcode: _autoload
+    $global %direct_config
+    %direct_config = (
+        strict => "--enable-strict",
+        fast   => "--enable-fast=all",
+        nofast => "--disable-fast",
+        noshared=>"--disable-shared",
+        debug  => "--enable-g=all",
+        noweak => "--disable-weak-symbols",
+        strictnoweak=>"--enable-strict --disable-weak-symbols",
+        nofortran=>"--disable-fortran",
+        nocxx  => "--disable-cxx",
+        multithread=>"--enable-threads=multiple",
+        singlethread=>"--enable-threads=single --with-thread-package=none",
+        debuginfo => "--enable-debuginfo",
+        noerrorchecking=>"--disable-error-checking",
+        "no-inline" => "--enable-ch4-netmod-inline=no --enable-ch4-shm-inline=no",
+        "direct-nm" => "--enable-ch4-direct=netmod",
+        "direct-auto"=>"--enable-ch4-direct=auto",
+    );
+
+fncode: set_config
+    my $config = $jenkins_options{config}
+    $if $direct_config{$config}
+        push @mymake_args, $direct_config{$config}
+    $elif $config eq "am-only"
+        push @mymake_args, "--with-ch4-netmod-ucx-args=am-only"
+        push @mymake_args, "--enable-legacy-ofi"
+
+fncode: set_compiler
+    my $compiler = $jenkins_options{compiler}
+    $if !$compiler
+        $compiler = "gcc"
+    $if $compiler =~/gcc-(\d\S+)/ -> $ver
+        $custom_env{PATH}="$ENV{PMRS}/opt/$compiler/bin:$ENV{PATH}"
+        $custom_env{LD_LIBRARY_PATH}="$ENV{PMRS}/opt/$compiler/lib64:$ENV{LD_LIBRARY_PATH}"
+        $(for:CC,CXX,F77,FC and gcc, g++, gfortran, gfortran)
+            $custom_env{$1} = "$2-$ver"
+    $elif $compiler =~ /clang(-*)/
+        $custom_env{PATH}="$ENV{PMRS}/opt/$compiler/bin:$ENV{PATH}"
+        # $custom_env{LD_LIBRARY_PATH}="$ENV{PMRS}/opt/$compiler/lib64:$ENV{LD_LIBRARY_PATH}"
+        $(for:CC,CXX,F77,FC and $compiler, clang++, gfortran, gfortran)
+            $custom_env{$1} = "$2"
+    $elif $compiler=~/intel/
+        my $intel="/nfs/gce/software/spack/opt/spack/linux-centos7-x86_64/gcc-6.5.0/intel-parallel-studio-professional.2019.3-xfiyvwh"
+        $custom_env{PATH}="$intel/bin:$ENV{PATH}"
+        $custom_env{INTEL_LICENSE_FILE}="28518\@lic001.cels.anl.gov"
+        $(for:CC,CXX,F77,FC and icc, icpc, ifort, ifort)
+            $custom_env{$1} = "$2"
+
+fncode: set_label
+
+#---- subroutines ---------------------------------
+subcode: _autoload
+    $global %dir_hash = ("test/mpi" => [])
+    $global $do_custom_testlist
+
+fncode: add_testlist($spec)
+    my $dir = "test/mpi";;
+    $if $spec=~/^\S+[^\/]$/ && -d "$dir/$spec"
+        $spec .= "/"
+    $while $spec=~/(.+?)\//g
+        $if !$dir_hash{"$dir/$1"}
+            $dir_hash{"$dir/$1"} = [];
+        push @{$dir_hash{$dir}}, $1;
+        $dir .= "/$1"
+
+    $spec=~s/.*\///;
+    $if $spec
+        push @{$dir_hash{$dir}}, $spec
+    $do_custom_testlist = 1
+
+fncode: dump_testlist
+    $if $do_custom_testlist
+        my @sorted = sort keys(%dir_hash)
+        $foreach $dir in @sorted
+            my $list = $dir_hash{$dir}
+            $if $list && @$list
+                $call dump_dir_testlist_custom
+            $else
+                system "ln -s testlist $dir/testlist.custom";
+        $custom_env{TESTLIST}="testlist.custom";
+
+    subcode: dump_dir_testlist_custom
+        &call open_W, $dir/testlist.custom
+            my %dups;
+            $foreach $l in @{$list}
+                $if !$dups{$l}
+                    $print $l
+                    $dups{$l} = 1;
+

@@ -1,0 +1,73 @@
+include: macros_mymake/args.def
+include: macros_mymake/defines.def
+include: macros_mymake/subdirs.def
+include: macros_mymake/mpich.def
+include: macros_mymake/bindings.def
+include: macros_mymake/hydra.def
+
+output_dir: ./mymake
+
+page: mymake_libtool
+    $call load_opts
+
+    system "mkdir -p mymake/libtool"
+    chdir "mymake/libtool" or die "can't chdir mymake/libtool\n"
+
+    &call open_w, configure.ac
+        print Out "AC_INIT\n"
+        print Out "LT_INIT\n"
+        $(if:0)
+            print Out "AC_PROG_CXX\n"
+            print Out "AC_PROG_F77\n"
+            print Out "AC_PROG_FC\n"
+        print Out "LT_OUTPUT\n"
+
+    $print "Configure libtool ..."
+    system "libtoolize -iq && aclocal && autoconf > t.log"
+    $call @cache_configure
+    system "./configure --disable-static >> t.log"
+
+    chdir $pwd
+    $call patch_libtool
+
+subcode: cache_configure
+    $foreach $a in "stdc", "sys/types.h", "sys/stat.h", "stdlib.h", "string.h", "memory.h", "strings.h", "inttypes.h", "stdint.h", "unistd.h", "dlfcn.h"
+        my $cv = "ac_cv_header_$a"
+        $cv=~s/[\/.]/_/g
+        $ENV{$cv} = "yes"
+    
+    $(if:0)
+        $ENV{"ac_cv_prog_CC"} = $ENV{CC}
+        $foreach $a in "objdump", "ar", "strip", "ranlib", "gawk"
+            $ENV{"ac_cv_prog_".uc($a)} = $a
+
+subcode: patch_libtool
+    $(set:skip_mod_list=1)
+    my %need_patch
+    $call get_file_lines, mymake/libtool/libtool
+    &call open_W, libtool
+        $foreach $l in @lines
+            $if $l=~/^AR_FLAGS=/
+                $l = "AR_FLAGS=\"cr\"\n"
+            # --------------------------
+            $elif $l=~/^CC="(.*)"/ -> $CC
+                $call set_need_patch
+            $elif $l=~/^(pic_flag|wl|link_static_flag)=/
+                $if $need_patch{$1}
+                    $l = "$1='$need_patch{$1}'\n"
+            $elif $l=~/^(archive_cmds=|\s*\\\$CC\s+-shared )/
+                $if $need_patch{shared}
+                    $l=~s/-shared /$need_patch{shared} /
+            # --------------------------
+            print Out $l
+    system "chmod a+x libtool"
+
+    subcode: set_need_patch
+        $if $CC =~ /^sun(f77|f9.|fortran)/
+            $need_patch{pic_flag}=" -KPIC"
+            $need_patch{wl}="-Qoption ld "
+            $need_patch{link_static_flag}=" -Bstatic"
+            $need_patch{shared}="-G"
+        $else
+            %need_patch=()
+
