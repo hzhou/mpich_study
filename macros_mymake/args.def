@@ -1,10 +1,8 @@
 subcode: _autoload
     $use Cwd
-    my $pwd
-    $if $ENV{PWD}
-        $pwd = $ENV{PWD}
-    $else
-        $pwd=getcwd()
+    my $pwd=getcwd()
+    my $mymake_dir = Cwd::abs_path($0)
+    $mymake_dir=~s/\/[^\/]+$//
 
 #- findout mymake directory
 subcode: set_mymake
@@ -16,17 +14,18 @@ subcode: set_mymake
 
 #- cmdline, sort out options 
 subcode: parse_args
+    $if !-f "maint/version.m4"
+        die "Not in top_srcdir.\n"
     $global %opts
     $global @config_args
-    $call init_config_defines
+    $(if:_pagename=mymake)
+        $call init_config_defines
     $call @set_opts_default
-    $call @filter_ARGV
     $call @load_last_ARGV
     $call parse_ARGV
-    # $map opt_set, srcdir, moddir, prefix
+    # $map opt_set, moddir, prefix
     $call set_prefix
     $call set_moddir
-    $call probe_srcdir
 
     subcode: set_moddir
         my $mod_tarball
@@ -38,24 +37,16 @@ subcode: parse_args
             $mod_tarball = "mymake/modules.tar.gz"
         # --------------
         $if $ENV{MODDIR}
-            $opts{moddir} = $ENV{MODDIR}
-        $elif -d "mymake/hwloc"
+            $opts{moddir} = Cwd::abs_path($ENV{MODDIR})
+        $elif -e "mymake/skip_tarball"
             $opts{moddir} = "$pwd/mymake"
         $elif -e $mod_tarball
             $opts{moddir} = "$pwd/mymake"
             $call do_cmd, mkdir -p $opts{moddir}
             $call do_cmd, tar -C $opts{moddir} -xf $mod_tarball
+            system "touch mymake/skip_tarball"
         $else
             die "moddir not set\n"
-
-    subcode: probe_srcdir
-        my $srcdir = $opts{srcdir}
-        $(for:.,..,../..,../../..)
-            $case -f "$1/maint/version.m4"
-                $srcdir = "$1"
-        $if !$srcdir
-            die "srcdir not set\n"
-        $opts{srcdir} = $srcdir
 
     subcode: set_prefix
         $if !$opts{prefix}
@@ -74,9 +65,16 @@ subcode: parse_args
 
     subcode: parse_ARGV
         $foreach $a in @ARGV
-            $if $a=~/^--(prefix)=(.*)/
+            $if $a=~/^-quick/
+                $opts{quick}=1
+            $elif $a=~/^--(.*?)=(.*)/
                 $opts{$1}=$2
+            $elif $a=~/^--(.*)/
+                $opts{$1}=1
             $elif $a=~/^(\w+)=(.*)/
+                $opts{$1}=$2
+            # -----------------------
+            $if $a=~/^--(prefix)=(.*)/
                 $opts{$1}=$2
             $elif $a=~/^--/
                 $if $a=~/^--with-device=(.*)/
@@ -104,28 +102,14 @@ subcode: parse_args
                 $elif $a=~/--with-(ucx|libfabric|argobots)=(.*)/
                     $opts{$1}=$2
                     push @config_args, $a
-                $call filter_config_defines
-                $else
+                $(if:_pagename=mymake)
+                    $call filter_config_defines
+                $else nowarn
                     push @config_args, $a
 
         $(for:CC,CXX,F77,FC)
             $if $opts{$1}
                 $ENV{$1}=$opts{$1}
-
-#----------------------
-subcode: filter_ARGV
-    my $cnt_else = 0
-    $foreach $a in @ARGV
-        $print [$a]
-        $if $a=~/V=1/
-            $opts{V} = 1
-        $call filter_config_defines
-        $else
-            $cnt_else++
-
-    $print [filter_ARGV] $cnt_else ARGS
-    $if !$cnt_else
-        @ARGV = ()
 
 #----------------------
 subcode: load_last_ARGV
@@ -144,11 +128,10 @@ subcode: save_last_ARGV
         my $t = join(' ', @ARGV)
         &call open_w, mymake/args
             print Out $t, "\n"
-        # TODO: only if non-trivial args
-        system "rm -f mymake/Makefile.orig"
-        system "rm -f $(Hmpl) $(Hopa)"
-
         $call save_opts
+
+        $if -f "Makefile"
+            system "make realclean"
 
 subcode: save_opts
     $opts{config_args} = join(' ', @config_args)
@@ -161,4 +144,13 @@ subcode: load_opts
     &call open_r, mymake/opts
         $if /^(\w+): (.*)/
             $opts{$1} = $2
+
+#---------------------------------------- 
+subcode: do_cmd(@cmd)
+    $(if:cmd~")
+        my $cmd = $(cmd)
+    $(else)
+        my $cmd = "$(cmd)"
+    $print $cmd
+    system $cmd
 

@@ -1,0 +1,64 @@
+subcode: config_init_mpl
+    $config_in = "$mymake_dir/config_templates/mplconfig.h"
+    $config_out = "mymake/mpl/include/mplconfig.h"
+    symlink "../../libtool", "mymake/mpl/libtool"
+
+subcode: config_mpl
+    $call ac_init, MPL, 0.1, -, mpl, -
+    $call set_config_defines
+    $call patch_mpl_timer_h
+
+    subcode: set_config_defines
+        $call AC_USE_SYSTEM_EXTENSIONS
+        $config_defines{CACHELINE_SIZE} = 64
+
+        $config_defines{THREAD_PACKAGE_NAME} = "MPL_THREAD_PACKAGE_POSIX"
+        $config_defines{PROC_MUTEX_PACKAGE_NAME} = "MPL_PROC_MUTEX_PACKAGE_POSIX"
+        $config_defines{POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_TICKETLOCK"
+
+        $config_defines{USE_MMAP_SHM} = 1
+        $config_defines{MPL_USE_MMAP_SHM} = 1
+        $config_defines{USE_NOTHING_FOR_YIELD} = 1
+
+        # --enable-timer-type=[gethrtime,clock_gettime,gettimeofday,mach_absolute_time,linux86_cycle,gcc_ia64_cycle,ppc64_cycle]
+        $config_defines{HAVE_CLOCK_GETTIME} = 1
+        $config_defines{HAVE_CLOCK_GETRES} = 1
+        $config_defines{HAVE_GETTIMEOFDAY} = 1
+
+        # --with-mpl-atomic-primitives=[auto,c11,gcc_atomic,gcc_sync,win,lock,no]
+        $config_defines{HAVE_C11_ATOMICS}=1
+        $config_defines{HAVE_GCC_INTRINSIC_ATOMIC}=1
+        $config_defines{HAVE_GCC_INTRINSIC_SYNC}=1
+
+        $config_defines{COMPILER_TLS}="_Thread_local"
+        $config_defines{DEFINE_ALIGNED_ALLOC}=1
+        $(for:a in FUNC_ATTRIBUTE_FALLTHROUGH,VAR_ATTRIBUTE_USED,VAR_ATTRIBUTE_ALIGNED,_BOOL,__TYPEOF)
+            $config_defines{HAVE_$(a)}=1
+
+        $(for:a in aligned_alloc,backtrace,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
+            $config_defines{HAVE_$(a:uc)}=1
+
+        $config_defines{HAVE_LIBCUDA}=1
+        $config_defines{HAVE_PTHREAD_MUTEXATTR_SETPSHARED} = 1
+
+        $config_defines{backtrace_size_t} = "int"
+
+    subcode: patch_mpl_timer_h
+        my %confs
+        $confs{MPL_TIMER_TYPE} = "struct timespec"
+        $confs{MPL_TIMER_KIND} = "MPL_TIMER_KIND__CLOCK_GETTIME"
+        autoconf_file("mymake/mpl/include/mpl_timer.h", \%confs)
+
+#---------------------------------------- 
+subcode: make_mpl
+    $call copy_subdir_module, mpl
+    $autoconf_vars{MPLLIBNAME} = "mpl"
+
+    my %conds
+    $conds{MPL_EMBEDDED_MODE} = 1
+    # $conds{MPL_HAVE_CUDA} = 1
+    # $conds{MPL_HAVE_ZE} = 1
+    load_automake("mymake/mpl/Makefile.am", \%conds)
+    @programs=()
+    dump_makefile("mymake/mpl/Makefile")
+

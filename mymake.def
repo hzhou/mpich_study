@@ -6,7 +6,6 @@ include: macros_mymake/mpich.def
 include: macros_mymake/bindings.def
 include: macros_mymake/hydra.def
 include: macros_mymake/gforker.def
-include: macros_mymake/testing.def
 
 output_dir: ./mymake
 
@@ -17,18 +16,16 @@ page: mymake
     $call @short_circuits
     $call parse_args
     $call setup_mymake
-    $call set_mymake_DO
 
     $call save_last_ARGV
     $call @dump_args
 
-    $call add_rule_pm
-    # $call add_rule_testing
-    $call compile_mpich
+    $if $opts{quick}
+        $call mymake_quick
+    $else
+        $call mpich_slow
 
     subcode: setup_mymake
-        $if $srcdir ne "."
-            chdir $srcdir or die "can't chdir $srcdir\n"
         $if !-d "mymake"
             mkdir "mymake" or die "can't mkdir mymake\n"
         $call pre_patch
@@ -42,43 +39,26 @@ page: mymake
             $if !-f $cvars_c
                 system "touch $cvars_c"
 
-
-    subcode: set_mymake_DO
-        $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
-            push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
-        push @extra_make_rules, ""
-        push @extra_make_rules, ".PHONY: test cvars errmsg"
-        $(for:testing,cvars,errmsg)
-            $call push_autogen_rule, $1, $1
-
-    subcode: push_autogen_rule(name, file)
-        push @extra_make_rules, "$(file):"
-        push @extra_make_rules, "\t\x24(DO_$(name))"
-        push @extra_make_rules, ""
-
-    subcode: add_rule_pm
-        $if $opts{pm} eq "gforker"
-            $call add_rule_gforker
-        $elif $opts{pm} eq "remshell"
-            $call add_rule_remshell
-        $else
-            $call add_rule_hydra, hydra
-            $if $opts{pm} eq "hydra2"
-                $call add_rule_hydra, hydra2
-
     subcode: dump_args
-        $(for:srcdir,moddir,prefix,device)
+        $(for:moddir,prefix,device)
             $print $1: $opts{$1}
 
 subcode: short_circuits
-    $if -d "pm"
-        system "perl $opts{mymake}_hydra.pl @ARGV"
+    $if $ARGV[0]=~/^(clean|errmsg|cvars|logs|hydra|testing|test|makefile|config|libtool)$/
+        shift @ARGV
+        system "perl $opts{mymake}_$1.pl @ARGV"
         exit(0)
 
-    $foreach $a in @ARGV
-        $if $a=~/^(clean|errmsg|cvars|logs|hydra|testing)$/
-            system "perl $opts{mymake}_$1.pl"
-            exit(0)
+subcode: mymake_quick
+    $if !-f "libtool"
+        system "perl $opts{mymake}_libtool.pl"
+    $if !-f "$(mpich_config_h)"
+        system "perl $opts{mymake}_config.pl mpich"
+        system "perl $opts{mymake}_makefile.pl mpich"
+
+macros:
+    mpich_config_h: src/include/mpichconf.h
+    mpich_makefile: Makefile
 
 #---------------------------------------- 
 include: macros_mymake/errmsgs.def
@@ -120,14 +100,6 @@ page: mymake_logs
     $call logging_states
 
 # ----------------
-include: macros_mymake/mpi_h.def
-page: mymake_mpi_h
-    module: perl
-
-    $call load_opts
-    $call get_mpi_h
-
-# ----------------
 page: mymake_hydra
     module: perl
 
@@ -158,16 +130,19 @@ page: mymake_clean
     module: perl
 
     $call load_opts
-
     my @realclean_list
-    $(for:a in $(mpich_configure_deps))
-        push @realclean_list, "$(a)"
-    $(for:a in $(subdir_list))
-        $if -d "$(D$(a))"
-            push @realclean_list, "$(H$(a))"
-    push @realclean_list, "src/pm/hydra/mymake"
     push @realclean_list, "src/mpi/errhan/defmsg.h"
     push @realclean_list, "src/include/mpir_cvars.h"
+    $if $opts{quick}
+        push @realclean_list, "src/include/mpichconf.h"
+        push @realclean_list, "mymake/mpl"
+        push @realclean_list, "src/pm/hydra/Makefile"
+    $else
+        push @realclean_list, "subsys_include.m4"
+        push @realclean_list, "configure"
+        push @realclean_list, "Makefile"
+        push @realclean_list, "mymake/Makefile.*"
+        push @realclean_list, "src/pm/hydra/mymake"
     $foreach $t in @realclean_list
         $print "rm -rf $t"
         system "rm -rf $t"
@@ -208,12 +183,4 @@ subcode: hdr_guard(name)
     $print
     BLOCK
     $print "#endif /* $(name:uc)_H_INCLUDED */"
-
-subcode: do_cmd(@cmd)
-    $(if:cmd~")
-        my $cmd = $(cmd)
-    $(else)
-        my $cmd = "$(cmd)"
-    $print $cmd
-    system $cmd
 

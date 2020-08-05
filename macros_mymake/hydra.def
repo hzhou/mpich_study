@@ -6,16 +6,19 @@ macros:
 
 #---- mymake_hydra.pl -------------------- 
 subcode: prepare_hydra
+    $(setmacro:makefile=hydra)
     $global $do_hydra2
     $if $opts{pm} eq "hydra2"
         $print "Building hydra2..."
         $do_hydra2 = 1
 
-    $if $srcdir
-        my $dir="$srcdir/src/pm/hydra"
-        $if $do_hydra2
-            $dir="$srcdir/src/pm/hydra2"
-        chdir $dir or die "Can't chdir $dir\n"
+    my $dir="src/pm/hydra"
+    $if $do_hydra2
+        $dir="src/pm/hydra2"
+    chdir $dir or die "Can't chdir $dir\n"
+    my $srcdir = "../../.."
+    $pwd = getcwd()
+
     $if !-d "mymake"
         mkdir "mymake" or die "can't mkdir mymake\n"
     $if !-f "mymake/Makefile.orig"
@@ -35,29 +38,10 @@ subcode: prepare_hydra
             $I_list .= " -I$opts{argobots}/include"
             $L_list .= " -L$opts{argobots}/lib -labt"
 
-    subcode: dump_variable_custom
-        $call @filter_var_hwloc
-        $(if:key=AM_CPPFLAGS)
-            $t=~s/\s*-I\S*mpl\/include//g
-            $t .= $I_list
-
-    subcode: set_libs_custom
-        $t=~s/\s*\S*\/libmpl.la//g
-        $t=~s/-lhydra/libhydra.la/g
-        $t=~s/-lpm/libpm.la/g
-        $t .= $L_list
-
 # -------------------
 subcode: hydra_config
-    $if $srcdir
-        my $o="../../.."
-        system "rsync -r $o/confdb/ confdb/" 
-        system "cp $o/maint/version.m4 ."
-    $else
-        $if !-d "confdb" 
-            die "hydra: missing confdb/\n"
-        $if !-f "version.m4"
-            die "hydra: missing version.m4\n"
+    system "rsync -r $srcdir/confdb/ confdb/" 
+    system "cp $srcdir/maint/version.m4 ."
 
     &call modify_frame, temporary
         $if $do_hydra2
@@ -122,7 +106,7 @@ subcode: hydra_config
 #---- rules in mpich Makefile ------------------ 
 subcode: add_rule_hydra(name)
     my $mkfile="src/pm/$(name)/Makefile"
-    my $add="$(Lmpl) $(Lhwloc)"
+    my $add="\x24(MODDIR)/$(Lmpl) \x24(MODDIR)/$(Lhwloc)"
     push @extra_make_rules, ".PHONY: $(name) $(name)-install"
     push @extra_make_rules, "$(name): $mkfile $add"
     push @extra_make_rules, "\t(cd src/pm/$(name) && \x24(MAKE) )"

@@ -1,0 +1,376 @@
+include: macros_mymake/gforker.def
+
+fncode: dump_makefile($makefile)
+    $global @CONFIGS
+    $global $I_list, $L_list # ref: dump_variable_custom
+    $global @extra_make_rules
+    $global %dst_hash
+    $global %special_targets
+
+    my $lt = get_make_var("LIBTOOL")
+    my $lt_opt
+    $if !$opts{V}
+        $lt_opt = "--quiet"
+
+    &call open_W, $makefile
+        $call mymake_MODDIR_PREFIX
+        $call mymake_common_VARS
+
+        $call set_dst_hash_ltlibs_programs
+
+        $print "all: @ltlibs @programs"
+        $print
+        $call dump_rules, ltlibs
+        $call dump_rules, programs
+
+        $call dump_extra
+        $call dump_implicit
+        $call dump_install
+        $call dump_clean
+
+    subcode: mymake_MODDIR_PREFIX
+        $print "PREFIX=$opts{prefix}"
+        $print "export MODDIR=$opts{moddir}"
+        my $pwd = getcwd()
+        $if $makefile eq "Makefile"
+            $print "MODS=mymake"
+        $else
+            $print "MODS=$opts{moddir}"
+        $print
+
+    subcode: mymake_common_VARS
+        $print "CONFIGS = @CONFIGS"
+        $print
+        $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
+        $print
+
+        $call dump_CC
+        $if !$opts{disable_cxx}
+            $call dump_cxx
+        $if !$opts{disable_fortran}
+            $call dump_fortran
+
+    # ---- COMPILER CHAIN ------------------------
+    macros: 
+        LT: $lt --mode=$1 $lt_opt
+
+    subcode: dump_CC
+        my $cc = get_make_var("CC")
+        my $ccld = get_make_var("CCLD")
+
+        $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
+        $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $print "LTCC = $(LT:compile) \x24(COMPILE)"
+        $print "LTLD = $(LT:link) \x24(LINK)"
+        $print
+
+    subcode: dump_cxx
+        my $cxx = get_make_var("CXX")
+        my $flags = get_make_var("CXXFLAGS")
+        my $am_flags = get_make_var("AM_CXXFLAGS")
+        $print "CXXCOMPILE = $cxx \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) $flags $am_flags"
+
+        my $cxxld = get_make_var("CXXLD")
+        $if $cxxld
+            $print "LTCXX = $(LT:compile) --tag=CXX \x24(CXXCOMPILE)"
+            $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $else
+            # mac os
+            $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
+            $print "CXXLD = $(LT:link) --tag=CC $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $print
+
+    # FIXME: add -module src/binding/fortran/use_mpi
+    #    or modify to install modules from srcdir
+    subcode: dump_fortran
+        $(for:F77,FC and F,FC)
+            my $fc = get_make_var("$1")
+            my $flags = get_make_var("$2FLAGS")
+            my $am_flags = get_make_var("AM_$2FLAGS")
+            $flags.=" $am_flags"
+            $if $flags=~/-I(\S+)/ -> $modpath
+                $if $fc =~/^(pgfortran|ifort)/
+                    $flags.=" -module $modpath"
+                $elif $fc =~/^sunf\d+/
+                    $flags.=" -moddir=$modpath"
+                $elif $fc =~/^af\d+/
+                    $flags.=" -YMOD_OUT_DIR=$modpath"
+                $else
+                    $flags.=" -J$modpath"
+            $print "$1COMPILE = $fc $flags"
+            $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
+
+            my $ld = get_make_var("$1LD")
+            $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+            $print
+
+    # ----------------------
+    subcode: dump_extra
+        $print "\x23 --------------------\n"
+        $call @custom_make_extra
+        $foreach $l in @extra_make_rules
+            $print $l
+
+    subcode: dump_implicit
+        $print "\x23 --------------------\n"
+        $print "%.o: %.c"
+        $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
+        $print
+        $print "%.lo: %.c"
+        $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
+        $print
+        $if !$opts{disable_cxx}
+            $print "%.lo: %.cxx"
+            $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<
+            $print
+        $if !$opts{disable_fortran}
+            $print "%.lo: %.f"
+            $call quiet_rule, LTF77, \x24(LTF77) -c -o \$\@ \$<
+            $print
+            $print "%.lo: %.f90"
+            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+            $print
+        $foreach %special_targets
+            $print "%.$k.lo: %.c"
+            $call quiet_rule, LTCC, $v -c -o \$\@ \$<
+            $print
+        $print "%.i: %.c"
+        $call quiet_rule, CC -E, \x24(COMPILE) -E -o \$\@ \$<
+        $print
+
+    subcode: dump_clean
+        $print "\x23 --------------------\n"
+        $print ".PHONY: clean"
+        $print "clean:"
+        $print "\t(find src $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
+        $print
+
+    subcode: dump_install
+        my $t1 = get_make_var_list("include_HEADERS")
+        my $t2 = get_make_var_list("nodist_include_HEADERS")
+        my $t3 = get_make_var_list("modinc_HEADERS")
+        $if @$t1 or @$t2 or @$t3
+            $foreach $t in @$t1, @$t2, @$t3
+                $t=~s/use_mpi_f08/use_mpi/
+                $dst_hash{$t} = "$opts{prefix}/include"
+
+        my (%dirs, @install_list, @install_deps, @lns_list)
+        $foreach $k in sort keys %dst_hash
+            my $v = $dst_hash{$k}
+            $if $k=~/^LN_S-(.*)/
+                push @lns_list, "rm -f $1 && ln -s $v $1"
+            $elif $v=~/noinst/
+                NOOP
+            $elif $v
+                $if !$dirs{$v}
+                    $dirs{$v} = 1
+                $if $v=~/\/lib$/
+                    push @install_list, "$(LT:install) install $k $v"
+                    push @install_deps, $k
+                $elif $v=~/\/bin$/
+                    push @install_list, "$(LT:install) install $k $v"
+                    push @install_deps, $k
+                $elif $v=~/\/include$/
+                    push @install_list, "cp $k $v"
+
+        # my @install_list = sort @install_list
+        $foreach $d in keys %dirs
+            unshift @install_list, "mkdir -p $d"
+        push @install_list, sort @lns_list
+
+        $if @install_list
+            $print "\x23 --------------------\n"
+            $print ".PHONY: install"
+            $print "install: @install_deps"
+            $foreach $l in @install_list
+                $print "\t$l"
+            $print
+
+    # ---- DUMP UTILS --------------------
+    subcode: dump_variable(key)
+        my $t = get_make_var_unique("$(key)")
+        $call @dump_make_var_custom
+        $print "$(key) = $t"
+
+        subcode: customizations
+            $call @dump_variable_custom
+
+    subcode: dump_object(key, tlist)
+        $(if:_pagename=mymake)
+            $if $(key)=~/mpifort.*_OBJECTS/
+                $call @dump_fort_object
+
+        my $last_item = pop $(tlist)
+        $if $last_item
+            $print "$(key) = \\"
+            $foreach $t in $(tlist)
+                $if $t
+                    $print "    $t \\"
+            $print "    $last_item"
+        $else
+            $print "$(key) ="
+        $print
+
+        $if @CONFIGS and "$(key)"=~/_OBJECTS$/
+            $print "\x24($(key)): \x24(CONFIGS)"
+
+    subcode: set_dst_hash_ltlibs_programs
+        $foreach $target in @ltlibs, @programs
+            $if $target=~/^(lib|bin)\//
+                $dst_hash{$target} = "\x24(PREFIX)/$1"
+
+    subcode: dump_rules(which)
+        $foreach $p in @$(which)
+            my $ld = "LTLD"
+            $if $p=~/libmpifort.la/
+                $ld = "F77LD"
+            $elif $p=~/libmpicxx.la/
+                $ld = "CXXLD"
+            my $cmd = "\x24($ld)"
+            $if $opts{V}==0
+                $cmd = "\@echo $ld \$\@ && $cmd"
+
+            my $a = $p
+            $a=~s/[\.\/]/_/g
+
+            my ($deps, $objs)
+            $call check_cppflags
+            $call set_objects
+            $call set_add
+            $call set_ldflags
+
+            $objs = "$deps $objs \x24(LIBS)"
+
+            # ref: subcode: collect_programs_libs
+            $if $dst_hash{$p}=~/\/lib$/
+                my $opt="-rpath $dst_hash{$p}"
+                $if $opts{so_version}
+                    $opt.=" -version-info $opts{so_version}"
+                $objs = "$opt $objs"
+
+            $print $p: $deps
+            $print \t$cmd -o \$\@ $objs
+            $print
+
+        subcode: check_cppflags
+            my $t_cppflags = get_make_var("${a}_CPPFLAGS")
+
+        subcode: set_objects
+            my $o= "${a}_OBJECTS"
+            $(if:which=programs)
+                my $tlist = get_make_objects($a, 1)
+            $(else)
+                my $tlist = get_make_objects($a)
+            $global %special_targets
+            $if $special_targets{$a}
+                $foreach $t in @$tlist
+                    $t=~s/\.(l?o)$/.$a.$1/
+
+            $call attach_to_deps, $o, $tlist
+
+        subcode: set_add
+            $(if:which=programs)
+                my $ldadd = get_make_var("LDADD")
+                $if $ldadd
+                    $deps .= " $ldadd"
+                my $add = $a."_LDADD"
+            $(elif:which=ltlibs)
+                my $add = $a."_LIBADD"
+
+            my $t = get_make_var($add)
+            $if $t
+                $t=~s/^\s+//
+                my @tlist = split /\s+/, $t
+                $call attach_to_deps, $add, tlist
+
+        subcode: set_ldflags
+            $(if:which=programs)
+                $(for:CFLAGS,LDFLAGS)
+                    my $t = get_make_var("${a}_$1")
+                    $if $t
+                        $cmd.= " $t"
+                        $cmd .= " \x24($1)"
+
+        # --------------------
+        subcode: attach_to_deps(o, tlist)
+            my @t
+            $foreach $t in @$(tlist)
+                $if $t=~/^-l\w+/
+                    $objs.=" $t"
+                $elif $t=~/^-L\S+/
+                    $objs.=" $t"
+                $else
+                    $if $t_cppflags and $t=~/(\w+)\.o/
+                        $call per_prog_rule
+                    push @t, $t
+
+            $if $#t > 1
+                $call dump_object, $(o), @t
+                $deps .= " \x24($(o))"
+            $else
+                $deps .= " @t"
+
+            subcode: per_prog_rule
+                my $obj=$1
+                $if $obj ne $a
+                    $obj .= "_$a"
+                    $t = "$obj.o"
+                $print "$t: $1.c"
+                $print "\t\@echo CC \$\@ && \x24(COMPILE) $t_cppflags -c -o \$\@ \$<"
+#---------------------------------------- 
+subcode:: dump_make_var_custom
+    $(if:key=DEFS)
+        $global @extra_DEFS
+        $t .= " @extra_DEFS"
+    $(if:key=INCLUDES)
+        $global @extra_INCLUDES
+        $t .= " @extra_INCLUDES"
+    $(if:key=CPPFLAGS)
+        $t .= $I_list
+
+fncode: get_make_var_unique($name)
+    my (@t, %cache)
+    $foreach $k in split /\s+/, get_make_var($name)
+        $if !$cache{$k}
+            $cache{$k} = 1
+            push @t, $k
+    return join(' ', @t)
+
+fncode: get_make_var_list($name)
+    my (@tlist, %cache)
+    $foreach $k in split /\s+/, get_make_var($name)
+        $if !$k
+            next
+        $if !$cache{$k}
+            $cache{$k} = 1
+            push @tlist, $k
+    return \@tlist
+
+#---- ------------------------------------ 
+subcode: push_autogen_rule(name, file)
+    push @extra_make_rules, "$(file):"
+    push @extra_make_rules, "\t\x24(DO_$(name))"
+    push @extra_make_rules, ""
+
+#---------------------------------------- 
+subcode: just_modify(f)
+    my @lines
+    &call open_r, $(f)
+        BLOCK
+        push @lines, $_
+    &call open_w, $(f)
+        print Out @lines
+
+subcode: quiet_rule(cmd, @rule)
+    $if $opts{V}==0
+        $print \t\@echo $(cmd) \$\@ && $(rule)
+    $else
+        $print \t$(rule)
+
+subcode: add_subdir_rule_block(subdir, target, @dep)
+    my @t = ("cd $(subdir)")
+    BLOCK
+    push @extra_make_rules, "$(target): $(dep)"
+    push @extra_make_rules, "\t(".join(' && ', @t).")"
+    push @extra_make_rules, ""
+

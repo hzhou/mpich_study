@@ -5,7 +5,6 @@ include: macros_mymake/mpich.def
 include: macros_mymake/bindings.def
 include: macros_mymake/hydra.def
 include: macros_mymake/gforker.def
-include: macros_mymake/testing.def
 
 include: macros_mymake/cvars.def
 page: mymake_cvars_new
@@ -49,12 +48,4 @@ subcode: hdr_guard(name)
     $print
     BLOCK
     $print "#endif /* $(name:uc)_H_INCLUDED */"
-
-subcode: do_cmd(@cmd)
-    $(if:cmd~")
-        my $cmd = $(cmd)
-    $(else)
-        my $cmd = "$(cmd)"
-    $print $cmd
-    system $cmd
 

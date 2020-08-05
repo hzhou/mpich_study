@@ -1,39 +1,13 @@
 include: macros_mymake/dependency.def
 
-subcode: compile_mpich
-    # push @config_args, "--enable-izem=atomic --with-zm-prefix=yes"
-    $if $opts{enable_izem}
-        $call need_izem
+subcode: mpich_slow
+    $(setmacro:makefile=mpich)
+    $opts{do_pmpi} = 0
+    $call set_general_make_rules
+    $call mpich_make_setup
 
-    $call copy_subdir_module, mpl
-    $if -d "src/openpa"
-        $call copy_subdir_module, opa
-
-    $call @preproc_bindings
     $call mpich_configure
     $call @post_mpich_configure
-
-    $call add_rule_cpi
-    $call @add_rule_dep
-
-    $call need_mpich_preproc # cvar, errmsg, etc.
-    $if -d "src/openpa"
-        $call need_opa
-    $(for:mpl,hwloc,yaksa)
-        $call need_$1
-
-    $call need_jsonc
-
-    $if !$opts{disable_romio}
-        $call need_romio
-
-    $if $opts{device}=~/ch4:ucx/
-        $call need_ucx
-    $if $opts{device}=~/:ofi/
-        $call need_ofi
-
-    $if $ENV{EXTRA_LIB}
-        $L_list .= " $ENV{EXTRA_LIB}"
 
     $call custom_make
 
@@ -41,14 +15,14 @@ subcode: compile_mpich
     $call patch_mpicc_etc
 
     $ENV{CFLAGS}=$opts{CFLAGS}
+    my $t="mymake/$(Hmpl)"
     $if -d "src/openpa"
-        system "make $(Hmpl) $(Hopa)"
-    $else
-        system "make $(Hmpl)"
+        $t.=" mymake/$(Hopa)"
+    $t=~s/$pwd\///g
+    system "make $t"
 
     # post filtering config_defines
-    $if -f "src/mpl/include/mpl_atomic.h"
-        $call @patch_sizeof_atomic
+    $call @patch_sizeof_atomic
     $call patch_atomic_nolocal
     $call patch_ticketlock
     $if %config_defines
@@ -66,28 +40,6 @@ subcode: compile_mpich
             # not working for clang asan yet
             next
     # ---------------------------
-    subcode: dump_variable_custom
-        $call filter_var_hwloc
-        $(if:key=CPPFLAGS)
-            $call filter_var_mpl_etc
-            $t .= $I_list
-
-    subcode: set_libs_custom
-        $(if:which=ltlibs)
-            $if $add!~/mpi(fort|cxx)/
-                $call filter_lib_romio
-                $if $add=~/_libmpi_la_/ && $opts{have_weak}
-                    $call filter_lib_mpl_etc
-                    $call filter_lib_ucx
-                    $call filter_lib_ofi
-                    $t.= $L_list
-                $elif $add=~/_libpmpi_la_/
-                    # !$opts{have_weak}
-                    $call filter_lib_mpl_etc
-                    $call filter_lib_ucx
-                    $call filter_lib_ofi
-                    $t.= $L_list
-    # ---------------------------
     subcode: post_mpich_configure
         &call open_r, src/include/mpichconf.h
             $if /^#define\s+HAVE_.*WEAK.* 1/
@@ -98,16 +50,6 @@ subcode: compile_mpich
         &call open_r, config.status
             $if /S\["WRAPPER_LIBS"\]="(.*)"/
                 $opts{WRAPPER_LIBS}=$1
-
-        $if !$opts{have_weak}
-            $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
-
-        # install mpicc etc.
-        my $bin="\x24(PREFIX)/bin"
-        $(for:p in mpicc,mpicxx,mpif77,mpifort)
-             $dst_hash{"mymake/$(p)"}=$bin
-        $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
-        $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
 
     subcode: load_dump_CFLAGS
         &call open_r, mymake/Makefile.custom
@@ -130,22 +72,107 @@ subcode: compile_mpich
                                 $l = "final_${c}flags=\"$flags -fsanitize=$1\"\n"
                         print Out $l
 
-    # --------------------
+    subcode: set_general_make_rules
+        $call set_mymake_DO
+        $call add_rule_pm
+        # $call add_rule_testing
+
+    subcode: set_mymake_DO
+        $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
+            push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
+        push @extra_make_rules, ""
+        push @extra_make_rules, ".PHONY: test cvars errmsg"
+        $(for:testing,cvars,errmsg)
+            $call push_autogen_rule, $1, $1
+        push @extra_make_rules, "realclean: clean"
+        push @extra_make_rules, "\t\x24(DO_clean)"
+
+    subcode: add_rule_pm
+        $if $opts{pm} eq "gforker"
+            $call add_rule_gforker
+        $elif $opts{pm} eq "remshell"
+            $call add_rule_remshell
+        $else
+            $call add_rule_hydra, hydra
+            $if $opts{pm} eq "hydra2"
+                $call add_rule_hydra, hydra2
+
+#---------------------------------------- 
+subcode: set_make_rules_DO
+    $(for:stage,clean,errmsg,cvars,logs,config,makefile)
+        push @extra_make_rules, "DO_$1 = perl $opts{mymake}_$1.pl"
+    push @extra_make_rules, ""
+    push @extra_make_rules, ".PHONY: test cvars errmsg realclean"
+    $(for:testing,cvars,errmsg)
+        $call push_autogen_rule, $1, $1
+    push @extra_make_rules, "realclean: clean"
+    push @extra_make_rules, "\t\x24(DO_clean)"
+
+#---------------------------------------- 
+subcode: mpich_make_setup
+    $(for:mpl,hwloc,yaksa,jsonc)
+        $call need_$1
+    $if $opts{enable_izem}
+        $call need_izem
+    $if -d "src/openpa"
+        $call need_opa
+
+    $if !$opts{disable_romio}
+        $call need_romio
+    $if $opts{device}=~/:ucx/
+        $call need_ucx
+    $if $opts{device}=~/:ofi/
+        $call need_ofi
+
+    $call @preproc_bindings
+
+    $call add_rule_cpi
+    $call @add_rule_dep
+
+    $call need_mpich_preproc # cvar, errmsg, etc.
+
+    $if $ENV{EXTRA_LIB}
+        $L_list .= " $ENV{EXTRA_LIB}"
+
+    $if $opts{do_pmpi}
+        $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+
+    # install mpicc etc.
+    my $bin="\x24(PREFIX)/bin"
+    $(for:p in mpicc,mpicxx,mpif77,mpifort)
+            $dst_hash{"mymake/$(p)"}=$bin
+    $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
+    $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
+
+
+    subcode: need_mpich_preproc
+        $(set:errhan=src/mpi/errhan/$1)
+        push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
+        $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
+        push @CONFIGS, "src/include/mpichconf.h"
+        push @CONFIGS, "src/include/mpir_cvars.h"
+        $call push_autogen_rule, cvars, src/include/mpir_cvars.h
+        # $call push_autogen_rule, logs, src/include/mpiallstates.h
+        $if -f "src/include/autogen.h.in"
+            push @CONFIGS, "src/include/autogen.h"
+            push @extra_make_rules, "src/include/autogen.h: src/include/autogen.h.in"
+            push @extra_make_rules, "\tperl maint/gen_init.pl"
+            push @extra_make_rules, ""
+
+
+        &call add_subdir_rule_block, src/glue/romio, src/glue/romio/all_romio_symbols.c
+            push @t, "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
+
     subcode: add_rule_cpi
-        push @extra_make_rules, "examples/cpi: lib/libmpi.la"
-        push @extra_make_rules, "\t\x24(CC) -o examples/cpi examples/cpi.c lib/.libs/libmpi.a $opts{WRAPPER_LIBS}"
+        push @extra_make_rules, "cpi: "
+        push @extra_make_rules, "\tmpicc -o cpi examples/cpi.c"
         push @extra_make_rules, ""
         
     subcode: add_rule_dep
         $if $opts{device} =~/ch4/
             $call add_ch4_dep
-#---------------------------------------- 
-macros:
-    mpich_configure_deps:: subsys_include.m4
-    mpich_configure_deps:: configure
-    mpich_configure_deps:: Makefile
-    mpich_configure_deps:: mymake/Makefile.*
 
+#---------------------------------------- 
 subcode: mpich_configure
     $call @hack_MPI_OFFSET
     $if !-f "subsys_include.m4"
@@ -197,56 +224,37 @@ subcode: mpich_configure
                 $flag=0
             $elif $flag
                 next
-        $if $opts{device}=~/ucx/
-            $call patch_configure_ucx
-        $if $opts{device}=~/ofi/
-            $call patch_configure_ofi
 
         $if -f "src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4"
             $call hack_configure_xpmem
 
-        subcode: hack_configure_xpmem
-            my $skip_xpmem=1
-            $foreach $a in @config_args
-                $if $a=~/--with-xpmem/
-                    $skip_xpmem = 0
-            $if $skip_xpmem
-                &call modify, src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4
-                    $if $l=~/AM_CONDITIONAL.*BUILD_SHM_IPC_XPMEM.*build_ch4_shm_ipc_xpmem/
-                        $l=~s/test .* ".*"/false/
+    subcode: hack_configure_xpmem
+        my $skip_xpmem=1
+        $foreach $a in @config_args
+            $if $a=~/--with-xpmem/
+                $skip_xpmem = 0
+        $if $skip_xpmem
+            &call modify, src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4
+                $if $l=~/AM_CONDITIONAL.*BUILD_SHM_IPC_XPMEM.*build_ch4_shm_ipc_xpmem/
+                    $l=~s/test .* ".*"/false/
 
-subcode: need_mpich_preproc
-    $(set:errhan=src/mpi/errhan/$1)
-    push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
-    $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
-    push @CONFIGS, "src/include/mpichconf.h"
-    push @CONFIGS, "src/include/mpir_cvars.h"
-    $call push_autogen_rule, cvars, src/include/mpir_cvars.h
-    # $call push_autogen_rule, logs, src/include/mpiallstates.h
-    $if -f "src/include/autogen.h.in"
-        push @CONFIGS, "src/include/autogen.h"
-        push @extra_make_rules, "src/include/autogen.h: src/include/autogen.h.in"
-        push @extra_make_rules, "\tperl maint/gen_init.pl"
-        push @extra_make_rules, ""
-
-
-    &call add_subdir_rule_block, src/glue/romio, src/glue/romio/all_romio_symbols.c
-        push @t, "perl all_romio_symbols ../../mpi/romio/include/mpio.h.in"
 
 #---------------------------------------- 
 subcode: patch_sizeof_atomic
-    &call open_w, "mymake/t.c"
-        $(set:print_to=Out)
-        $print #include "mpl_atomic.h"
-        $print #include <pthread.h>
-        $print "pthread_mutex_t MPL_emulation_lock;"
-        $print "int main() { return sizeof(MPL_atomic_ptr_t); }"
+    $if -f "src/mpl/include/mpl_atomic.h"
+        &call open_w, "mymake/t.c"
+            $(set:print_to=Out)
+            $print #include "mpl_atomic.h"
+            $print #include <pthread.h>
+            $print "pthread_mutex_t MPL_emulation_lock;"
+            $print "int main() { return sizeof(MPL_atomic_ptr_t); }"
 
-    system "$make_vars{CC} -Imymake/mpl/include mymake/t.c -o mymake/t"
-    system "mymake/t"
-    my $ret = $? >> 8;
+        my $CC = get_make_var("CC")
+        system "$CC -Imymake/mpl/include mymake/t.c -o mymake/t"
+        system "mymake/t"
+        my $ret = $? >> 8;
 
-    $config_defines{SIZEOF_MPL_ATOMIC_PTR_T} = $ret
+        $config_defines{SIZEOF_MPL_ATOMIC_PTR_T} = $ret
 
 subcode: patch_atomic_nolocal
     my $lock_based_atomics

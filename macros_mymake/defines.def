@@ -1,97 +1,142 @@
 subcode: init_config_defines
-    $(if:_pagename=mymake)
-        $global %hash_defines, %hash_undefs, %hash_define_val
-        $hash_defines{"disable-ch4-ofi-ipv6"} = "MPIDI_CH4_OFI_SKIP_IPV6"
-        $hash_defines{"enable-ofi-domain"} = "MPIDI_OFI_VNI_USE_DOMAIN"
-        $hash_defines{"enable-legacy-ofi"} = "MPIDI_ENABLE_LEGACY_OFI"
-        $hash_defines{"enable-ch4-am-only"} = "MPIDI_ENABLE_AM_ONLY"
+    $global %config_defines, %config_cflags, %config_ldflags
+    $global %hash_defines, %hash_define_vals
+    $call init_opt, disable-ch4-ofi-ipv6, MPIDI_CH4_OFI_SKIP_IPV6
+    $call init_opt, enable-legacy-ofi,    MPIDI_ENABLE_LEGACY_OFI
+    $call init_opt, enable-ch4-am-only,   MPIDI_ENABLE_AM_ONLY
+    $call init_opt, with-ch4-max-vcis,    MPIDI_CH4_MAX_VCIS
+    $call init_opt, enable-nolocal,       ENABLE_NO_LOCAL
 
-        $hash_define_val{"with-ch4-max-vcis"} = "MPIDI_CH4_MAX_VCIS"
+    $call init_opt_both, enable, ofi-domain, MPIDI_OFI_VNI_USE_DOMAIN, 1, undef
 
-        $hash_undefs{"disable-ofi-domain"} = "MPIDI_OFI_VNI_USE_DOMAIN"
+    &call init_opt_vals, enable-thread-cs, MPICH_THREAD_GRANULARITY
+        "default" => "MPICH_THREAD_GRANULARITY__GLOBAL",
+        "global" => "MPICH_THREAD_GRANULARITY__GLOBAL",
+        "per-vci" => "MPICH_THREAD_GRANULARITY__VCI",
+        "per-object" => "MPICH_THREAD_GRANULARITY__POBJ",
+
+    &call init_opt_vals, with-posix-mutex, MPL_POSIX_MUTEX_NAME
+        "default" => "MPL_POSIX_MUTEX_NATIVE",
+        "ticketlock" => "MPL_POSIX_MUTEX_TICKETLOCK",
+
+    &call init_opt_vals, enable-ch4-mt,  MPIDI_CH4_USE_MT_{DIRECT,HANDOFF,RUNTIME}
+        "default" => "DIRECT",
+        "direct"  => "DIRECT",
+        "handoff" => "HANDOFF",
+        "runtime" => "RUNTIME",
+
+    &call init_opt_vals, enable-ch4-vci-method, MPIDI_CH4_VCI_METHOD
+        "default" => "MPICH_VCI__ZERO",
+        "zero" =>    "MPICH_VCI__ZERO",
+        "communicator" => "MPICH_VCI__COMM",
+        "tag" => "MPICH_VCI__TAG",
+        "implicit" => "MPICH_VCI__IMPLICIT",
+        "explicit" => "MPICH_VCI__EXPLICIT",
+
+    subcode: init_opt(opt, name)
+        $hash_defines{"$(opt)"} = "$(name)"
+
+    subcode: init_opt_vals(opt, name)
+        $hash_defines{"$(opt)"} = "$(name)"
+        $hash_define_vals{"$(name)"} = {
+            BLOCK
+        };
+
+    subcode: init_opt_both(enable, what, name, yes, no)
+        $(if:enable=enable)
+            $hash_defines{"enable-$(what)"} = "$(name)"
+            $hash_defines{"disable-$(what)"} = "$(name)"
+            $hash_define_vals{$(name)} = { enable => $(yes), disable => $(no) };
+        $(else)
+            $hash_defines{"with-$(what)"} = "$(name)"
+            $hash_defines{"without-$(what)"} = "$(name)"
+            $hash_define_vals{$(name)} = { with => $(yes), without => $(no) };
+
+
+subcode: post_config_defines
+    $if $config_defines{MPIDI_CH4_MAX_VCIS} > 1 and !$config_defines{MPIDI_CH4_VCI_METHOD}
+        $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
 
 subcode: filter_config_defines
-    $(if:_pagename=mymake)
-        $elif $a=~/--enable-thread-cs=(.*)/
-            my $cs = "GLOBAL"
-            $if $1 eq "per-object" or $1 eq "per_object"
-                $cs = "POBJ"
-            $elif $1 eq "per-vci" or $1 eq "per_vci"
-                $cs = "VCI"
-            $config_defines{MPICH_THREAD_GRANULARITY} = "MPICH_THREAD_GRANULARITY__$cs"
-        $elif $a=~/--with-posix-mutex=(.*)/
-            $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_".uc($1)
-        $elif $a=~/--enable-ch4-vci-method=(.*)/
-            $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__".uc($1)
-            $if $1 eq "communicator"
-                $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
-        $elif $a=~/--enable-ch4-mt=(\w+)/
-            $if $1 eq "direct"
-                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = 1
-            $elif $1 eq "handoff"
-                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = undef
-                $config_defines{MPIDI_CH4_USE_MT_HANDOFF} = 1
-            $elif $1 eq "runtime"
-                $config_defines{MPIDI_CH4_USE_MT_DIRECT} = undef
-                $config_defines{MPIDI_CH4_USE_MT_RUNTIME} = 1
-        $elif $a=~/--enable-nolocal/
-            $config_defines{ENABLE_NO_LOCAL} = 1
-            # $config_defines{MPIDI_CH4_DIRECT_NETMOD} = 1
-        # ------------------------------------------------------------
-        $elif $a=~/--((with|enable)-.*)=(.*)/ && $hash_define_val{$1}
-            $config_defines{$hash_define_val{$1}} = $3
-            $if $1 eq "with-ch4-max-vcis"
-                $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
-        $elif $a=~/--((disable|enable)-.*)/ && ($hash_defines{$1} || $hash_undefs{$1})
-            $if $hash_defines{$1}
-                $config_defines{$hash_defines{$1}} = 1
-            $else
-                $config_defines{$hash_undefs{$1}} = undef
-        # ------------------------------------------------------------
-        $elif $a=~/--enable-g=(\S+)/ -> $g
-            $if $1 eq "most"
-                $g="dbg,log,mem,meminit,mutex,handle,handlealloc"
-            $elif $1 eq "all"
-                $g="dbg,log,mem,meminit,mutex,handle,handlealloc,memarena"
-            $foreach $t in split /,/, $g
-                $if $t eq "dbg" || $t eq "debug"
-                    $config_cflags{"-g"} = 1
-                $elif $t eq "log"
-                    $config_defines{MPL_USE_DBG_LOGGING} = 1
-                $elif $t eq "mem" or $t eq "memarena"
-                    $config_defines{MPL_USE_MEMORY_TRACING} = 1
-                    $config_defines{USE_MEMORY_TRACING} = 1
-                    $if $t eq "memarena"
-                        $config_defines{MPICH_DEBUG_MEMARENA} = 1
-                $elif $t eq "meminit"
-                    $config_defines{MPICH_DEBUG_MEMINIT} = 1
-                $elif $t eq "mutex"
-                    $config_defines{MPICH_DEBUG_MUTEX} = 1
-                $elif $t eq "handle"
-                    $config_defines{MPICH_DEBUG_HANDLES} = 1
-                $elif $t eq "handlealloc"
-                    $config_defines{MPICH_DEBUG_HANDLEALLOC} = 1
-                $elif $t eq "asan"
-                    $config_cflags{O}=1
-                    $(for:-g, -fsanitize=address, -fno-omit-frame-pointer)
-                        $config_cflags{"$1"} = 1
-                    $config_ldflags{"-fsanitize=address"} = 1
-                $elif $t eq "usan" or $t eq "ubsan"
-                    $(for:-fsanitize=undefined)
-                        $config_cflags{"$1"} = 1
-                    $config_ldflags{"-fsanitize=undefined"} = 1
-        # ------------------------------------------------------------
-        $elif $a=~/--enable-fast=(\S+)/ -> $g
-            $if $g =~ /O(\S)/
-                $config_cflags{O} = $1
-            $if $g=~/ndebug/
-                $config_cflags{-DNDEBUG} = 1
-            $elif $g=~/all|yes/
-                $config_cflags{-DNDEBUG} = 1
-                $config_cflags{O} = 2
-            $elif $g=~/no|none/
-                $config_cflags{O} = 0
+    $elif $a=~/--((with|enable)-.*)=(.*)/ && $hash_defines{$1}
+        my $name = $hash_defines{$1}
+        my $val = $3
+        $if $hash_define_vals{$name}
+            $call get_hash_define_vals
+        $else
+            $config_defines{$name} = $val
+    $elif $a=~/--((disable|enable|with|without)-.*)/ && $hash_defines{$1}
+        my $name = $hash_defines{$1}
+        my $val = 1
+        $if $hash_define_vals{$name}
+            $val = $hash_define_vals{$name}->{$2}
+        $config_defines{$name} = $val
 
+    # ------------------------------------------------------------
+    $elif $a=~/--enable-g=(\S+)/ -> $g
+        $if $1 eq "most"
+            $g="dbg,log,mem,meminit,mutex,handle,handlealloc"
+        $elif $1 eq "all"
+            $g="dbg,log,mem,meminit,mutex,handle,handlealloc,memarena"
+        $foreach $t in split /,/, $g
+            $if $t eq "dbg" || $t eq "debug"
+                $config_cflags{"-g"} = 1
+            $elif $t eq "log"
+                $config_defines{MPL_USE_DBG_LOGGING} = 1
+            $elif $t eq "mem" or $t eq "memarena"
+                $config_defines{MPL_USE_MEMORY_TRACING} = 1
+                $config_defines{USE_MEMORY_TRACING} = 1
+                $if $t eq "memarena"
+                    $config_defines{MPICH_DEBUG_MEMARENA} = 1
+            $elif $t eq "meminit"
+                $config_defines{MPICH_DEBUG_MEMINIT} = 1
+            $elif $t eq "mutex"
+                $config_defines{MPICH_DEBUG_MUTEX} = 1
+            $elif $t eq "handle"
+                $config_defines{MPICH_DEBUG_HANDLES} = 1
+            $elif $t eq "handlealloc"
+                $config_defines{MPICH_DEBUG_HANDLEALLOC} = 1
+            $elif $t eq "asan"
+                $config_cflags{O}=1
+                $(for:-g, -fsanitize=address, -fno-omit-frame-pointer)
+                    $config_cflags{"$1"} = 1
+                $config_ldflags{"-fsanitize=address"} = 1
+            $elif $t eq "usan" or $t eq "ubsan"
+                $(for:-fsanitize=undefined)
+                    $config_cflags{"$1"} = 1
+                $config_ldflags{"-fsanitize=undefined"} = 1
+    # ------------------------------------------------------------
+    $elif $a=~/--enable-fast=(\S+)/ -> $g
+        $if $g =~ /O(\S)/
+            $config_cflags{O} = $1
+        $if $g=~/ndebug/
+            $config_cflags{-DNDEBUG} = 1
+        $elif $g=~/all|yes/
+            $config_cflags{-DNDEBUG} = 1
+            $config_cflags{O} = 2
+        $elif $g=~/no|none/
+            $config_cflags{O} = 0
+
+    # -----------------------------
+    subcode: get_hash_define_vals
+        my $V = $hash_define_vals{$name}->{$val}
+        $if !$V
+            $V = $hash_define_vals{$name}->{default}
+
+        $if $name=~/(\w+)_\{(.*)\}$/ -> $name_, $val_list
+            $call set_config_defines_val_list
+        $else
+            $config_defines{$name} = $V
+
+        subcode: set_config_defines_val_list
+            # value in macro names
+            $foreach $a in split /,\s*/, $val_list
+                $if $a eq $V
+                    $config_defines{"${name_}_$a"} = 1
+                $else
+                    $config_defines{"${name_}_$a"} = undef
+
+#---------------------------------------- 
 subcode: define_config_h(config_h)
     $(if:_pagename=mymake)
         $global %config_defines
@@ -119,6 +164,13 @@ subcode: define_config_h(config_h)
         $cnt++
 
 #---------------------------------------- 
+# ref. macros_mymake/makefile.def
+subcode:: dump_make_var_custom
+    $(if:key=CFLAGS)
+        $call modify_cflags, $t
+    $(if:key=LDFLAGS)
+        $call modify_ldflags, $t
+
 subcode: modify_cflags(t)
     $global %config_cflags, %config_ldflags
     $if %config_cflags

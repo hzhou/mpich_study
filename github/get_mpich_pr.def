@@ -28,7 +28,7 @@ page: get_mpich_pr
         $elif -d $(B)
             $mpich_github = $(B)
 
-    system "git clone $mpich_github --branch master mpich$pr"
+    system "git clone $mpich_github --branch main mpich$pr"
     chdir "mpich$pr"
 
     system "git remote add gh-$author https://github.com/$author/mpich"

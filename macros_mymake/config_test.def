@@ -1,0 +1,85 @@
+subcode: config_init_test
+    $config_in = "$mymake_dir/config_templates/mpitestconf.h"
+    $config_out = "test/mpi/include/mpitestconf.h"
+    symlink "../../libtool", "test/mpi/libtool"
+
+subcode: config_test
+    $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/
+    $call set_config_defines
+
+    subcode: set_config_defines
+        # datatypes
+        $(for:a in float,double,long_double)
+            $config_defines{HAVE_$(a:uc)__COMPLEX} = 1
+        $(for:a in long_long,_bool)
+            $config_defines{HAVE_$(a:uc)} = 1
+
+        $config_defines{HAVE_MPI_INTEGER16} = 1
+        $config_defines{USE_LONG_DOUBLE_COMPLEX} = 1
+
+        $if $sizeof_hash{VOID_P} == $sizeof_hash{LONG}
+            $config_defines{POINTERINT_t} = "long"
+        $elif $sizeof_hash{VOID_P} == $sizeof_hash{LONG_LONG}
+            $config_defines{POINTERINT_t} = "long long"
+
+        $config_defines{SIZEOF_MPI_OFFSET} = $sizeof_hash{VOID_P}
+        # getrusage
+        $config_defines{HAVE_GETRUSAGE} = 1
+
+        # mpi
+        $config_defines{THREAD_PACKAGE_NAME} = "THREAD_PACKAGE_POSIX"
+        $config_defines{HAVE_MPI_WIN_CREATE} = 1
+        $if $opts{device}!~/ch4:ucx/
+            $config_defines{HAVE_MPI_SPAWN} = 1
+
+subcode: make_test
+    my %conds
+    my $dir = "pt2pt"
+    $foreach $dir in "attr", "pt2pt", "coll", "rma"
+        $call @make_init
+        $call set_top_srcdir, $dir
+        load_automake("test/mpi/$dir/Makefile.am", \%conds)
+
+        $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
+        $make_vars{LDADD} = "$top_srcdir/util/mtest.o"
+        $make_vars{LDADD} .= " $top_srcdir/util/mtest_common.o"
+        $make_vars{LDADD} .= " $top_srcdir/util/mtest_single.o"
+        $make_vars{LDADD} .= " $top_srcdir/dtpools/src/libdtpools.la"
+
+        $make_vars{LIBTOOL} = "$top_srcdir/libtool"
+        $make_vars{CC} = "mpicc"
+        $make_vars{CCLD} = "mpicc"
+        dump_makefile("test/mpi/$dir/Makefile")
+
+    subcode: add_make_rule(target, dir, sub_target, @dep)
+        $(if:dep)
+            push @extra_make_rules, "$top_srcdir/$(target): $top_srcdir/$(dep)"
+        $(else)
+            push @extra_make_rules, "$top_srcdir/$(target):"
+        push @extra_make_rules, "\t(cd $top_srcdir/$(dir) && \x24(MAKE) $(sub_target))"
+        push @extra_make_rules, ""
+
+    subcode: set_top_srcdir(dir)
+        my $top_srcdir = $dir
+        $top_srcdir=~s/[^\/]+/../g
+        $make_vars{top_srcdir}=$top_srcdir
+
+#---------------------------------------- 
+subcode: config_init_dtpools
+    $config_in = "$mymake_dir/config_templates/dtpoolsconf.h"
+    $config_out = "test/mpi/dtpools/dtpoolsconf.h"
+    symlink "../../../libtool", "test/mpi/dtpools/libtool"
+
+subcode: config_dtpools
+    $call ac_init, dtpools, 0.0, discuss@mpich.org, dtpools, -
+    $config_defines{HAVE_MEMSET} = 1
+
+subcode: make_dtpools
+    my %conds
+    $autoconf_vars{DTP_DATATYPES} = "MPI_INT,MPI_INT:4+MPI_DOUBLE:8"
+    load_automake("test/mpi/dtpools/src/Makefile.am", \%conds)
+
+    $make_vars{INCLUDES} = "-I../include"
+    $make_vars{LIBTOOL} = "/bin/sh ../libtool"
+
+    dump_makefile("test/mpi/dtpools/src/Makefile")

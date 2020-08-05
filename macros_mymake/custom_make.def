@@ -1,26 +1,90 @@
-subcode: custom_make
-    $global $I_list, $L_list # ref: dump_variable_custom, set_libs_custom
-    my $lt_opt
-    $if $opts{V}==0
-        $lt_opt = "--quiet"
+include: macros_mymake/makefile.def
+include: macros_mymake/hydra.def
+include: macros_mymake/gforker.def
 
+subcode: custom_make
     # FIXME
     $if $opts{argobots}
         $I_list .= " -I$opts{argobots}/include"
-    # Try shorten the path, or pgi compiler will have trouble
-    my $_P = `pwd`
-    chomp $_P
-    $I_list=~s/$_P/./g
-
     $call parse_Makefile, mymake/Makefile.orig
-    &call open_W, mymake/Makefile.custom
-        $print "export MODDIR=$opts{moddir}"
-        $print "PREFIX=$opts{prefix}"
-        $print
-        $call dump_custom_make
+    $objects{MODS}="-"
+    $objects{MODDIR}="-"
+
+    $call collect_programs_libs
+    # $call collect_mpi_fc_modules
+
+    $call custom_programs_libs
+    dump_makefile("mymake/Makefile.custom")
+
     system "rm -f Makefile"
     system "ln -s mymake/Makefile.custom Makefile"
 
+    # ----------------------------
+    subcode: collect_programs_libs
+        my $tlist = get_list("lib_LTLIBRARIES")
+        $foreach $t in @$tlist
+            $dst_hash{$t} = "\x24(PREFIX)/lib"
+        my $tlist = get_list("bin_PROGRAMS")
+        $foreach $t in @$tlist
+            $call @custom_programs
+            $dst_hash{$t} = "\x24(PREFIX)/bin"
+        # -------------------
+        $global @programs
+        my $tlist = get_list("PROGRAMS")
+        $foreach $t in @$tlist
+            $call @custom_programs
+            push @programs, $t
+    
+        $global @ltlibs
+        my $tlist = get_list("LTLIBRARIES")
+        $foreach $t in @$tlist
+            $call @custom_ltlibs
+            push @ltlibs, $t
+
+    subcode: custom_programs_libs
+        $(for:which in ltlibs, programs)
+            $foreach $p in @$(which)
+                my $a = $p
+                $a=~s/[\.\/]/_/g
+                $(if:which=programs)
+                    my $add = $a."_LDADD"
+                $(elif:which=ltlibs)
+                    my $add = $a."_LIBADD"
+                my $t = get_make_var($add)
+                $call @set_libs_custom
+                $objects{$add} = $t
+
+        subcode:: set_libs_custom
+            # print "$add: $t...\n"
+            $(if:makefile=hydra)
+                $t=~s/\s*\S*\/libmpl.la//g
+                $t=~s/-lhydra/libhydra.la/g
+                $t=~s/-lpm/libpm.la/g
+            $(elif:makefile=mpich)
+                $call filter_lib_romio
+                $call filter_lib_mpl_etc
+                $call filter_lib_ucx
+                $call filter_lib_ofi
+
+            $(if:makefile=mpich and which=ltlibs)
+                $if ($add=~/libmpi_la_/ && $opts{have_weak}) or ($add=~/libpmpi_la_/)
+                    $t.= $L_list
+            $(elif:makefile=hydra and which=ltlibs)
+                $if $add=~/libhydra.*_la/
+                    $t.= $L_list
+
+            subcode: filter_lib_mpl_etc
+                $t=~s/\S+\/(mpl|openpa|izem|hwloc|yaksa|json-c)\/\S+\.la\s*//g
+                $(if:0)
+                    $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
+                    $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
+                    $t=~s/\bsrc\/izem\/\S+\s*//g
+
+            subcode: filter_lib_ucx
+                $t=~s/\@ucxlib\@\s*//g
+
+            subcode: filter_lib_ofi
+                $t=~s/\@ofilib\@\s*//g
 #---------------------------------------- 
 subcode: modify_frame(@is_temp)
     my @mod_list
@@ -75,14 +139,6 @@ subcode: modify_frame(@is_temp)
             $else
                 %need_patch=()
 
-subcode: just_modify(f)
-    my @lines
-    &call open_r, $(f)
-        BLOCK
-        push @lines, $_
-    &call open_w, $(f)
-        print Out @lines
-
 #---------------------------------------- 
 subcode: parse_Makefile(makefile)
     $global %objects 
@@ -110,316 +166,6 @@ subcode: parse_Makefile(makefile)
         $if $done
             undef $tlist
 
-#---------------------------------------- 
-subcode: dump_custom_make
-    $if @CONFIGS
-        $global @CONFIGS
-        $call P, "CONFIGS = @CONFIGS"
-        $print
-    $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
-    $print
-
-    $call dump_CC
-    $if !$opts{disable_cxx}
-        $call dump_cxx
-    $if !$opts{disable_fortran}
-        $call dump_fortran
-
-    $call collect_programs_libs
-    # $call collect_mpi_fc_modules
-
-    $print "all: @ltlibs @programs"
-    $print
-
-    $call dump_rules, ltlibs
-    $call dump_rules, programs
-    $call dump_extra
-    $call dump_implicit
-    $call dump_install
-    $call dump_clean
-
-    # ----------------------------
-    macros: 
-        LT: /bin/sh ./libtool --mode=$1 $lt_opt
-
-    subcode: dump_CC
-        my $cc = get_object("CC")
-        my $ccld = get_object("CCLD")
-
-        $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
-        $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-        $print "LTCC = $(LT:compile) \x24(COMPILE)"
-        $print "LTLD = $(LT:link) \x24(LINK)"
-        $print
-
-    subcode: dump_cxx
-        my $cxx = get_object("CXX")
-        my $flags = get_object("CXXFLAGS")
-        my $am_flags = get_object("AM_CXXFLAGS")
-        $print "CXXCOMPILE = $cxx \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) $flags $am_flags"
-
-        my $cxxld = get_object("CXXLD")
-        $if $cxxld
-            $print "LTCXX = $(LT:compile) --tag=CXX \x24(CXXCOMPILE)"
-            $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-        $else
-            # mac os
-            $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
-            $print "CXXLD = $(LT:link) --tag=CC $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-        $print
-
-    # FIXME: add -module src/binding/fortran/use_mpi
-    #    or modify to install modules from srcdir
-    subcode: dump_fortran
-        $(for:F77,FC and F,FC)
-            my $fc = get_object("$1")
-            my $flags = get_object("$2FLAGS")
-            my $am_flags = get_object("AM_$2FLAGS")
-            $flags.=" $am_flags"
-            $if $flags=~/-I(\S+)/ -> $modpath
-                $if $fc =~/^(pgfortran|ifort)/
-                    $flags.=" -module $modpath"
-                $elif $fc =~/^sunf\d+/
-                    $flags.=" -moddir=$modpath"
-                $elif $fc =~/^af\d+/
-                    $flags.=" -YMOD_OUT_DIR=$modpath"
-                $else
-                    $flags.=" -J$modpath"
-            $print "$1COMPILE = $fc $flags"
-            $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
-
-            my $ld = get_object("$1LD")
-            $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-            $print
-
-    subcode: dump_extra
-        $print "\x23 --------------------\n"
-        $call @custom_make_extra
-        $global @extra_make_rules
-        $foreach $l in @extra_make_rules
-            $call P, $l
-
-    subcode: dump_implicit
-        $print "\x23 --------------------\n"
-        $print "%.o: %.c"
-        $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
-        $print
-        $print "%.lo: %.c"
-        $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
-        $print
-        $if !$opts{disable_cxx}
-            $print "%.lo: %.cxx"
-            $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<
-            $print
-        $if !$opts{disable_fortran}
-            $print "%.lo: %.f"
-            $call quiet_rule, LTF77, \x24(LTF77) -c -o \$\@ \$<
-            $print
-            $print "%.lo: %.f90"
-            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
-            $print
-        $foreach %special_targets
-            $print "%.$k.lo: %.c"
-            $call quiet_rule, LTCC, $v -c -o \$\@ \$<
-            $print
-        $print "%.i: %.c"
-        $call quiet_rule, CC -E, \x24(COMPILE) -E -o \$\@ \$<
-        $print
-
-    subcode: dump_install
-        my $t1 = get_list("include_HEADERS")
-        my $t2 = get_list("nodist_include_HEADERS")
-        my $t3 = get_list("modinc_HEADERS")
-        $if @$t1 or @$t2 or @$t3
-            $foreach $t in @$t1, @$t2, @$t3
-                $t=~s/use_mpi_f08/use_mpi/
-                $dst_hash{$t} = "$opts{prefix}/include"
-
-        my (%dirs, @install_list, @install_deps, @lns_list)
-        $foreach %dst_hash
-            $if $k=~/^LN_S-(.*)/
-                push @lns_list, "rm -f $1 && ln -s $v $1"
-            $elif $v
-                $if !$dirs{$v}
-                    $dirs{$v} = 1
-                $if $v=~/\/lib$/
-                    push @install_list, "$(LT:install) install $k $v"
-                    push @install_deps, $k
-                $elif $v=~/\/bin$/
-                    push @install_list, "$(LT:install) install $k $v"
-                    push @install_deps, $k
-                $elif $v=~/\/include$/
-                    push @install_list, "cp $k $v"
-
-        my @install_list = sort @install_list
-        $foreach $d in keys %dirs
-            unshift @install_list, "mkdir -p $d"
-        push @install_list, sort @lns_list
-
-        $if @install_list
-            $print "\x23 --------------------\n"
-            $print ".PHONY: install"
-            $print "install: @install_deps"
-            $foreach $l in @install_list
-                $print "\t$l"
-            $print
-
-    subcode: dump_clean
-        $print "\x23 --------------------\n"
-        $print ".PHONY: clean realclean realrealclean"
-        $print "clean:"
-        $print "\t(find src $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
-        $print
-        $print "realclean: clean"
-        $print "\trm -f configure mymake/Makefile.orig src/mpi/errhan/defmsg.h src/include/mpir_cvars.h src/utils/mpir_cvars.c src/pm/hydra/configure src/pm/hydra/mymake/Makefile.orig"
-        $print "\trm -rf mymake/mpl mymake/openpa mymake/romio"
-        $print
-
-    subcode: quiet_rule(cmd, @rule)
-        $if $opts{V}==0
-            $print \t\@echo $(cmd) \$\@ && $(rule)
-        $else
-            $print \t$(rule)
-
-    # ----------------------------
-    subcode: P(@line)
-        $(if:line!=$l)
-            my $l = $(line)
-        $l=~s/$opts{moddir}/\x24(MODDIR)/g
-        $print $l
-
-    subcode: dump_variable(key)
-        my $t = get_object("$(key)")
-        $(if:key=CFLAGS)
-            $call @modify_cflags, $t
-        $(if:key=LDFLAGS)
-            $call @modify_ldflags, $t
-        $call @dump_variable_custom
-        $(if:key=DEFS)
-            $global @extra_DEFS
-            $t .= " @extra_DEFS"
-        $(if:key=INCLUDES)
-            $global @extra_INCLUDES
-            $t .= " @extra_INCLUDES"
-        $call P, "$(key) = $t"
-
-    subcode: dump_object(key, tlist)
-        $(if:_pagename=mymake)
-            $if $(key)=~/mpifort.*_OBJECTS/
-                $call @dump_fort_object
-
-        $print "$(key) = \\"
-        my $last_item = pop $(tlist)
-        $foreach $t in $(tlist)
-            $if $t
-                $call P, "    $t \\"
-        $call P, "    $last_item"
-
-        $if @CONFIGS and "$(key)"=~/_OBJECTS$/
-            $print "\x24($(key)): \x24(CONFIGS)"
-
-    subcode: collect_programs_libs
-        $global %dst_hash
-        my $tlist = get_list("lib_LTLIBRARIES")
-        $foreach $t in @$tlist
-            $dst_hash{$t} = "\x24(PREFIX)/lib"
-        my $tlist = get_list("bin_PROGRAMS")
-        $foreach $t in @$tlist
-            $call @custom_programs
-            $dst_hash{$t} = "\x24(PREFIX)/bin"
-        # -------------------
-        $global @programs
-        my $tlist = get_list("PROGRAMS")
-        $foreach $t in @$tlist
-            $call @custom_programs
-            push @programs, $t
-    
-        $global @ltlibs
-        my $tlist = get_list("LTLIBRARIES")
-        $foreach $t in @$tlist
-            $call @custom_ltlibs
-            push @ltlibs, $t
-
-    subcode: dump_rules(which)
-        $foreach $p in @$(which)
-            my $ld = "LTLD"
-            $if $p=~/libmpifort.la/
-                $ld = "F77LD"
-            $elif $p=~/libmpicxx.la/
-                $ld = "CXXLD"
-            my $cmd = "\x24($ld)"
-            $if $opts{V}==0
-                $cmd = "\@echo $ld \$\@ && $cmd"
-
-            my $a = $p
-            $a=~s/[\.\/]/_/g
-
-            my ($deps, $objs)
-            $call set_objects
-            $call set_add
-            $call set_ldflags
-
-            $objs = "$deps $objs \x24(LIBS)"
-
-            # ref: subcode: collect_programs_libs
-            $if $dst_hash{$p}=~/\/lib$/
-                my $opt="-rpath $dst_hash{$p}"
-                $if $opts{so_version}
-                    $opt.=" -version-info $opts{so_version}"
-                $objs = "$opt $objs"
-
-            $print $p: $deps
-            $print \t$cmd -o \$\@ $objs
-            $print
-
-        subcode: set_objects
-            my $o= "${a}_OBJECTS"
-            my $tlist = get_list($o)
-            my @tlist = sort @$tlist
-            $global %special_targets
-            $if $special_targets{$a}
-                $foreach $t in @tlist
-                    $t=~s/([^\/]+)-(\w+)/$2.$1/
-            $else
-                $foreach $t in @tlist
-                    $t=~s/[^\/]+-//
-
-            $call attach_to_deps, $o, tlist
-
-        subcode: set_add
-            $(if:which=programs)
-                my $add = $a."_LDADD"
-            $(elif:which=ltlibs)
-                my $add = $a."_LIBADD"
-
-            $if $objects{$add}
-                my $t = get_object($add)
-                $call @set_libs_custom
-                $t=~s/^\s+//
-                my @tlist = split /\s+/, $t
-                $call attach_to_deps, $add, tlist
-
-        subcode: set_ldflags
-            $(if:which=programs)
-                $(for:CFLAGS,LDFLAGS)
-                    $if $objects{"${a}_$1"}
-                        $cmd.= ' '. get_object("${a}_$1")
-                        $cmd .= " \x24($1)"
-
-        # --------------------
-        subcode: attach_to_deps(o, tlist)
-            my @t
-            $foreach $t in @$(tlist)
-                $if $t=~/^-l\w+/
-                    $objs.=" $t"
-                $elif $t=~/^-L\S+/
-                    $objs.=" $t"
-                $else
-                    push @t, $t
-
-            $call dump_object, $(o), @t
-            $deps .= " \x24($(o))"
-
 #---- utils --------------------------- 
 fncode: get_list($key)
     my @t
@@ -430,7 +176,7 @@ fncode: get_list($key)
             my $L = get_list($1)
             push @t, @$L
         $else
-            $t=~s/\$\((\w+)\)/get_object($1)/ge
+            $t=~s/\$\((\w+)\)/get_make_var($1)/ge
             push @t, $t
     return \@t
 
@@ -443,21 +189,27 @@ fncode: get_list($key)
             $else
                 $print $key undefined
 
-fncode: get_object($key)
-    my $arr = $objects{$key}
-    $if defined $arr
-        my $t
-        $if ref($arr) eq "ARRAY"
-            $t = join(' ', @$arr)
-        $else
-            $t = $arr
-        $t=~s/\$\(am__v_[\w]+\)//g
-        $t=~s/\$\((\w+)\)/get_object($1)/ge
+fncode: get_make_var($name)
+    my $t = $objects{$name}
+    $if $t eq "-"
+        return "\x24($name)"
+    $if defined $t
+        $if ref($t) eq "ARRAY"
+            $t = join(' ', @$t)
+        $t=~s/\$\((\w+)\)/get_make_var($1)/ge
         $t=~s/\s+/ /g
 
-        $global %make_vars
-        $make_vars{$key} = $t
+        $t=~s/$opts{moddir}/\x24(MODS)/g
         return $t
+    $elif $name=~/^am__v_\w+/
+        return ""
     $else
         return ""
+
+fncode: get_make_objects($a)
+    my $tlist = get_list("${a}_OBJECTS")
+    my @tlist = sort @$tlist
+    $foreach $t in @tlist
+        $t=~s/$a-//g
+    return \@tlist
 
