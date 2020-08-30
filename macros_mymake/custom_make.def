@@ -9,6 +9,7 @@ subcode: custom_make
     $call parse_Makefile, mymake/Makefile.orig
     $objects{MODS}="-"
     $objects{MODDIR}="-"
+    $objects{PREFIX}="-"
 
     $call collect_programs_libs
     # $call collect_mpi_fc_modules
@@ -74,7 +75,7 @@ subcode: custom_make
                     $t.= $L_list
 
             subcode: filter_lib_mpl_etc
-                $t=~s/\S+\/(mpl|openpa|izem|hwloc|yaksa|json-c)\/\S+\.la\s*//g
+                $t=~s/\S+\/(mpl|openpa|izem|hwloc|yaksa|json-c|libfabric)\/\S+\.la\s*//g
                 $(if:0)
                     $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
                     $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g

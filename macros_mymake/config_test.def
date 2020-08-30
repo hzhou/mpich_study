@@ -34,17 +34,26 @@ subcode: config_test
 
 subcode: make_test
     my %conds
-    my $dir = "pt2pt"
-    $foreach $dir in "attr", "pt2pt", "coll", "rma"
+    $autoconf_vars{threadlib} = "-lpthread"
+    my @all_am = glob("test/mpi/*/Makefile.am")
+    push @all_am, glob("test/mpi/threads/*/Makefile.am")
+    # $foreach $dir in "attr", "comm", "datatype", "pt2pt", "coll", "rma", "threads/pt2pt"
+    $foreach $a in @all_am
+        my $dir
+        $if $a =~ /test\/mpi\/(.*)\/Makefile.am/
+            $dir = $1
+            my @t = glob("test/mpi/$dir/*/Makefile.am")
+            $if @t
+                next
+        $else
+            next
+
         $call @make_init
         $call set_top_srcdir, $dir
         load_automake("test/mpi/$dir/Makefile.am", \%conds)
 
+        @extra_make_rules=()
         $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
-        $make_vars{LDADD} = "$top_srcdir/util/mtest.o"
-        $make_vars{LDADD} .= " $top_srcdir/util/mtest_common.o"
-        $make_vars{LDADD} .= " $top_srcdir/util/mtest_single.o"
-        $make_vars{LDADD} .= " $top_srcdir/dtpools/src/libdtpools.la"
 
         $make_vars{LIBTOOL} = "$top_srcdir/libtool"
         $make_vars{CC} = "mpicc"

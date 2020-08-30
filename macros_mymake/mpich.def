@@ -24,7 +24,6 @@ subcode: mpich_slow
     # post filtering config_defines
     $call @patch_sizeof_atomic
     $call patch_atomic_nolocal
-    $call patch_ticketlock
     $if %config_defines
         $call define_config_h, mymake/mpl/include/mplconfig.h
         $call define_config_h, src/include/mpichconf.h
@@ -188,6 +187,9 @@ subcode: mpich_configure
         $call stage, Configure MPICH
         system "rm -f Makefile"
         my $t = join ' ', @config_args
+        $(if:0)
+            $if $opts{device}=~/ofi/ and $t!~/with-libfabric/
+                $t.= " --with-libfabric=embedded"
         system "./configure --with-pm=no $t" # we'll configure/build hydra separately
         system "mv Makefile mymake/Makefile.orig"
         &call modify_frame
@@ -228,6 +230,11 @@ subcode: mpich_configure
         $if -f "src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4"
             $call hack_configure_xpmem
 
+        $if $opts{device}=~/ch3:nemesis:ofi/
+            $call patch_configure_ch3_ofi
+        $elif $opts{device}=~/ch4:ofi/
+            $call patch_configure_ch4_ofi
+
     subcode: hack_configure_xpmem
         my $skip_xpmem=1
         $foreach $a in @config_args
@@ -237,6 +244,48 @@ subcode: mpich_configure
             &call modify, src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4
                 $if $l=~/AM_CONDITIONAL.*BUILD_SHM_IPC_XPMEM.*build_ch4_shm_ipc_xpmem/
                     $l=~s/test .* ".*"/false/
+
+    # assuming using sockets provider
+    subcode: patch_configure_ch4_ofi
+        &call modify_frame
+            my $flag
+            &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
+                $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/
+                    $flag = 1
+                    next
+                $elif $flag
+                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_CH4_NETMOD_OFI/
+                        $flag = 0
+                        $call @print_Out_defines
+                        next
+                    $elif $l=~/AC_ARG_ENABLE/
+                        $flag=2
+                    $elif $flag==2
+                        # pass thru
+                    $else
+                        next
+
+        subcode: print_Out_defines
+            $(if:1)
+                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_RUNTIME], [1], [Define to use runtime capability set])\n"
+            $(else)
+                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_SOCKETS], [1], [Define to use sockets capability set])\n"
+
+    subcode: patch_configure_ch3_ofi
+        &call modify_frame
+            my $flag
+            &call modify, src/mpid/ch3/channels/nemesis/netmod/ofi/subconfigure.m4
+                $if $l=~/^AM_COND_IF\(\[BUILD_NEMESIS_NETMOD_OFI\]/
+                    $flag = 1
+                    next
+                $elif $flag
+                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_NEMESIS_NETMOD_OFI/
+                        $flag = 0
+                        $call @print_Out_defines
+                    next
+
+        subcode: print_Out_defines
+            print Out "    AC_DEFINE([ENABLE_COMM_OVERRIDES], [1], [Define to add per-vc function pointers to override send and recv functions])\n"
 
 
 #---------------------------------------- 
@@ -255,6 +304,7 @@ subcode: patch_sizeof_atomic
         my $ret = $? >> 8;
 
         $config_defines{SIZEOF_MPL_ATOMIC_PTR_T} = $ret
+    $config_defines{SIZEOF_OPA_PTR_T} = 8  # hack
 
 subcode: patch_atomic_nolocal
     my $lock_based_atomics
@@ -264,7 +314,3 @@ subcode: patch_atomic_nolocal
             last
     $if $lock_based_atomics
         $config_defines{ENABLE_NO_LOCAL} = 1
-
-subcode: patch_ticketlock
-    $if $opts{device}=~/ch4:/ && !$config_defines{MPL_POSIX_MUTEX_NAME}
-        $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_TICKETLOCK"

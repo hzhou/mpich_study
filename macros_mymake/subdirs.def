@@ -177,7 +177,7 @@ subcode: need_ucx
 
         subcode: patch_ucx_for_pgi
             $if $ENV{compiler} =~ /pgi|sun/
-                &call just_modify, $(Ducx)/src/ucs/type/status.h
+                &call just_modify, $opts{moddir}/$(Ducx)/src/ucs/type/status.h
                     s/UCS_S_PACKED\s*ucs_status_t/ucs_status_t/
 
     subcode: patch_ucx_need_sed
@@ -222,7 +222,7 @@ subcode: need_ofi
         $L_list .= " -L$opts{libfabric}/lib"
         $L_list .= " -lfabric"
     $if !$opts{quick}
-        $call patch_configure_ofi
+        # $call patch_configure_ofi
 
     subcode: need_ofi_embedded
         $call copy_subdir_module, ofi
@@ -236,54 +236,6 @@ subcode: need_ofi
             # $(set:C=$(join:--disable-$1: :psm,psm2,verbs,usnic,mlx,gni,ugni,rxm,mrail,rxd,bgq,rstream,udp,perf))
             # $configure .= " $(C)"
 
-    # assuming using sockets provider
-    subcode: patch_configure_ofi
-        $if $opts{device}=~/ch3:nemesis:ofi/
-            $call patch_configure_ch3_ofi
-        $else
-            $call patch_configure_ch4_ofi
-
-    subcode: patch_configure_ch4_ofi
-        &call modify_frame
-            my $flag
-            &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
-                $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/
-                    $flag = 1
-                    next
-                $elif $flag
-                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_CH4_NETMOD_OFI/
-                        $flag = 0
-                        $call @print_Out_defines
-                        next
-                    $elif $l=~/AC_ARG_ENABLE/
-                        $flag=2
-                    $elif $flag==2
-                        # pass thru
-                    $else
-                        next
-
-        subcode: print_Out_defines
-            $(if:1)
-                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_RUNTIME], [1], [Define to use runtime capability set])\n"
-            $(else)
-                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_SOCKETS], [1], [Define to use sockets capability set])\n"
-
-    subcode: patch_configure_ch3_ofi
-        &call modify_frame
-            my $flag
-            &call modify, src/mpid/ch3/channels/nemesis/netmod/ofi/subconfigure.m4
-                $if $l=~/^AM_COND_IF\(\[BUILD_NEMESIS_NETMOD_OFI\]/
-                    $flag = 1
-                    next
-                $elif $flag
-                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_NEMESIS_NETMOD_OFI/
-                        $flag = 0
-                        $call @print_Out_defines
-                    next
-
-        subcode: print_Out_defines
-            print Out "    AC_DEFINE([ENABLE_COMM_OVERRIDES], [1], [Define to add per-vc function pointers to override send and recv functions])\n"
-
 #---- common --------------------------- 
 subcode:: dump_make_var_custom
     $(if:key=AM_CFLAGS or key=CPPFLAGS or key=AM_CPPFLAGS)
@@ -291,7 +243,7 @@ subcode:: dump_make_var_custom
 
 subcode:: dump_make_var_custom
     $(if:key=CPPFLAGS or key=AM_CPPFLAGS)
-        $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa)\/\S+\s*//g
+        $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa|libfabric)\/\S+\s*//g
         $t=~s/-I\S+\/json-c//g
 
 subcode: chdir_subdir(dir)
@@ -333,11 +285,15 @@ subcode: add_subdir_make(name)
         my $lib_la = "$(L$(name))"
         my $config_h = "$(H$(name))"
     $(if:quick)
-        $(if:name=mpl)
+        $(if:name=mpl or name=opa)
             push @extra_make_rules, "$config_h:"
             push @extra_make_rules, "\t\x24(DO_config) $(name) && \x24(DO_makefile) $(name)"
             push @extra_make_rules, ""
+        $(if:name=mpl)
             &call add_subdir_rule_block, $subdir, $lib_la, $config_h
+                push @t, "\x24(MAKE)"
+        $(elif:name=opa)
+            &call add_subdir_rule_block, $subdir/src, $lib_la, $config_h
                 push @t, "\x24(MAKE)"
     $(else)
         &call add_subdir_rule_block, $subdir, $config_h

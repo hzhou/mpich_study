@@ -1,4 +1,5 @@
 subcode: config_init_mpl
+    $config_prefix = "mpl"
     $config_in = "$mymake_dir/config_templates/mplconfig.h"
     $config_out = "mymake/mpl/include/mplconfig.h"
     symlink "../../libtool", "mymake/mpl/libtool"
@@ -14,7 +15,8 @@ subcode: config_mpl
 
         $config_defines{THREAD_PACKAGE_NAME} = "MPL_THREAD_PACKAGE_POSIX"
         $config_defines{PROC_MUTEX_PACKAGE_NAME} = "MPL_PROC_MUTEX_PACKAGE_POSIX"
-        $config_defines{POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_TICKETLOCK"
+        $if !$config_defines{MPL_POSIX_MUTEX_NAME}
+            $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_NATIVE"
 
         $config_defines{USE_MMAP_SHM} = 1
         $config_defines{MPL_USE_MMAP_SHM} = 1
@@ -26,13 +28,18 @@ subcode: config_mpl
         $config_defines{HAVE_GETTIMEOFDAY} = 1
 
         # --with-mpl-atomic-primitives=[auto,c11,gcc_atomic,gcc_sync,win,lock,no]
-        $config_defines{HAVE_C11_ATOMICS}=1
+        $if test_cc_header($opts{CC}, "stdatomic.h")
+            $config_defines{HAVE_C11_ATOMICS}=1
         $config_defines{HAVE_GCC_INTRINSIC_ATOMIC}=1
         $config_defines{HAVE_GCC_INTRINSIC_SYNC}=1
 
-        $config_defines{COMPILER_TLS}="_Thread_local"
+        $if $opts{cc_version}=~/gcc 4/
+            $config_defines{COMPILER_TLS}="__thread"
+        $else # C11
+            $config_defines{COMPILER_TLS}="_Thread_local"
         $config_defines{DEFINE_ALIGNED_ALLOC}=1
-        $(for:a in FUNC_ATTRIBUTE_FALLTHROUGH,VAR_ATTRIBUTE_USED,VAR_ATTRIBUTE_ALIGNED,_BOOL,__TYPEOF)
+        # HAVE_FUNC_ATTRIBUTE_FALLTHROUGH
+        $(for:a in VAR_ATTRIBUTE_USED,VAR_ATTRIBUTE_ALIGNED,_BOOL,__TYPEOF)
             $config_defines{HAVE_$(a)}=1
 
         $(for:a in aligned_alloc,backtrace,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
@@ -62,3 +69,35 @@ subcode: make_mpl
     @programs=()
     dump_makefile("mymake/mpl/Makefile")
 
+#---------------------------------------- 
+#---------------------------------------- 
+subcode: config_init_opa
+    $config_prefix = "opa"
+    $config_in = "$mymake_dir/config_templates/opa_config.h"
+    $config_out = "mymake/openpa/src/opa_config.h"
+    symlink "../../../libtool", "mymake/openpa/src/libtool"
+
+subcode: config_opa
+    $call ac_init, OpenPA, 1.0.3, https://trac.mcs.anl.gov/projects/openpa/newticket, openpa, -
+    $call set_config_defines
+
+    subcode: set_config_defines
+        $config_defines{OPA_HAVE_GCC_INTRINSIC_ATOMICS} = 1
+        $config_defines{OPA_HAVE_GCC_X86_32_64} = 1
+        $config_defines{OPA_HAVE_GCC_X86_32_64_P3} = 1
+
+        $config_defines{HAVE_LIBPTHREAD}=1
+        $config_defines{OPA_MAX_NTHREADS} = 100
+
+        $config_defines{SIZEOF_INT} = $sizeof_hash{INT}
+        $config_defines{SIZEOF_VOID_P} = $sizeof_hash{VOID_P}
+
+subcode: make_opa
+    $call copy_subdir_module, opa
+    $autoconf_vars{OPALIBNAME} = "opa"
+    $make_vars{DEFAULT_INCLUDES} = "-I." # path to ope_config.h
+    my %conds
+    $conds{EMBEDDED} = 1
+    load_automake("mymake/openpa/src/Makefile.am", \%conds)
+    @programs=()
+    dump_makefile("mymake/openpa/src/Makefile")

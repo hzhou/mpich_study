@@ -26,7 +26,7 @@ subcode: config_hydra
 
     subcode: set_config_defines
         $call AC_USE_SYSTEM_EXTENSIONS
-        $config_defines{HYDRA_CC} = "\"$CC  -g -O2   \""
+        $config_defines{HYDRA_CC} = "\"$opts{CC} -g -O2   \""
         $config_defines{HYDRA_CONFIGURE_ARGS_CLEAN} = "\"'CC=' 'CFLAGS=-g -O2'\""
         $config_defines{HYDRA_PMI_PROXY} = '"hydra_pmi_proxy"'
         $config_defines{HYDRA_RELEASE_DATE} = '"unreleased development copy"'

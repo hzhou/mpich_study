@@ -19,12 +19,12 @@ include: macros_mymake/config_test.def
 output_dir: ./mymake
 
 macros:
-    config_cases: mpich, mpl, hydra, test, dtpools
+    config_cases: mpich, mpl, opa, hydra, test, dtpools
     # showcond: 1
     # showload: 1
 
 page: mymake_config
-    $global $config, $config_in, $config_out
+    $global $config, $config_in, $config_out, $config_prefix
     $config = shift @ARGV
     $print -- mymake_config $config ...
 
@@ -37,7 +37,9 @@ page: mymake_config
     $global %config_defines
     $call load_opts
     $call init_config_defines
-    my @tlist = split /\s+/, $opts{config_args}
+
+    $call get_file_in_t, mymake/args
+    my @tlist = split /\s+/, $t
     $foreach $a in @tlist, @ARGV
         $if 0
             NOOP
@@ -53,7 +55,11 @@ page: mymake_config
 
     $(for:a in $(config_cases))
         $case $config eq "$(a)"
+            $(if:a!=mpich)
+                $call load_make_opts
             $call config_$(a)
+            $(if:a=mpich)
+                $call dump_make_opts
 
     $call collect_config_h
     $call dump_config_h
@@ -72,6 +78,7 @@ page: mymake_makefile
     $print -- mymake_makefile $what ...
 
     $call load_opts
+    $call load_make_opts
     $call make_init
 
     $(set:quick=1)
@@ -90,18 +97,42 @@ page: mymake_makefile
         @programs = ()
 
         $make_vars{LIBTOOL} = "./libtool"
-        $make_vars{CC} = $ENV{CC}
-        $make_vars{CXX} = $ENV{CXX}
+        $make_vars{CC} = $opts{CC}
+        $make_vars{CXX} = $opts{CXX}
         $if !$make_vars{CC}
             $make_vars{CC} = "gcc"
         $if !$make_vars{CXX}
             $make_vars{CXX} = "gcc"
         $make_vars{CCLD} = $make_vars{CC}
         $make_vars{CXXLD} = $make_vars{CXX}
+        $make_vars{DEFS} = "-DHAVE_CONFIG_H"
+
+        $make_vars{CFLAGS} = $opts{cflags}
+        $make_vars{LDFLAGS} = $opts{ldflags}
+
+        $make_vars{EXEEXT}=""
+        $make_vars{OBJEXT}="o"
+
+        /* suppress expansion */
         $make_vars{"MODS"} = "-"
         $make_vars{"MODDIR"} = "-"
-        $make_vars{CFLAGS} = "-g -O2"
-        $make_vars{DEFS} = "-DHAVE_CONFIG_H"
+        $make_vars{"PREFIX"} = "-"
+
+#---------------------------------------- 
+subcode: dump_make_opts
+    &call open_W, mymake/make_opts.mpich
+        $(for:a in CC,CXX,F77,FC,cc_version)
+            $print $(a): $opts{$(a)}
+        my $cflags = "-g -O2"
+        my $ldflags = ""
+        $(for:a in cflags, ldflags)
+            $call modify_$(a), $$(a)
+            $print $(a): $$(a)
+
+subcode: load_make_opts
+    &call open_r, mymake/make_opts.mpich
+        $if /^(\w+):\s*(.+)/
+            $opts{$1} = $2
 
 #---------------------------------------- ---------------------------
 #---- mymake_config macros
@@ -132,11 +163,15 @@ subcode: collect_config_h
                     $config_defines{$a} = 1
 
 subcode: dump_config_h
+    my $P
+    $if $config_prefix
+        $P = uc($config_prefix)
+
     my @lines
     &call open_r, $config_in
         $if /^#undef\s+(\w+)/ -> $a
-            $if $config eq "mpl"
-                $call define_it_mpl, $a, $config_defines{$a}
+            $if $config_prefix
+                $call define_it_prefix, $a, $config_defines{$a}, $config_defines{"${P}_$a"}
             $else
                 $call define_it, $a, $config_defines{$a}
         $elif /^# undef (\w+)/ and $config_defines{$1}
@@ -146,14 +181,14 @@ subcode: dump_config_h
             push @lines, $_
 
     &call open_W, $config_out
-        $if $config eq "mpl"
-            $print "#ifndef INCLUDE_MPLCONFIG_H"
-            $print "#define INCLUDE_MPLCONFIG_H 1"
+        $if $config_prefix
+            $print "#ifndef INCLUDE_${P}CONFIG_H"
+            $print "#define INCLUDE_${P}CONFIG_H 1"
 
         $foreach $l in @lines
             print Out $l
 
-        $if $config eq "mpl"
+        $if $config_prefix
             $print "#endif"
 
     # -----------------------------
@@ -163,26 +198,33 @@ subcode: dump_config_h
         $else
             push @lines, "\x2f* #undef $(a) */\n"
 
-    subcode: define_it_mpl(a, val)
-        my $b = "MPL_$(a)"
-        $if $(a)=~/^(_|MPL_|const|inline|restrict)/
+    subcode: define_it_prefix(a, val, val2)
+        my $b = "${P}_$(a)"
+        $if $(a)=~/^(_|${P}_|const|inline|restrict)/
             $b = $(a)
         $elif $(a)=~/^[a-z]/
-            $b = "_mpl_$(a)"
+            $b = "_${config_prefix}_$(a)"
 
-        $if defined $(val)
+        my $val = $(val)
+        $if defined $(val2)
+            $val = $(val2)
+        $if defined $val
             push @lines, "#ifndef $b\n"
-            push @lines, "#define $b $(val)\n"
+            push @lines, "#define $b $val\n"
             push @lines, "#endif\n"
         $else
             push @lines, "\x2f* #undef $b */\n"
 
 #---------------------------------------- 
 subcode: set_cc
-    $global $CC, $CXX, $FC
-    $CC = "gcc"
-    $if $ENV{CC}
-        $CC = $ENV{CC}
+    $(for:CC,CXX,F77,FC and gcc,gcc,gfortran,gfortran)
+        $if $ENV{$1}
+            $opts{$1} = $ENV{$1}
+        $else
+            $opts{$1} = "$2"
+    $opts{cc_version} = get_cc_version($opts{CC})
+    $if $opts{cc_version}=~/gcc 4/
+        $opts{CC} .= " -std=gnu99"
 
 subcode: ac_init(package, version, bugreport, tarname, url)
     $(for:package, version, bugreport, tarname, url)
@@ -231,7 +273,7 @@ subcode: get_c_sizeof
 fncode: get_sizeof($typelist, $headerlist)
     $call dump_c_test, mymake/t.c
 
-    my $t = `$CC mymake/t.c -o mymake/t.out 2>/dev/null && mymake/t.out`
+    my $t = `$opts{CC} mymake/t.c -o mymake/t.out 2>/dev/null && mymake/t.out`
     $if $? == 0
         $while $t=~/A(\d+):\s+(\d+)/g
             my $name = get_config_name($typelist->[$1]);
@@ -278,7 +320,7 @@ fncode: get_have_headers($headerlist)
 
     subcode: load_cpp_paths
         my @cpp_paths
-        my $cpp = `$CC -print-prog-name=cpp` # for cxx, cc1plus
+        my $cpp = `$opts{CC} -print-prog-name=cpp` # for cxx, cc1plus
         chomp $cpp
         $if $cpp
             my $t = `$cpp -v </dev/null 2>&1`
@@ -308,7 +350,7 @@ subcode: get_c_features
     $config_defines{HAVE_FC_TYPE_ROUTINES} = 1
 
     # functions
-    $(for:a in alarm,alloca,gethostname,putenv,qsort,random_r, signal, snprintf, strdup, strerror, strerror_r, strncasecmp, vsnprintf, vsprintf, mkstemp, CPU_SET_T, CPU_SET_MACROS, DECL_STRERROR_R, posix_memalign, select, sched_yield, pthread_yield, mmap, munmap)
+    $(for:a in alarm,alloca,gethostname,putenv,qsort,random_r, signal, snprintf, strdup, strerror, strerror_r, strncmp, strncasecmp, vsnprintf, vsprintf, mkstemp, CPU_SET_T, CPU_SET_MACROS, DECL_STRERROR_R, posix_memalign, select, sched_yield, pthread_yield, mmap, munmap, inet_pton)
         $config_defines{HAVE_$(a:uc)}=1
     $config_defines{STRERROR_R_CHAR_P} = 1
 
@@ -429,3 +471,37 @@ subcode: modify_frame
     subcode: modify(f)
         $(block:null)
             BLOCK
+
+#---------------------------------------- 
+fncode: get_cc_version($cc)
+    my $t
+    $if $cc =~/sun/
+        $t = `$cc -V`
+    $else
+        $t=`$cc --version`
+    $if $t=~/^(gcc) .*? ([0-9\.]+)/m
+        return "$1 $2"
+    $elif $t=~/^(clang) version ([0-9\.]+)/m
+        return "$1 $2"
+    $elif $t=~/^(Apple LLVM) version ([0-9\.]+)/m
+        return "clang $2"
+    $elif $t=~/^(icc) .*? ([0-9\.]+)/m
+        return "intel $2"
+    $elif $t=~/^(pgcc) .*? ([0-9\.]+)/m
+        return "pgi $2"
+    $elif $t=~/^(Studio) ([0-9\.]+)/m
+        return "sun $2"
+    $else
+        return "unknown"
+
+fncode: test_cc_header($cc, $header)
+    &call open_w, mymake/t.c
+        print Out "#include <$header>\n"
+        print Out "int main(){return 0;}\n"
+    system "$cc -c -o mymake/t.o mymake/t.c 2>/dev/null"
+    # $print ? = $?
+    $if $? == 0
+        return 1
+    $else
+        return 0
+

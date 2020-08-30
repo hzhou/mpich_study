@@ -20,6 +20,7 @@ fncode: dump_makefile($makefile)
 
         $print "all: @ltlibs @programs"
         $print
+        my %rules_ADD
         $call dump_rules, ltlibs
         $call dump_rules, programs
 
@@ -32,10 +33,13 @@ fncode: dump_makefile($makefile)
         $print "PREFIX=$opts{prefix}"
         $print "export MODDIR=$opts{moddir}"
         my $pwd = getcwd()
-        $if $makefile eq "Makefile"
+        $(if:makefile=mpich)
             $print "MODS=mymake"
-        $else
-            $print "MODS=$opts{moddir}"
+        $(else)
+            $if $makefile eq "Makefile"
+                $print "MODS=mymake"
+            $else
+                $print "MODS=$opts{moddir}"
         $print
 
     subcode: mymake_common_VARS
@@ -270,14 +274,18 @@ fncode: dump_makefile($makefile)
 
         subcode: set_add
             $(if:which=programs)
-                my $ldadd = get_make_var("LDADD")
-                $if $ldadd
-                    $deps .= " $ldadd"
                 my $add = $a."_LDADD"
+                my $t = get_make_var($add)
+                $if !$t
+                    $add = "LDADD"
+                    $t = get_make_var($add)
             $(elif:which=ltlibs)
                 my $add = $a."_LIBADD"
+                my $t = get_make_var($add)
+                $if !$t
+                    $add = "LIBADD"
+                    $t = get_make_var($add)
 
-            my $t = get_make_var($add)
             $if $t
                 $t=~s/^\s+//
                 my @tlist = split /\s+/, $t
@@ -304,8 +312,11 @@ fncode: dump_makefile($makefile)
                         $call per_prog_rule
                     push @t, $t
 
-            $if $#t > 1
+            $if $rules_ADD{$(o)}
+                $deps .= " \x24($(o))"
+            $elif $#t > 1
                 $call dump_object, $(o), @t
+                $rules_ADD{$(o)} = 1
                 $deps .= " \x24($(o))"
             $else
                 $deps .= " @t"

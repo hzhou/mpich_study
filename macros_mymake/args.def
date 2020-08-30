@@ -107,6 +107,8 @@ subcode: parse_args
                 $else nowarn
                     push @config_args, $a
 
+        $(if:_pagename=mymake)
+            $call post_config_defines
         $(for:CC,CXX,F77,FC)
             $if $opts{$1}
                 $ENV{$1}=$opts{$1}
@@ -142,7 +144,7 @@ subcode: save_opts
 subcode: load_opts
     $global %opts
     &call open_r, mymake/opts
-        $if /^(\w+): (.*)/
+        $if /^(\S+): (.*)/
             $opts{$1} = $2
 
 #---------------------------------------- 

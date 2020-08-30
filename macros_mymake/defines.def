@@ -6,6 +6,7 @@ subcode: init_config_defines
     $call init_opt, enable-ch4-am-only,   MPIDI_ENABLE_AM_ONLY
     $call init_opt, with-ch4-max-vcis,    MPIDI_CH4_MAX_VCIS
     $call init_opt, enable-nolocal,       ENABLE_NO_LOCAL
+    $call init_opt, enable-izem-queue,    ENABLE_IZEM_QUEUE
 
     $call init_opt_both, enable, ofi-domain, MPIDI_OFI_VNI_USE_DOMAIN, 1, undef
 
@@ -56,6 +57,10 @@ subcode: init_config_defines
 subcode: post_config_defines
     $if $config_defines{MPIDI_CH4_MAX_VCIS} > 1 and !$config_defines{MPIDI_CH4_VCI_METHOD}
         $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
+    $if $config_defines{MPICH_THREAD_GRANULARITY} =~/VCI|POBJ/
+        $config_defines{MPICH_THREAD_REFCOUNT} = "MPICH_REFCOUNT__LOCKFREE"
+    $else
+        $config_defines{MPICH_THREAD_REFCOUNT} = "MPICH_REFCOUNT__NONE"
 
 subcode: filter_config_defines
     $elif $a=~/--((with|enable)-.*)=(.*)/ && $hash_defines{$1}
@@ -116,6 +121,13 @@ subcode: filter_config_defines
             $config_cflags{O} = 2
         $elif $g=~/no|none/
             $config_cflags{O} = 0
+    # ------------------------------------------------------------
+    $elif $a=~/--enable-strict/
+        $(set:F=-Wall, -Wextra, -Wmissing-prototypes, -DGCC_WALL, -Wshadow, -Wmissing-declarations, -Wundef, -Wpointer-arith, -Wbad-function-cast, -Wwrite-strings, -Wnested-externs, -Winvalid-pch, -Wvariadic-macros, -Wtype-limits, -Werror-implicit-function-declaration, -Wstack-usage=262144)
+        # $(set:F.=, -Wstrict-prototypes, -Wold-style-definition)
+        $(set:F.=, -Wno-missing-field-initializers, -Wno-unused-parameter, -Wno-long-long, -Wno-endif-labels, -Wno-sign-compare, -Wno-multichar, -Wno-deprecated-declarations, -Wno-pointer-sign)
+        $(for:$(F))
+            $config_cflags{"$1"} = 1
 
     # -----------------------------
     subcode: get_hash_define_vals
@@ -187,7 +199,7 @@ subcode: modify_cflags(t)
                 push @tlist, "-O$config_cflags{O}"
             $else
                 push @tlist, $a
-        $(t) = join(' ', @tlist)
+        $(t) = join(' ', sort @tlist)
         print(STDOUT "  -->  CFLAGS = $(t)\n");
 
 subcode: modify_ldflags(t)
@@ -196,6 +208,6 @@ subcode: modify_ldflags(t)
         $foreach $a in @tlist
             $if !$config_ldflags{$a}
                 $config_ldflags{$a} = 1
-        $(t) = join ' ', keys %config_ldflags
+        $(t) = join ' ', sort keys %config_ldflags
         print(STDOUT "  -->  LDFLAGS = $(t)\n");
 
