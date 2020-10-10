@@ -2,31 +2,38 @@ include: macros_mymake/dependency.def
 
 subcode: mpich_slow
     $(setmacro:makefile=mpich)
-    $opts{do_pmpi} = 0
     $call set_general_make_rules
     $call mpich_make_setup
 
+    my $ret=0
     $call mpich_configure
-    $call @post_mpich_configure
 
-    $call custom_make
+    $if $ret == 0
+        $call @post_mpich_configure
 
-    $call load_dump_CFLAGS
-    $call patch_mpicc_etc
+    $if $ret == 0
+        $call custom_make
 
-    $ENV{CFLAGS}=$opts{CFLAGS}
-    my $t="mymake/$(Hmpl)"
-    $if -d "src/openpa"
-        $t.=" mymake/$(Hopa)"
-    $t=~s/$pwd\///g
-    system "make $t"
+    $if $ret == 0
+        # configure MPL
+        $call load_dump_CFLAGS
+        $call patch_mpicc_etc
 
-    # post filtering config_defines
-    $call @patch_sizeof_atomic
-    $call patch_atomic_nolocal
-    $if %config_defines
-        $call define_config_h, mymake/mpl/include/mplconfig.h
-        $call define_config_h, src/include/mpichconf.h
+        $ENV{CFLAGS}=$opts{CFLAGS}
+        my $t="mymake/$(Hmpl)"
+        $if -d "src/openpa"
+            $t.=" mymake/$(Hopa)"
+        $t=~s/$pwd\///g
+
+        $ret = system "make $t"
+
+    $if $ret == 0
+        # post filtering config_defines
+        $call @patch_sizeof_atomic
+        $call patch_atomic_nolocal
+        $if %config_defines
+            $call define_config_h, mymake/mpl/include/mplconfig.h
+            $call define_config_h, src/include/mpichconf.h
 
     # ---------------------------
     subcode: custom_programs
@@ -118,9 +125,11 @@ subcode: mpich_make_setup
 
     $if !$opts{disable_romio}
         $call need_romio
-    $if $opts{device}=~/:ucx/
+    $if $opts{device}=~/:ucx/ and (!$opts{"with-ucx"} or $opts{"with-ucx"} eq "embedded")
         $call need_ucx
-    $if $opts{device}=~/:ofi/
+    $elif $opts{device}=~/ch4:ofi/ and (!$opts{"with-libfabric"} or $opts{"with-libfabric"} eq "embedded")
+        $call need_ofi
+    $elif $opts{device}=~/ch3.*:ofi/ and (!$opts{"with-ofi"} or $opts{"with-ofi"} eq "embedded")
         $call need_ofi
 
     $call @preproc_bindings
@@ -190,10 +199,14 @@ subcode: mpich_configure
         $(if:0)
             $if $opts{device}=~/ofi/ and $t!~/with-libfabric/
                 $t.= " --with-libfabric=embedded"
-        system "./configure --with-pm=no $t" # we'll configure/build hydra separately
-        system "mv Makefile mymake/Makefile.orig"
-        &call modify_frame
-            $call patch_libtool
+        $if !$ret
+            $ret = system "./configure --with-pm=no $t" # we'll configure/build hydra separately
+        $if !$ret
+            $ret = system "mv Makefile mymake/Makefile.orig"
+        $if !$ret
+            $ret = system "mv libtool mymake/libtool.orig"
+        $if !$ret
+            $call patch_libtool, mymake/libtool.orig
 
     # -------------------
     subcode: hack_MPI_OFFSET
@@ -202,22 +215,33 @@ subcode: mpich_configure
             $ENV{FORTRAN_MPI_OFFSET}="integer*8"
     # -------------------
     subcode: modify_configure_ac
+        $call patch_confdb_subcfg
         &call modify, configure.ac
             $if $l=~/AC_CONFIG_SUBDIRS/
                 next
             $elif $l=~/^\s*HWLOC_/
                 next
-            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR|PAC_CONFIG_ALL_SUBDIRS)/
-                $l = "$1: \x23 $2\n"
-            $elif $l=~/^(\s*PAC_SUBDIR_MPL)/
-                $l = "$1([$(Dmpl)])"
-            $elif $l=~/^(\s*PAC_SUBDIR_OPA)/
-                $l = "$1([$(Dopa)])"
-            $elif $l=~/^(\s*PAC_SUBDIR_HWLOC)/
-                $l = "$1([$(Dhwloc)])"
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
+        $if $opts{device}=~/ch3/
+            $call patch_configure_ch3
+        $else
+            $if -f "src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4"
+                $call hack_configure_xpmem
+
+    subcode: patch_confdb_subcfg
+        my $flag
+        &call modify, confdb/aclocal_subcfg.m4
+            $if $l=~/^AC_DEFUN\(\[PAC_CONFIG_SUBDIR_ARGS/
+                $flag=1
+            $elif $flag and $l=~/^\]\)/
+                $l = ":])" # NOOP
+                $flag=0
+            $elif $flag
+                next
+
+    subcode: patch_configure_ch3
         my $flag
         &call modify, src/mpid/ch3/subconfigure.m4
             $if $l=~/AC_MSG_CHECKING.*OpenPA/
@@ -226,14 +250,6 @@ subcode: mpich_configure
                 $flag=0
             $elif $flag
                 next
-
-        $if -f "src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4"
-            $call hack_configure_xpmem
-
-        $if $opts{device}=~/ch3:nemesis:ofi/
-            $call patch_configure_ch3_ofi
-        $elif $opts{device}=~/ch4:ofi/
-            $call patch_configure_ch4_ofi
 
     subcode: hack_configure_xpmem
         my $skip_xpmem=1
@@ -244,49 +260,6 @@ subcode: mpich_configure
             &call modify, src/mpid/ch4/shm/ipc/xpmem/subconfigure.m4
                 $if $l=~/AM_CONDITIONAL.*BUILD_SHM_IPC_XPMEM.*build_ch4_shm_ipc_xpmem/
                     $l=~s/test .* ".*"/false/
-
-    # assuming using sockets provider
-    subcode: patch_configure_ch4_ofi
-        &call modify_frame
-            my $flag
-            &call modify, src/mpid/ch4/netmod/ofi/subconfigure.m4
-                $if $l=~/^AM_COND_IF\(\[BUILD_CH4_NETMOD_OFI\]/
-                    $flag = 1
-                    next
-                $elif $flag
-                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_CH4_NETMOD_OFI/
-                        $flag = 0
-                        $call @print_Out_defines
-                        next
-                    $elif $l=~/AC_ARG_ENABLE/
-                        $flag=2
-                    $elif $flag==2
-                        # pass thru
-                    $else
-                        next
-
-        subcode: print_Out_defines
-            $(if:1)
-                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_RUNTIME], [1], [Define to use runtime capability set])\n"
-            $(else)
-                print Out "    AC_DEFINE([MPIDI_CH4_OFI_USE_SET_SOCKETS], [1], [Define to use sockets capability set])\n"
-
-    subcode: patch_configure_ch3_ofi
-        &call modify_frame
-            my $flag
-            &call modify, src/mpid/ch3/channels/nemesis/netmod/ofi/subconfigure.m4
-                $if $l=~/^AM_COND_IF\(\[BUILD_NEMESIS_NETMOD_OFI\]/
-                    $flag = 1
-                    next
-                $elif $flag
-                    $if $l=~/^\]\).*AM_COND_IF\(BUILD_NEMESIS_NETMOD_OFI/
-                        $flag = 0
-                        $call @print_Out_defines
-                    next
-
-        subcode: print_Out_defines
-            print Out "    AC_DEFINE([ENABLE_COMM_OVERRIDES], [1], [Define to add per-vc function pointers to override send and recv functions])\n"
-
 
 #---------------------------------------- 
 subcode: patch_sizeof_atomic

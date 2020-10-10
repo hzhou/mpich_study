@@ -115,4 +115,4 @@ subcode: testing_config
 subcode: echo_system(@cmd)
     my $cmd = $(cmd)
     $print ": $cmd"
-    system($cmd) == 0 or die "    Command failed.\n"
+    system($cmd) == 0 or die "    [$cmd] failed.\n"

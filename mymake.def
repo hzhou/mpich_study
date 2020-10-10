@@ -6,6 +6,7 @@ include: macros_mymake/mpich.def
 include: macros_mymake/bindings.def
 include: macros_mymake/hydra.def
 include: macros_mymake/gforker.def
+include: macros_mymake/libtool.def
 
 output_dir: ./mymake
 
@@ -22,7 +23,10 @@ page: mymake
 
     $if $opts{quick}
         $if !-f "libtool"
-            system "perl $opts{mymake}_libtool.pl"
+            $if -f "mymake/libtool/libtool"
+                $call patch_libtool, mymake/libtool/libtool
+            $else
+                system "perl $opts{mymake}_libtool.pl"
         $if !-f "$(mpich_config_h)"
             system "perl $opts{mymake}_config.pl mpich"
             system "perl $opts{mymake}_makefile.pl mpich"
@@ -48,7 +52,7 @@ page: mymake
             $print $1: $opts{$1}
 
 subcode: short_circuits
-    $if $ARGV[0]=~/^(clean|errmsg|cvars|logs|hydra|testing|test|makefile|config|libtool)$/
+    $if $ARGV[0]=~/^(clean|errmsg|cvars|log|log_show|logs|hydra|testing|test|makefile|config|libtool)$/
         shift @ARGV
         system "perl $opts{mymake}_$1.pl @ARGV"
         exit(0)
@@ -133,17 +137,19 @@ page: mymake_clean
     push @realclean_list, "src/include/mpir_cvars.h"
     push @realclean_list, "src/include/mpichconf.h"
     push @realclean_list, "Makefile"
+    push @realclean_list, "src/pm/hydra/mymake"
     push @realclean_list, "src/pm/hydra/Makefile"
-    $if !$opts{quick}
-        push @realclean_list, "configure"
-        push @realclean_list, "mymake/Makefile.*"
+
+    push @realclean_list, "configure"
+    push @realclean_list, "mymake/t-*"
+    push @realclean_list, "mymake/Makefile.*"
 
     push @realclean_list, "mymake/mpl"
     $if -d "src/openpa"
         push @realclean_list, "mymake/openpa"
 
     $if -d $opts{prefix}
-        push @realclean_list, "$opts{prefix}/lib/*"
+        push @realclean_list, "$opts{prefix}/lib/libmpi*"
 
     $foreach $t in @realclean_list
         $print "rm -rf $t"

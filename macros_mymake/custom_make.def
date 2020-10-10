@@ -56,14 +56,12 @@ subcode: custom_make
                 $objects{$add} = $t
 
         subcode:: set_libs_custom
-            # print "$add: $t...\n"
+            $call filter_lib_mpl_etc
             $(if:makefile=hydra)
-                $t=~s/\s*\S*\/libmpl.la//g
                 $t=~s/-lhydra/libhydra.la/g
                 $t=~s/-lpm/libpm.la/g
             $(elif:makefile=mpich)
                 $call filter_lib_romio
-                $call filter_lib_mpl_etc
                 $call filter_lib_ucx
                 $call filter_lib_ofi
 
@@ -75,11 +73,7 @@ subcode: custom_make
                     $t.= $L_list
 
             subcode: filter_lib_mpl_etc
-                $t=~s/\S+\/(mpl|openpa|izem|hwloc|yaksa|json-c|libfabric)\/\S+\.la\s*//g
-                $(if:0)
-                    $t=~s/\bsrc\/(mpl|openpa)\/\S+\s*//g
-                    $t=~s/\bsrc\/mpi\/romio\/\S+\s*//g
-                    $t=~s/\bsrc\/izem\/\S+\s*//g
+                $t=~s/(\S+\/)?(mpl|openpa|izem|hwloc|yaksa|json-c|libfabric|ucx)\/\S+\.la\s*//g
 
             subcode: filter_lib_ucx
                 $t=~s/\@ucxlib\@\s*//g
@@ -112,33 +106,6 @@ subcode: modify_frame(@is_temp)
                     next
                 print Out $l
         system "cp -v $m[2] $m[0]"
-
-    subcode: patch_libtool
-        $(set:skip_mod_list=1)
-        my %need_patch
-        &call modify, libtool
-            $if $l=~/^AR_FLAGS=/
-                $l = "AR_FLAGS=\"cr\"\n"
-            # --------------------------
-            $elif $l=~/^CC="(.*)"/ -> $CC
-                $call set_need_patch
-            $elif $l=~/^(pic_flag|wl|link_static_flag)=/
-                $if $need_patch{$1}
-                    $l = "$1='$need_patch{$1}'\n"
-            $elif $l=~/^(archive_cmds=|\s*\\\$CC\s+-shared )/
-                $if $need_patch{shared}
-                    $l=~s/-shared /$need_patch{shared} /
-            # --------------------------
-        system "chmod a+x libtool"
-
-        subcode: set_need_patch
-            $if $CC =~ /^sun(f77|f9.|fortran)/
-                $need_patch{pic_flag}=" -KPIC"
-                $need_patch{wl}="-Qoption ld "
-                $need_patch{link_static_flag}=" -Bstatic"
-                $need_patch{shared}="-G"
-            $else
-                %need_patch=()
 
 #---------------------------------------- 
 subcode: parse_Makefile(makefile)

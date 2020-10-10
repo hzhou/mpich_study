@@ -45,7 +45,8 @@ subcode: config_mpl
         $(for:a in aligned_alloc,backtrace,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
             $config_defines{HAVE_$(a:uc)}=1
 
-        $config_defines{HAVE_LIBCUDA}=1
+        $if $opts{"with-cuda"}
+            $config_defines{HAVE_CUDA}=1
         $config_defines{HAVE_PTHREAD_MUTEXATTR_SETPSHARED} = 1
 
         $config_defines{backtrace_size_t} = "int"
@@ -63,7 +64,12 @@ subcode: make_mpl
 
     my %conds
     $conds{MPL_EMBEDDED_MODE} = 1
-    # $conds{MPL_HAVE_CUDA} = 1
+    $if $opts{"with-cuda"}
+        my $p = $opts{"with-cuda"}
+        $conds{MPL_HAVE_CUDA} = 1
+        $make_vars{CPPFLAGS} .= " -I$p/include"
+        $make_vars{LDFLAGS} .= " -L$p/lib64"
+        $make_vars{LIBS} .= " -lcudart -lcuda"
     # $conds{MPL_HAVE_ZE} = 1
     load_automake("mymake/mpl/Makefile.am", \%conds)
     @programs=()

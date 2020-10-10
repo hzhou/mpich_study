@@ -3,7 +3,12 @@ page: get_mpich_pr
 
     $global $group = "pmodels"
     $global $repo = "mpich"
+    $global $main = "main"
     $global $me = "hzhou"
+
+    $if $0 =~ /get_osh_pr/
+        $repo = "oshmpi"
+        $main = "master"
 
     my $pr = $ARGV[0]
     $if $pr !~ /^\d+$/
@@ -17,21 +22,21 @@ page: get_mpich_pr
     $if !$author
         die "Failed to get remote PR branch\n"
 
-    my $mpich_github = "https://github.com/$group/$repo"
-    $(set:A="$ENV{HOME}/mpich-github")
-    $(set:B="$ENV{HOME}/work/mpich-github")
-    $if $ENV{MPICH_GITHUB}
-        $mpich_github = $ENV{MPICH_GITHUB}
-    $elif $author eq $me
+    my $github_url = "https://github.com/$group/$repo"
+
+    $if $author eq $me && $repo eq "mpich"
+        $(set:A="$ENV{HOME}/mpich-github")
+        $(set:B="$ENV{HOME}/work/mpich-github")
         $if -d $(A)
-            $mpich_github = $(A)
+            $github_url = $(A)
         $elif -d $(B)
-            $mpich_github = $(B)
+            $github_url = $(B)
 
-    system "git clone $mpich_github --branch main mpich$pr"
-    chdir "mpich$pr"
+    my $dir = "$repo$pr"
+    system "git clone $github_url -b $main $dir"
+    chdir "$dir"
 
-    system "git remote add gh-$author https://github.com/$author/mpich"
+    system "git remote add gh-$author https://github.com/$author/$repo"
     system "git fetch gh-$author"
     system "git checkout -b $branch gh-$author/$branch"
 

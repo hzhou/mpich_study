@@ -1,0 +1,92 @@
+page: check_internal_inline
+    module: perl
+
+    $call @parse_commandline
+    $call @setup
+
+    $call collect_functions
+    $call check_functions
+    $call report
+    $if $opts{correct}
+        $call correct
+
+subcode: collect_functions
+    $global %functions
+    &call each_ch_file
+        $if /^MPL_STATIC_INLINE_PREFIX\s.*\s(\w+)\(/
+            $if $functions{$1}
+                $functions{$1}->{external_count}++
+            $else
+                $functions{$1} = {file=>$f}
+        $elif /^INTERNAL_STATIC_INLINE\s.*\s(\w+)\(/
+            $functions{$1} = {file=>$f, internal=>1}
+
+subcode: check_functions
+    &call each_ch_file
+        $if /(\w+)\(/ && $functions{$1}
+            $if $f eq $functions{$1}->{file}
+                $functions{$1}->{internal_count}++
+            $else
+                $functions{$1}->{external_count}++
+
+subcode: report
+    my %files_need_correct
+    $foreach $name in sort keys %functions
+        my $count = $functions{$name}->{external_count}
+        my $file = $functions{$name}->{file}
+        $if $functions{$name}->{internal} 
+            $if $count>0
+                $print INTERNAL $name\texternally used
+                $functions{$name}->{need_correct}=1
+                $files_need_correct{$file}++
+        $else
+            $if $count==0
+                my $internal_count = $functions{$name}->{internal_count}
+                $if $name=~/^MPIDI_STUBSHM_/ or $internal_count==1
+                    next
+                $print EXTERNAL $name\tonly used internally ($internal_count)
+                $functions{$name}->{need_correct}=1
+                $files_need_correct{$file}++
+
+subcode: correct
+    $foreach $f in sort keys %files_need_correct
+        my @lines
+        &call open_r, $f
+            $if /^MPL_STATIC_INLINE_PREFIX\s.*\s(\w+)\(/
+                $if $functions{$1}->{need_correct}
+                    s/MPL_STATIC_INLINE_PREFIX/INTERNAL_STATIC_INLINE/
+            $elif /^INTERNAL_STATIC_INLINE\s.*\s(\w+)\(/
+                $if $functions{$1}->{need_correct}
+                    s/INTERNAL_STATIC_INLINE/MPL_STATIC_INLINE_PREFIX/
+            push @lines, $_
+        &call open_W, $f
+            $foreach $l in @lines
+                $print $l
+
+#---------------------------------------- 
+macros:
+    mpi_src_dirs: mpi mpi_t nameserv util include mpid pmi
+
+subcode: parse_commandline
+    $global %opts
+    $foreach $a in @ARGV
+        $if $a=~/^-(\w+)$/
+            $opts{$1}=1
+        $elif $a=~/^-(\w+)=(.*)/
+            $opts{$1}=$2
+
+subcode: setup
+    my @files
+    $foreach $dir in qw($(mpi_src_dirs))
+        $call find_files, src/$dir, *.[ch]
+
+    subcode: find_files(dir, name)
+        &call open_r, find $(dir) -name '$(name)' |
+            chomp
+            push @files, $_
+
+subcode: each_ch_file
+    $foreach $f in @files
+        &call open_r, $f
+            BLOCK
+

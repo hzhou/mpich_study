@@ -73,7 +73,7 @@ subcode: need_mpl
         $foreach $t in @config_args
             $if $t=~/--enable-(g|strict)/
                 $configure.=" $t"
-            $elif $t=~/--with-(mpl|thread-package|argobots|uti)/
+            $elif $t=~/--with-(mpl|thread-package|argobots|uti|cuda)/
                 $configure.=" $t"
 
 #---------------------------------------- 
@@ -118,14 +118,12 @@ subcode: filter_lib_romio
 
 #---------------------------------------- 
 subcode: need_yaksa
-    $call copy_subdir_module, yaksa
     $call add_subdir_inc_lib, yaksa
     my $configure = "./configure"
     $call add_subdir_make, yaksa
 
 #---------------------------------------- 
 subcode: need_hwloc
-    $call copy_subdir_module, hwloc
     $call add_subdir_inc_lib, hwloc
     $call set_configure
     $call add_subdir_make, hwloc
@@ -135,7 +133,6 @@ subcode: need_hwloc
 
 #---------------------------------------- 
 subcode: need_izem
-    $call copy_subdir_module, izem
     $call add_subdir_inc_lib, izem
     my $configure = "./configure --enable-embedded"
     $call add_subdir_make, izem
@@ -144,7 +141,6 @@ subcode: need_izem
 subcode: need_jsonc
     $(set:json_gen=maint/tuning/coll/json_gen.sh)
     $if -f "$(json_gen)"
-        $call copy_subdir_module, jsonc
         system "bash $(json_gen)"
         $call add_subdir_inc_lib, jsonc
         my $configure = "./configure"
@@ -158,18 +154,11 @@ subcode: need_ucx
 
     # system "mkdir -p $opts{moddir}/$(Ducx)/config/{m4,aux}"
     $if !$opts{quick}
-        $call patch_configure_ucx
+        # $call patch_configure_ucx
 
-    $if $opts{ucx} eq "embedded"
-        $call @need_ucx_embedded
-    $else
-        # until: -I, -L path added by configure
-        $I_list .= " -I$opts{ucx}/include"
-        $L_list .= " -L$opts{ucx}/lib"
-        $L_list .= " -lucp -lucs"
+    $call @need_ucx_embedded
 
     subcode: need_ucx_embedded
-        $call copy_subdir_module, ucx
         $call patch_ucx_for_pgi
         $call add_subdir_inc_lib, ucx
         my $configure = "./configure --prefix=\x24(PREFIX) --disable-static"
@@ -214,18 +203,9 @@ subcode: need_ucx
 
 #---------------------------------------- 
 subcode: need_ofi
-    $if $opts{libfabric} eq "embedded"
-        $call @need_ofi_embedded
-    $else
-        # until: -I, -L path added by configure
-        $I_list .= " -I$opts{libfabric}/include"
-        $L_list .= " -L$opts{libfabric}/lib"
-        $L_list .= " -lfabric"
-    $if !$opts{quick}
-        # $call patch_configure_ofi
+    $call @need_ofi_embedded
 
     subcode: need_ofi_embedded
-        $call copy_subdir_module, ofi
         $call add_subdir_inc_lib, ofi
         $call set_configure
         $call add_subdir_make, ofi
@@ -244,6 +224,7 @@ subcode:: dump_make_var_custom
 subcode:: dump_make_var_custom
     $(if:key=CPPFLAGS or key=AM_CPPFLAGS)
         $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa|libfabric)\/\S+\s*//g
+        $t=~s/-I\S+\/ucx\/src//g
         $t=~s/-I\S+\/json-c//g
 
 subcode: chdir_subdir(dir)
