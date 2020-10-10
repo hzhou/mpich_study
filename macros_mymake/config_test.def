@@ -1,7 +1,8 @@
 subcode: config_init_test
     $config_in = "$mymake_dir/config_templates/mpitestconf.h"
     $config_out = "test/mpi/include/mpitestconf.h"
-    symlink "../../libtool", "test/mpi/libtool"
+    system "sed -e 's/\"gcc\"/\"mpicc\"/' libtool > test/mpi/libtool"
+    system "chmod a+x test/mpi/libtool"
 
 subcode: config_test
     $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/

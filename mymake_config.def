@@ -271,9 +271,10 @@ subcode: get_c_sizeof
             push @type_list, "$1 _Complex"
 
 fncode: get_sizeof($typelist, $headerlist)
-    $call dump_c_test, mymake/t.c
+    my $tname="t-$$"
+    $call dump_c_test, mymake/$tname.c
 
-    my $t = `$opts{CC} mymake/t.c -o mymake/t.out 2>/dev/null && mymake/t.out`
+    my $t = `$opts{CC} mymake/$tname.c -o mymake/$tname.out 2>/dev/null && mymake/$tname.out`
     $if $? == 0
         $while $t=~/A(\d+):\s+(\d+)/g
             my $name = get_config_name($typelist->[$1]);
@@ -283,7 +284,7 @@ fncode: get_sizeof($typelist, $headerlist)
         return 0
 
     subcode: dump_c_test(c_file)
-        &call open_w, mymake/t.c
+        &call open_w, $(c_file)
             $foreach $t in @$headerlist
                 print Out "#include <$t>\n"
             print Out "int main() {\n"

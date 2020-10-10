@@ -319,6 +319,9 @@ fncode: dump_makefile($makefile)
                 $rules_ADD{$(o)} = 1
                 $deps .= " \x24($(o))"
             $else
+                $if $(o)=~/_OBJECTS/
+                    $for $t in @t
+                        $print "$t: \x24(CONFIGS)"
                 $deps .= " @t"
 
             subcode: per_prog_rule
@@ -337,6 +340,9 @@ subcode:: dump_make_var_custom
         $global @extra_INCLUDES
         $t .= " @extra_INCLUDES"
     $(if:key=CPPFLAGS)
+        $if $opts{"with-cuda"}
+            my $p = $opts{"with-cuda"}
+            $I_list .= " -I$p/include"
         $t .= $I_list
 
 fncode: get_make_var_unique($name)

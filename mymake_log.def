@@ -2,7 +2,8 @@ output_dir: ./mymake
 
 page: mymake_log
     module: perl
-    arg: /home/hzhou/work/mpich-github
+    # arg: /home/hzhou/work/mpich-github
+    arg: /home/hzhou/work/modules/yaksa/src -clean
 
     parse_args()
     $if $opts{clean}
@@ -37,7 +38,8 @@ page: mymake_log_show
 
 #---------------------------------------- 
 fncode: parse_args
-    $global %opts
+    $global %opts, %exclusions
+    $call load_conf
     my @un_recognized
     $foreach $a in @ARGV
         $if $a=~/^-(\w+)=(.*)/
@@ -56,6 +58,13 @@ fncode: parse_args
     $if @un_recognized
         usage()
         die "Unrecognized options: @un_recognized\n"
+
+    subcode: load_conf
+        $if -e "mymake_log.conf"
+            &call open_r, "mymake_log.conf"
+                $if /^exclude:\s*(.+)/
+                    $foreach $a in split /\s+/, $1
+                        $exclusions{$a} = 1
 
 fncode: usage
     $print "Usage: $0 [-option] [subdir]\n"
@@ -176,16 +185,22 @@ subcode: _autoload
     $global $mark = "/* MPIR_FUNC */"
 
 fncode: log_enter($funcname, $l)
-    push @$l, "    $mark printf(\"Entering $funcname \t\t(%s:%d)\\n\", __FILE__, __LINE__);\n"
-    # push @$l, "    $mark printf(\"Entering $funcname\\n\");\n"
+    $if !$exclusions{$funcname}
+        push @$l, "    $mark printf(\"Entering $funcname \t\t(%s:%d)\\n\", __FILE__, __LINE__);\n"
+        # push @$l, "    $mark printf(\"Entering $funcname\\n\");\n"
+    $else
+        $print Exclude $funcname
 
 fncode: log_exit($funcname, $l, $sp, $ret, $add_brace)
-    $if $add_brace
-        push @$l, $sp."$mark {\n"
-    push @$l, $sp."$mark printf(\"Exit     $funcname\\n\");\n"
-    push @$l, $ret
-    $if $add_brace
-        push @$l, $sp."$mark }\n"
+    $if !$exclusions{$funcname}
+        $if $add_brace
+            push @$l, $sp."$mark {\n"
+        push @$l, $sp."$mark printf(\"Exit     $funcname\\n\");\n"
+        push @$l, $ret
+        $if $add_brace
+            push @$l, $sp."$mark }\n"
+    $else
+        push @$l, $ret
 
 /*
 fncode: log_enter($funcname, $l)

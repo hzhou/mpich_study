@@ -23,6 +23,8 @@ subcode: config_hydra
         $(for:as, a in demuxes, launchers, rmks, topolibs and demux,launcher,rmk,topolib)
             $config_defines{HYDRA_AVAILABLE_$(as:uc)} = "\"@$(as)\""
             $config_defines{HYDRA_DEFAULT_$(a:uc)} = "\"$$(as)[0]\""
+        # needed by v3.3.2
+        $config_defines{HYDRA_AVAILABLE_CKPOINTLIBS}='""'
 
     subcode: set_config_defines
         $call AC_USE_SYSTEM_EXTENSIONS
@@ -41,15 +43,22 @@ subcode: config_hydra
         $config_defines{HAVE_EXTERN_ENVIRON}=1
         $config_defines{ENABLE_PROFILING}=1
 
+        $(for:CXX,F77,F90)
+            $config_defines{HYDRA_$1}="\"$opts{$1} \""
+
         delete $config_defines{HAVE_ALLOCA}
         $(for:a in fcntl,getifaddrs,getpgid,gettimeofday,hstrerror,inet_ntop,isatty,killpg,poll,posix_regcomp,setsid,sigaction,sigset,stat,strsignal,time,unsetenv,usleep)
             $config_defines{HAVE_$(a:uc)}=1
+
+        # overwrite
+        delete $headers_hash{SLURM_SLURM_H}
 
 subcode: make_hydra
     $call need_mpl
     $call need_hwloc
     my %conds
     $conds{HYDRA_HAVE_HWLOC}=1
+    $conds{hydra_have_hwloc}=1 # v3.3.2
     $conds{hydra_bss_external}=1 # --with-hydra-bss=[user,ssh,fork,slurm,ll,lsf,sge,pbs,cobalt,manual,persist]
     $conds{hydra_bss_persist}=1
     $conds{hydra_have_poll}=1   # --with-hydra-demux=[poll,select,port]

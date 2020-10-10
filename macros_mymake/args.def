@@ -27,6 +27,10 @@ subcode: parse_args
     $call set_prefix
     $call set_moddir
 
+    my $uname = `uname`
+    $if $uname=~/Darwin/
+        $opts{do_pmpi} = 1
+
     subcode: set_moddir
         my $mod_tarball
         $if $ENV{MODTARBALL}
@@ -60,8 +64,6 @@ subcode: parse_args
 
     subcode: set_opts_default
         $opts{V}=0
-        $opts{ucx}="embedded"
-        $opts{libfabric}="embedded"
 
     subcode: parse_ARGV
         $foreach $a in @ARGV
@@ -99,7 +101,7 @@ subcode: parse_args
                 $elif $a=~/--enable-izem-queue/
                     $opts{enable_izem}=1
                     push @config_args, $a
-                $elif $a=~/--with-(ucx|libfabric|argobots)=(.*)/
+                $elif $a=~/--with-(argobots)=(.*)/
                     $opts{$1}=$2
                     push @config_args, $a
                 $(if:_pagename=mymake)

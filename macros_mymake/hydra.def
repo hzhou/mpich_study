@@ -65,43 +65,34 @@ subcode: hydra_config
         system "autoreconf -ivf"
     system "rm -f Makefile"
     system "./configure"
-    &call modify_frame, temporary
-        $call patch_libtool
+    $call patch_config_h
+    system "mv libtool mymake/libtool.orig"
+    $call patch_libtool, mymake/libtool.orig
     system "mv Makefile mymake/Makefile.orig"
 
     # ------------------------------
     subcode: modify_hydra_configure
         &call modify, configure.ac
-            $if $l=~/^\s*hwloc\)/
-                print Out $l
-                $flag_skip=1
+            $if $l=~/^\s*HWLOC_/
                 next
-            $elif $flag_skip && $l=~/AC_MSG_RESULT/
-                $flag_skip=2
-            $elif $flag_skip==2 && $l=~/^(\s*)if test.*\$have_hwloc.*then/
-                print Out $1, "have_hwloc=yes\n"
-                print Out $1, "hydra_use_embedded_hwloc=no\n" # we handles it
-                $flag_skip=0
-            $elif $l=~/^(HWLOC_DO_AM_CONDITIONALS)/
-                $l = "\x23 $1\n"
-            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/ # mpl
-                $l = "$1: \x23 $2\n"
-            $elif $l=~/^(\s*)PAC_SUBDIR_HWLOC/
-                $l = $1."AM_CONDITIONAL([HAVE_HWLOC], [true])\n"
-                $flag_skip=0
+            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR|PAC_CONFIG_ALL_SUBDIRS)/
+                next
 
     subcode: modify_hydra2_configure
-        &call modify, configure.ac
-            $if $l=~/^PAC_CHECK_PREFIX\(hwloc\)/
-                $flag_skip=1
-                next
-            $elif $l=~/^(HWLOC_DO_AM_CONDITIONALS)/
-                $flag_skip=0
-                print Out $1, "have_hwloc=yes\n"
-                print Out $1, "hydra_use_embedded_hwloc=no\n" # we handles it
-                next
-            $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR.*)/ # mpl
-                $l = "$1: \x23 $2\n"
+        $call modify_hydra_configure
+
+    subcode: patch_config_h
+        my (@lines, $flag)
+        &call open_r, include/hydra_config.h
+            $if /#define HYDRA_DEFAULT_TOPOLIB NULL/
+                push @lines, "#define HYDRA_DEFAULT_TOPOLIB \"hwloc\"\n"
+                $flag = 1
+            $else
+                push @lines, $_
+        $if $flag
+            &call open_W, include/hydra_config.h
+                $foreach $l in @lines
+                    $print $l
 
 #---- rules in mpich Makefile ------------------ 
 subcode: add_rule_hydra(name)
