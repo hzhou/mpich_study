@@ -121,6 +121,8 @@ subcode: filter_config_defines
             $config_cflags{O} = 2
         $elif $g=~/no|none/
             $config_cflags{O} = 0
+        $elif $g=~/alwaysinline/
+            $config_defines{MPL_ENABLE_ALWAYS_INLINE} = 1
     # ------------------------------------------------------------
     $elif $a=~/--enable-strict/
         $(set:F=-Wall, -Wextra, -Wmissing-prototypes, -DGCC_WALL, -Wshadow, -Wmissing-declarations, -Wundef, -Wpointer-arith, -Wbad-function-cast, -Wwrite-strings, -Wnested-externs, -Winvalid-pch, -Wvariadic-macros, -Wtype-limits, -Werror-implicit-function-declaration, -Wstack-usage=262144)

@@ -21,6 +21,8 @@ page: mymake
     $call save_last_ARGV
     $call @dump_args
 
+    $if -f "maint/gen_ch4_api.pl"
+        system "perl maint/gen_ch4_api.pl"
     $if $opts{quick}
         $if !-f "libtool"
             $if -f "mymake/libtool/libtool"

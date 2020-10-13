@@ -50,7 +50,8 @@ subcode: config_mpich
         $temp{FALSE} = 0
 
         $if $opts{device}=~/ch4/
-            # $temp{MPIDI_CH4_DIRECT_NETMOD} = 1
+            $if $opts{"without-ch4-shmmods"}
+                $temp{MPIDI_CH4_DIRECT_NETMOD} = 1
             $temp{MPIDI_BUILD_CH4_LOCALITY_INFO}=1
             $temp{MPIDI_CH4U_USE_PER_COMM_QUEUE}=1
             $temp{MPIDI_CH4_MAX_VCIS}=1
@@ -75,7 +76,7 @@ subcode: config_mpich
                     $temp{"MPIDI_CH4_OFI_USE_SET_$set"}=1
                 $else
                     $temp{MPIDI_CH4_OFI_USE_SET_RUNTIME}=1
-                $if 1
+                $if !$temp{MPIDI_CH4_DIRECT_NETMOD}
                     $temp{MPIDI_CH4_SHM_ENABLE_GPU}=1
                     $make_conds{BUILD_SHM_IPC_GPU} = 1
         $elif $opts{device}=~/ch3/
@@ -149,10 +150,11 @@ subcode: config_mpich
                 $if $opts{device} =~/ch4:ofi/
                     $make_conds{BUILD_CH4_NETMOD_OFI} = 1
                 $else $opts{device} =~/ch4:ucx/
-                    $call @check_ucx_enable_shm
                     $make_conds{BUILD_CH4_NETMOD_UCX} = 1
                     $if 0
                         $make_conds{BUILD_HCOLL} = 1
+                $if $opts{"without-ch4-shmmods"} or $opts{device}=~/ch4:ucx/
+                    $call @check_enable_shm
 
                 $if $opts{enable_shm}
                     $make_conds{BUILD_CH4_SHM} = 1
@@ -196,7 +198,7 @@ subcode: config_mpich
             $if 1
                 $make_conds{BUILD_NAMEPUB_PMI}=1
         # ----
-        subcode: check_ucx_enable_shm
+        subcode: check_enable_shm
             $opts{enable_shm} = 1
             &call open_r, src/mpid/ch4/subconfigure.m4
                 # ref PR #3645
