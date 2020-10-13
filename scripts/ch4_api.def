@@ -33,14 +33,14 @@ fncode: dump_netmod_h($h_file)
         # ----
         $print "typedef struct MPIDI_NM_funcs {"
         &call each_netmod_api
-            $if $a->{"non-native"}
+            $if !$a->{native}
                 $call dump_nm_funcs_t
         $print "} MPIDI_NM_funcs_t;"
         $print
         # ----
         $print "typedef struct MPIDI_NM_native_funcs {"
         &call each_netmod_api
-            $if !$a->{"non-native"}
+            $if $a->{native}
                 $call dump_nm_funcs_t
         $print "} MPIDI_NM_native_funcs_t;"
         $print
@@ -112,13 +112,13 @@ fncode: dump_func_table_c($c_file, $mod)
         $print "#include \"netmod_inline.h\""
         $print "MPIDI_NM_funcs_t MPIDI_NM_${mod}_funcs = {"
         &call each_netmod_api
-            $if $a->{"non-native"}
+            $if !$a->{native}
                 $call dump_func_table_entry
         $print "};"
         $print
         $print "MPIDI_NM_native_funcs_t MPIDI_NM_native_${mod}_funcs = {"
         &call each_netmod_api
-            $if !$a->{"non-native"}
+            $if $a->{native}
                 $call dump_func_table_entry
         $print "};"
         $print "#endif"
@@ -369,9 +369,9 @@ fncode: load_ch4_api($ch4_api_txt)
     $global @apis, %name_types
     my ($cur_api, $flag)
     &call open_r, $ch4_api_txt
-        $if /^(API|PARAM):/
+        $if /^(.*API|PARAM):/
             $flag=$1
-        $elif $flag eq "API"
+        $elif $flag =~ /API$/
             $if /^\s+(NM|SHM)(\*?)\s*:\s*(.+)/ -> $nm, $inline, $t
                 my @tlist = split /,\s*/, $t
                 $if $nm eq "NM"
@@ -382,8 +382,6 @@ fncode: load_ch4_api($ch4_api_txt)
                     $cur_api->{shm_params} = \@tlist
                     $if $inline
                         $cur_api->{shm_inline}=1
-            $elif /^\s+(non-native)\s*:\s*(.+)/
-                $cur_api->{$1}=$2
             $elif /^\s+(\w+)\s*:\s*(.+)/
                 $cur_api = {name=>$1, ret=>$2}
                 push @apis, $cur_api
@@ -391,6 +389,9 @@ fncode: load_ch4_api($ch4_api_txt)
                 $if $func_name=~/mpi_(init|finalize)_hook/
                     $func_name = "mpi_$1"
                 $cur_api->{func_name} = $func_name
+
+                $if $flag=~/^Native API/
+                    $cur_api->{native}=1
         $elif $flag eq "PARAM"
             $if /^\s+(\S+):\s*(.+)/
                 $name_types{$1} = $2
@@ -467,10 +468,10 @@ subcode: each_api
         my $s = "    "
         $if $use_ret
             $s .= "ret = "
-        $if $a->{"non-native"}
-            $s .= "MPIDI_$(NM)_func->$a->{name}("
-        $else
+        $if $a->{native}
             $s .= "MPIDI_$(NM)_native_func->$a->{name}("
+        $else
+            $s .= "MPIDI_$(NM)_func->$a->{name}("
         my $tail = ");"
         dump_s_param_tail($s, $(params), $tail, 1)
         $print
