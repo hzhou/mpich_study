@@ -1,0 +1,204 @@
+macros:
+    # OUTDIR: /home/hzhou/work/mpich-def/bindings/interface
+    OUTDIR: .
+    standard_dir: /home/hzhou/work/mpi-standard
+
+page: extract_funcs
+    module: perl
+
+    $(if:0)
+        &call cd_standard
+            load_standard_api()
+        dump_api("$(OUTDIR)/mpi_functions.txt")
+    $(elif:0)
+        # eg: f77_type.txt
+        $call load_types
+        $call dump_types, $(OUTDIR)
+    $(else)
+        load_api("$(OUTDIR)/mpi_functions.txt")
+        my $mapping = $MAPS{SMALL_C_KIND_MAP}
+        $if !$mapping
+            die "Failed to load mapping: SMALL_C_KIND_MAP\n"
+        my $a = $FUNCS{"MPI_Send"}
+        my $ret = "int"
+        my $s = "$ret $a->{name}("
+        my $count = @{$a->{params}}
+        $if $count == 0
+            $s.="void"
+        $else
+            $s.=get_C_param($a->{params}->[0], $mapping)
+            $foreach $i, $p in @{$a->{params}}
+                $if $i>0
+                    $s.=", ".get_C_param($p, $mapping)
+        $s.=");"
+        $print $s
+
+    subcode: cd_standard
+        $use Cwd
+        my $pwd = getcwd()
+        chdir "$(standard_dir)" or die "Can't chdir $(standard_dir)\n"
+        BLOCK
+        chdir $pwd or die "Can't get back to current directory\n"
+
+fncode: get_C_param($param, $mapping)
+    $if $param->{type} eq "VARARGS"
+        return "..."
+
+    $call get_param_type, $param->{type}, $param->{t}
+    $call check_want_star, $param->{type}, $param->{t}
+
+    my $s
+    $if $param->{t}=~/constant=True/
+        $s.="const "
+    $s.=$type
+
+    $if $want_star
+        $s.=" *"
+    $else
+        $s.=" "
+    $s.=$param->{name}
+
+    $if $want_bracket
+        $s.="[]"
+    $if $param->{t}=~/length=\[.*?, (\d+)\]/
+        $s.="[$1]"
+
+    return $s
+
+    # -----------------------------
+    subcode: get_param_type(type, t)
+        my $type = $mapping->{$(type)}
+        $if $(type) eq "FUNCTION"
+            $if $(t)=~/func_type=(\w+)/
+                $type=$1
+            $else
+                $print Function type for parameter $param->{name} not found!
+        $if !$type
+            $print Type mapping [$mapping] $(type) not found !
+
+    subcode: check_want_star(type, t)
+        my ($want_star, $want_bracket)
+        $if $(type)=~/^ATTRIBUTE_VAL(_10)?$/
+            $want_star = 1
+        $elif $(type) eq "STRING"
+            $if $(t)=~/length=/ and $(t)!~/pointer=/
+                $want_bracket = 1
+            $else
+                $want_star = 1
+        $elif $(type)=~/^STRING_(2D)?ARRAY$/
+            $want_bracket = 1
+        $elif $(type)=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+            $want_star = 1
+        $elif $(t)=~/direction=(in)?out|pointer=/ and $(t)!~/length=/
+            $want_star = 1
+
+fncode: dump_api($api_txt)
+    &call open_W, $api_txt
+        $foreach $f in sort keys %FUNCS
+            my $fn = $FUNCS{$f}
+            $print $fn->{name}:
+            $foreach $p in @{$fn->{params}}
+                $print "    $p"
+
+        $foreach $map in sort keys %MAPS
+            my $mapping = $MAPS{$map}
+            $print $map:
+            $foreach $k in sort keys %$mapping
+                $print "    $k: $mapping->{$k}"
+
+#---------------------------------------- 
+fncode: load_api($api_txt)
+    $global %FUNCS, %MAPS
+    my ($cur_func, $cur_map, $cur_name)
+    &call open_r, $api_txt
+        $if /^(MPI\w+):\s*(.*)/
+            $cur_name = $1
+            $cur_func = {name=>$1, params=>[]}
+            $cur_func->{attrs}=$2
+            $FUNCS{$1} = $cur_func
+        $elif /^\s+(\w+),\s*(\w+)(.*)/ -> $name, $type, $tail
+            my $p={name=>$name, type=>$type, t=>$tail}
+            push @{$cur_func->{params}}, $p
+
+        $elif /^(\w+_KIND_MAP):/
+            $cur_name = $1
+            $cur_map = {}
+            $MAPS{$1} = $cur_map
+        $elif /^\s+(\w+):\s*(.*)/ -> $name, $type
+            $cur_map->{$name} = $type
+
+#---- Loading from mpi-standard ----
+fncode: load_standard_api
+    $call load_funcs
+    $call load_types
+
+    subcode: load_funcs
+        my @all_latexes = glob("*/*.tex")
+        $global %FUNCS
+        my $l
+        $foreach $a in @all_latexes
+            my $func
+            my $i_line=0
+            &call open_r, $a
+                $i_line++
+                $call parse_latex
+
+        subcode: parse_latex
+            $if /\\begin\{mpi-binding\}/
+                $func={name=>undef, params=>[]}
+            $elif /\\end\{mpi-binding\}/
+                $if $func->{name}
+                    $FUNCS{$func->{name}} = $func
+                $elif !defined($func->{name})
+                    warn "Missing name in $a:$i_line\n"
+                undef $func
+            $elif $func
+                chomp
+                $if $l
+                    s/^\s+//
+                    $l .= " $_"
+                $else
+                    $l = $_
+                $if $l!~/,\s*$/
+                    $if $l=~/^\s*function_name\(['"](.*)['"]\)/
+                        $func->{name} = $1
+                    $elif $l=~/^\s*parameters_c_only\(['"](.*)['"]\)/ -> $t
+                        push @{$func->{params}}, "C-only: $t"
+                    $elif $l=~/^\s*parameter\((.*)\)/ -> $t
+                        $t=~s/,\s*desc=['"][^'"]*['"]//
+                        # $t=~s/^['"](\w+)['"],\s*['"](\w+)['"]/$1, $2/
+                        $t=~s/['"]//g
+                        push @{$func->{params}}, $t
+                    $elif $l=~/^\s*(callback|no_ierror)/
+                        $func->{$1}=1
+                    undef $l
+
+    subcode: load_types
+        $global %MAPS
+        my $mapping
+        &call open_r, binding-tool/bindingtypes.py
+            s/#.*$//g
+            $if /^(\w+_KIND_MAP)\s*=\s*\{/
+                $mapping = {}
+                $MAPS{$1} = $mapping
+            $elif /^(\w+_KIND_MAP)\s*=\s*copy.deepcopy\((\w+)\)/
+                $mapping = {}
+                $MAPS{$1} = $mapping
+                %$mapping = %{$MAPS{$2}}
+            $if /^(\w+_KIND_MAP)\.update\(\{\s*$/
+                $mapping = $MAPS{$1}
+            $elif /^\}/
+                undef $mapping
+            $elif $mapping && /^\s*'(\w+)'\s*:\s*(.*)/ -> $key, $val
+                $if $val=~/['"](.*)['"]/
+                    $val = $1
+                $elif $val=~/^(\w+)/
+                    $val = $1
+                $mapping->{$key} = $val
+
+#---------------------------------------- 
+fncode: strip_quotes($t)
+    $if $t=~/^['"](.*)['"]/
+        return $1
+    return $t
+
