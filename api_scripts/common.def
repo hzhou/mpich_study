@@ -1,0 +1,165 @@
+macros:
+    OUTDIR: .
+    standard_dir: /home/hzhou/work/mpi-standard
+    mpich_dir: /home/hzhou/work/mpich-github
+    standard_api_txt: $(OUTDIR)/mpi_standard_api.txt
+    custom_api_txt: $(OUTDIR)/mpi_custom_api.txt
+
+subcode: load_api(@custom_list)
+    load_mpi_api("$(standard_api_txt)")
+    # load_mpi_api("$(custom_api_txt)")
+    $(for:f in $(custom_list))
+        load_mpi_api("$(OUTDIR)/mpi_$(f)_api.txt")
+
+#---------------------------------------- 
+fncode: load_mpi_api($api_txt)
+    $global %FUNCS, %MAPS, %SEEALSO, @SEEALSO
+    my $see_also_idx=0
+    my ($cur_func, $cur_map, $cur_name)
+    my $stage
+    &call open_r, $api_txt
+        $if /^(MPI\w+):\s*(.*)/
+            $stage = "FUNC"
+            $cur_name = $1
+            $if $FUNCS{$1}
+                $cur_func = $FUNCS{$1}
+                $if $2
+                    $cur_func->{attrs} = $2
+            $else
+                $cur_func = {name=>$1, params=>[], attrs=>$2}
+                $FUNCS{$1} = $cur_func
+        $elif /^(\w+_KIND_MAP):/
+            $stage = "MAP"
+            $cur_name = $1
+            $cur_map = {_name=>$1}
+            $MAPS{$1} = $cur_map
+        $elif /^SEEALSO:\s*(.*)/ -> $t
+            $see_also_idx++
+            my @tlist = split /,\s*/, $t
+            $SEEALSO[$see_also_idx] = \@tlist
+            $foreach $a in @tlist
+                $SEEALSO{$a} = $see_also_idx
+        $elif $stage eq "FUNC"
+            $if /^\s+\.(\w+):\s*(.*)/
+                $cur_func->{$1} = $2
+            $elif /^\s+(\w+):\s*(\w+)(.*)/ -> $name, $kind, $t
+                my $p={name=>$name, kind=>$kind}
+                $if $t=~/,\s*\[(.*)\]\s*$/
+                    $t = $`;
+                    $p->{desc} = $1
+                    $global %mpich_man_maps=(COMMUNICATOR=>"handle", DATATYPE=>"handle", BUFFER=>"choice", TAG=>"integer", RANK=>"integer")
+                    $if $mpich_man_maps{$p->{kind}}
+                        $p->{desc} .= " ($mpich_man_maps{$p->{kind}})"
+                    
+                $p->{t} = $t
+                push @{$cur_func->{params}}, $p
+            $elif /^{/
+                my $body = $cur_func->{body}
+                $if !$body
+                    $body = []
+                    $cur_func->{body} = $body
+                $while <In>
+                    $if /^}/
+                        last
+                    push @$body, $_
+        $elif $stage eq "MAP"
+            $if /^\s+(\w+):\s*(.*)/ -> $name, $type
+                $cur_map->{$name} = $type
+
+#---------------------------------------- 
+fncode: get_C_params($func, $mapping)
+    my @param_list
+    $foreach $p in @{$func->{params}}
+        push @param_list, get_C_param($p, $mapping)
+    $if !@param_list
+        return ["void"]
+    $else
+        return \@param_list
+
+fncode: get_C_param($param, $mapping)
+    $if $param->{kind} eq "VARARGS"
+        return "..."
+
+    $call get_param_type, $param->{kind}, $param->{t}
+    $call check_want_star, $param->{kind}, $param->{t}
+
+    my $s
+    $if $param->{t}=~/constant=True/
+        $s.="const "
+    $s.=$type
+
+    $if $want_star
+        $s.=" *"
+    $else
+        $s.=" "
+    $s.=$param->{name}
+
+    $if $want_bracket
+        $s.="[]"
+    $if $param->{t}=~/length=\[.*?, (\d+)\]/
+        $s.="[$1]"
+
+    return $s
+
+    # -----------------------------
+    subcode: get_param_type(type, t)
+        my $type = $mapping->{$(type)}
+        $if $(type) eq "FUNCTION"
+            $if $(t)=~/func_type=(\w+)/
+                $type=$1
+            $else
+                $print Function type for parameter $param->{name} not found!
+        $if !$type
+            $print Type mapping [$mapping] $(type) not found !
+
+    subcode: check_want_star(type, t)
+        my ($want_star, $want_bracket)
+        $if $(type)=~/^ATTRIBUTE_VAL(_10)?$/
+            $want_star = 1
+        $elif $(type) eq "STRING"
+            $if $(t)=~/length=/ and $(t)!~/pointer=/
+                $want_bracket = 1
+            $else
+                $want_star = 1
+        $elif $(type)=~/^STRING_(2D)?ARRAY$/
+            $want_bracket = 1
+        $elif $(type)=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+            $want_star = 1
+        $elif $(t)=~/direction=(in)?out|pointer=/ and $(t)!~/length=/
+            $want_star = 1
+
+fncode: is_pointer_type($kind, $t)
+    $(set:type=$kind)
+    $if $(type)=~/^ATTRIBUTE_VAL(_10)?$/
+        return 1
+    $elif $(type) eq "STRING"
+        return 1
+    $elif $(type)=~/^STRING_(2D)?ARRAY$/
+        return 1
+    $elif $(type)=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+        return 1
+    $elif $t=~/direction=(in)?out|pointer=/ and $t!~/length=/
+        return 1
+    $else
+        return 0
+
+#---- dump utils ------------------------------------ 
+fncode: dump_copy_right
+    $(set:print_to=Out)
+    $print "\x2f*"
+    $print " * Copyright (C) by Argonne National Laboratory"
+    $print " *     See COPYRIGHT in top-level directory"
+    $print " */"
+    $print
+
+subcode: begin_error_checking
+    $print "#ifdef HAVE_ERROR_CHECKING"
+    $print "    {"
+    $print "        MPID_BEGIN_ERROR_CHECKS;"
+    $print "        {"
+    my $sp = ' ' x 12;
+    BLOCK
+    $print "        }"
+    $print "        MPID_END_ERROR_CHECKS;"
+    $print "    }"
+    $print "#endif \x2f* HAVE_ERROR_CHECKING */"

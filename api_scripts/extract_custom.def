@@ -1,0 +1,53 @@
+include: common.def
+page: extract_custom
+    module: perl
+
+    $foreach $dir in "pt2pt"
+        my @FUNCS
+        my @files = glob("$(mpich_dir)/src/mpi/$dir/*.c")
+        my ($flag, $func)
+        $foreach $f in @files
+             &call open_r, $f
+                $if /^#pragma weak\s+(MPI_\w+)\s*=/ -> $name
+                    my $file
+                    $if $f=~/.*src\/mpi\/$dir\/(.*)/
+                        $file = $1
+                    $func={name=>$name, file=>"$dir/$file"}
+                    push @FUNCS, $func
+                $elif /^\/\*\@/
+                    $flag = "man"
+                $elif /^\@\*\//
+                    undef $flag
+                $elif /^\s*\/\*\s*\.\.\.\s*body of routine \.\.\.\s*\*\//
+                    $flag = "body"
+                    $func->{body} = []
+                $elif /^\s*\/\*\s*\.\.\.\s*end of body of routine \.\.\.\s*\*\//
+                    undef $flag
+                $elif $flag eq "man" and /^\s*(MPI_\w+) -\s*(.*)/
+                    $func->{desc} = $2
+                $elif $flag eq "body"
+                    push @{$func->{body}}, $_
+
+        &call open_W, mpi_${dir}_api.txt
+            $print "; vim: set ft=c:"
+            $foreach $func in @FUNCS
+                $print
+                $print $func->{name}:
+                $print "    .file: $func->{file}"
+                $print "    .desc: $func->{desc}"
+                my $body=$func->{body}
+                my $i1 = 0
+                my $i2 = @$body
+                $while $i1<$i2
+                    $if $body->[$i1]!~/^\s*$/
+                        last
+                    $i1++
+                $while $i2>$i1
+                    $if $body->[$i2-1]!~/^\s*$/
+                        last
+                    $i2--
+
+                $print "{"
+                $for $i=$i1:$i2
+                    $print $body->[$i]-
+                $print "}"

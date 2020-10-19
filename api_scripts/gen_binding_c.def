@@ -1,0 +1,430 @@
+include: common.def
+
+page: gen_binding_c
+    module: perl
+
+    $call load_api, pt2pt
+
+    $foreach %FUNCS
+        $if $v->{file}
+            dump_mpi_c($v)
+
+fncode: dump_mpi_c($func)
+    $call check_has_comm
+    my ($err_hash, $validation_codes) = process_validations($func, $has_comm)
+
+    $call set_file
+    &call open_W, $(file)
+        dump_copy_right()
+        $print #include "mpiimpl.h"
+        $print
+        dump_profiling($func, "SMALL_C_KIND_MAP")
+        $print
+        dump_manpage($func, $err_hash)
+        dump_function($func, "SMALL_C_KIND_MAP", $has_comm, $validation_codes)
+    # ---------------------
+    subcode: check_has_comm
+        my $has_comm
+        &call foreach_p, $func
+            $if $name eq "comm"
+                $has_comm = 1
+                last
+
+    subcode: set_file
+        my ($dir, $file)
+        $if $func->{file}=~/(.*)\/(.*)\.c/
+            ($dir, $file) = ($1, $2)
+        $(if:0)
+            $(set-1:file=src/mpi/$dir/$file.c)
+        $(else)
+            $(set-1:file=$file.c)
+
+fncode: dump_function($func, $map_name, $has_comm, $validation_codes)
+    $call get_mapping_func_name
+    declare_function($func, $mapping, "")
+    $(set:print_to=Out)
+    $print "{"
+    $call function_body
+    $print "}"
+
+    subcode: function_body
+        $print "    int mpi_errno = MPI_SUCCESS;"
+        $if $has_comm
+            $print "    MPIR_Comm *comm_ptr = NULL;"
+
+        my $state_name = "MPID_STATE_".uc($func_name)
+        $call func_log_decl
+
+        $print
+        $print "    MPIR_ERRTEST_INITIALIZED_ORDIE();"
+        $print
+        $call cs_enter
+        $call func_log_enter
+        $call @set_comm_ptr
+        print Out @$validation_codes
+        $call @early_returns
+        $print "    /* ... body of routine ... */"
+        $if $func->{body}
+            $foreach $l in @{$func->{body}}
+                print Out $l
+        $else $func->{code}
+            dump_body_of_routine($func_name, $func->{code})
+        $print "    /* ... end of body of routine ... */"
+        $print
+        $print "  fn_exit:"
+        $call cs_exit
+        $call func_log_exit
+        $print "    return mpi_errno;"
+        $print "  fn_fail:"
+        dump_mpi_fn_fail($func, $mapping)
+        $print "    goto fn_exit;"
+
+        subcode: set_comm_ptr
+            $if $has_comm
+                &call begin_error_checking
+                    $print "${sp}MPIR_ERRTEST_COMM(comm, mpi_errno);"
+                $print
+                $print "    /* Convert MPI object handles to object pointers */"
+                $print "    MPIR_Comm_get_ptr(comm, comm_ptr);"
+                $print
+
+        subcode: early_returns
+            $call check_rank_request
+            $if $func->{name}=~/mpi_.*(send|recv)/i
+                my $request_kind="MPIR_REQUEST_KIND__".uc($1)
+                my $is_recv = ($1 eq "recv")
+                $print "    \x2f* Return immediately for dummy process */"
+                $print "    if (unlikely($check_rank == MPI_PROC_NULL)) {"
+                my $sp = ' ' x 8
+                $if $request_out
+                    $print "${sp}MPIR_Request *request_ptr = MPIR_Request_create_complete($request_kind);"
+                    $print "${sp}MPIR_ERR_CHKANDSTMT(request_ptr == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail, \"**nomemreq\");"
+                    $print "${sp}*request = request_ptr->handle;"
+                $if $is_recv
+                    $print "${sp}MPIR_Status_set_procnull(status);"
+                $print "        goto fn_exit;"
+                $print "    }"
+            # ----
+            subcode: check_rank_request
+                my ($check_rank, $request_out)
+                $foreach $p in @{$func->{params}}
+                    my $kind = $p->{kind}
+                    my $name = $p->{name}
+                    $if $kind eq "RANK"
+                        $check_rank = $name
+                    $elif $kind eq "REQUEST" and $p->{t}=~/direction=out/
+                        $request_out = $name
+
+fncode: dump_profiling($func, $map_name)
+    $call get_mapping_func_name
+    $(set:print_to=Out)
+    $print \x2f* -- Begin Profiling Symbol Block for routine $func_name */
+    &call if_defined, HAVE_PRAGMA_WEAK
+        $print "#pragma weak $func_name = P$func_name"
+    &call elif_defined, HAVE_PRAGMA_HP_SEC_DEF
+        $print "#pragma _HP_SECONDARY_DEF P$func_name  $func_name"
+    &call elif_defined, HAVE_PRAGMA_CRI_DUP
+        $print "#pragma _CRI duplicate $func_name as P$func_name"
+    &call elif_defined, HAVE_WEAK_ATTRIBUTE
+        declare_function($func, $mapping, " __attribute__ ((weak, alias(\"P$func_name\")));")
+    $print "#endif"
+    $print \x2f* -- End Profiling Symbol Block */
+
+    $print
+    $print "\x2f* Define MPICH_MPI_FROM_PMPI if weak symbols are not supported to build"
+    $print "   the MPI routines */"
+    $print "#ifndef MPICH_MPI_FROM_PMPI"
+    $print "#undef $func_name"
+    $print "#define $func_name P$func_name"
+    $print "\n#endif"
+
+fncode: dump_manpage($func, $err_hash)
+    my $func_name = $func->{name}
+    $(set:print_to=Out)
+    $print "/*\@"
+    $print "   $func_name - $func->{desc}"
+    $print
+    my (@input_list, @output_list)
+    $foreach $p in @{$func->{params}}
+        $if $p->{t}=~/direction=out/
+            push @output_list, $p
+        $else
+            push @input_list, $p
+    dump_mapage_list(\@input_list, "Input Parameters")
+    dump_mapage_list(\@output_list, "Output Parameters")
+    $if 1
+        $print ".N ThreadSafe"
+        $print
+        $print ".N Fortran"
+        $print
+        $print ".N Errors"
+        $print ".N MPI_SUCCESS"
+        $foreach $err in sort keys %$err_hash
+            $print ".N $err"
+    $print
+    $if $func->{seealso}
+         $print ".seealso: $func->{seealso}
+    $print "\@*/"
+
+fncode: dump_mapage_list($list, $header)
+    $(set:print_to=Out)
+    my $count = @$list
+    $if $count==0
+        return
+    $print $header:
+    $if $count == 1
+        my $p = $list->[0]
+        $print ". $p->{name} - $p->{desc}"
+    $else
+        $foreach $i, $p in @$list
+            my $lead = "."
+            $if $i==0
+                $lead = "+"
+            $elif $i==$count-1
+                $lead = "-"
+            $print "$lead $p->{name} - $p->{desc}"
+    $print
+
+
+# no-line-wrap version
+fncode: declare_function($func, $mapping, $tail)
+    my $name = $func->{name}
+    $if $mapping->{_name}=~/BIG/
+        $name .= "_l"
+
+    my $ret = "int"
+    $if $func->{return}
+        $ret = $mapping->{$func->{return}}
+
+    my $params = get_C_params($func, $mapping)
+    my $s = "$ret $name(" . join(", ", @$params) . ")"
+    $if $tail
+        $s.=$tail
+
+    $(set:print_to=Out)
+    $print $s
+
+fncode: process_validations($func, $has_comm)
+    my $func_name = $func->{name}
+    my (%err_hash, @lines)
+    $(set:print_to=@lines)
+    $call get_param_hash
+    &call begin_error_checking
+        $if $has_comm
+            $err_hash{MPI_ERR_COMM} = 1
+            $print "${sp}MPIR_Comm_valid_ptr(comm_ptr, mpi_errno, FALSE);"
+            $call check_mpi_errno
+        &call foreach_p, $func
+            $call validate_p
+        $foreach $triplet in @user_buffers
+            $err_hash{MPI_ERR_BUFFER}=1
+            $print "${sp}MPIR_ERRTEST_USERBUFFER($triplet, mpi_errno);"
+        $(if:0)
+            $err_hash{MPI_ERR_BUFFER}=1
+            $print "${sp}MPIR_ERRTEST_ALIAS_COL(..., mpi_errno);"
+    return (\%err_hash, \@lines)
+    # ---------------------
+    subcode: get_param_hash
+        my @user_buffers
+        $foreach $i, $p in @{$func->{params}}
+            $if $p->{kind} =~/BUFFER/
+                my $p2 = $func->{params}->[$i+1]
+                my $p3 = $func->{params}->[$i+2]
+                $if $p2->{kind}=~/POLYXFER_NUM_ELEM/ and $p3->{kind}=~/DATATYPE/
+                push @user_buffers, "$p->{name}, $p2->{name}, $p3->{name}"
+
+    subcode: validate_p
+        my $send_or_recv
+        $if $func_name=~/(send)/i
+            $send_or_recv = "send"
+        $elif $func_name=~/(recv)/i
+            $send_or_recv = "recv"
+
+        # ref: mpir_err.h
+        $if $kind eq "RANK"
+            $err_hash{MPI_ERR_RANK} = 1
+            my $errtest = "MPIR_ERRTEST_RANK"
+            $if $send_or_recv eq "send"
+                $errtest = "MPIR_ERRTEST_SEND_RANK"
+            $elif $send_or_recv eq "recv"
+                $errtest = "MPIR_ERRTEST_RECV_RANK"
+            $print "${sp}${errtest}(comm_ptr, $name, mpi_errno);"
+        $elif $kind eq "TAG"
+            $err_hash{MPI_ERR_TAG} = 1
+            $if $send_or_recv eq "send"
+                $print "${sp}MPIR_ERRTEST_SEND_TAG($name, mpi_errno);"
+            $else
+                $print "${sp}MPIR_ERRTEST_RECV_TAG($name, mpi_errno);"
+        $elif $kind eq "POLYXFER_NUM_ELEM"
+            $err_hash{MPI_ERR_COUNT} = 1
+            $print "${sp}MPIR_ERRTEST_COUNT($name, mpi_errno);"
+        $elif $kind=~/DISPLACEMENT/
+            $err_hash{MPI_ERR_DISP} = 1
+            $print "${sp}MPIR_ERRTEST_DISP($name, mpi_errno);"
+
+        $elif $kind eq "DATATYPE"
+            $err_hash{MPI_ERR_TYPE} = 1
+            $print "${sp}MPIR_ERRTEST_DATATYPE($name, \"datatype\", mpi_errno);"
+            $print "${sp}if (!HANDLE_IS_BUILTIN($name)) {"
+            $sp .= "    "
+            $print "${sp}MPIR_Datatype *datatype_ptr = NULL;"
+            $print "${sp}MPIR_Datatype_get_ptr($name, datatype_ptr);"
+            $print "${sp}MPIR_Datatype_valid_ptr(datatype_ptr, mpi_errno);"
+            $call check_mpi_errno
+            $print "${sp}MPIR_Datatype_committed_ptr(datatype_ptr, mpi_errno);"
+            $call check_mpi_errno
+
+            substr($sp, -4)=""
+            $print "${sp}}"
+        $elif $kind eq "REQUEST" and $p->{t}=~/direction=out/
+            $err_hash{MPI_ERR_ARG} = 1
+            $print "${sp}MPIR_ERRTEST_ARGNULL($name, \"request\", mpi_errno);"
+
+    subcode: check_mpi_errno
+        $print "${sp}if (mpi_errno)"
+        $print "${sp}    goto fn_fail;"
+
+fncode: dump_mpi_fn_fail($func, $mapping)
+    $(set:print_to=Out)
+    $print "    /* --BEGIN ERROR HANDLINE-- */"
+    $print "#ifdef HAVE_ERROR_CHECKING"
+    $call set_mpi_func_errno
+    $print "#endif"
+    $print "    mpi_errno = MPIR_Err_return_comm(comm_ptr, __func__, mpi_errno);"
+    $print "    /* --END ERROR HANDLING-- */"
+    # -------------
+    subcode: set_mpi_func_errno
+        my $s = "    mpi_errno = MPIR_Err_create_code(mpi_errno, MPIR_ERR_RECOVERABLE, __func__, __LINE__, MPI_ERR_OTHER,"
+
+        my $err_name=lc($func->{name})
+        $if $mapping->{_name}=~/BIG/
+            $err_name.="_l"
+        $s.=" \"**$err_name\", \"**$err_name"
+
+        my $args =""
+        $call add_args
+        
+        $s .= "\"$args);"
+
+        $call dump_Err_create_code
+
+    subcode: add_args
+        # ref: src/include/mpir_err.h
+        my %fmts=(RANK=>"%i", TAG=>"%t", COMMUNICATOR=>"%C", ASSERT=>"%A", DATATYPE=>"%D", ERRHANDLER=>"%E", FILE=>"%F", GROUP=>"%G", INFO=>"%I", OPERATION=>"%O", REQUEST=>"%R", WINDOW=>"%W")
+        &call foreach_p, $func
+            $if is_pointer_type($kind, $p->{t})
+                $s.= " %p"
+                $args .=", $name"
+            $elif $fmts{$kind}
+                $s .= " $fmts{$kind}"
+                $args .=", $name"
+            $elif $mapping->{$kind} eq "int"
+                $s .= " %d"
+                $args .=", $name"
+            # TODO: MPI_Count ?
+
+fncode: dump_body_of_routine($func_name, $copy_name)
+    my $code = $FUNCS{$copy_name}->{body}
+    $if !$code
+        die "Can't copy body of routine from $copy_name to $func_name\n"
+    $func_name=~s/^MPI_//
+    $copy_name=~s/^MPI_//
+    my $lc_func_name = lc($func_name)
+    my $lc_copy_name = lc($copy_name)
+    $foreach $l in @$code
+        $l=~s/MPID_$copy_name/MPID_$func_name/g
+        $l=~s/\b$lc_copy_name/$lc_func_name/g
+        print Out $l
+
+#---------------------------------------- 
+subcode: get_mapping_func_name
+    my $mapping = $MAPS{$map_name}
+    my $func_name = $func->{name}
+    $if $map_name=~/BIG/
+        $func_name.="_l"
+
+subcode: foreach_p(func)
+    $foreach $p in @{$(func)->{params}}
+        my $kind = $p->{kind}
+        my $name = $p->{name}
+        BLOCK
+
+subcode: if_defined(name)
+    $print "#if defined($(name))"
+        BLOCK
+
+subcode: elif_defined(name)
+    $print "#elif defined($(name))"
+        BLOCK
+
+subcode: cs_enter
+    $print "    MPID_THREAD_CS_ENTER(GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX);"
+subcode: cs_exit
+    $print "    MPID_THREAD_CS_EXIT(GLOBAL, MPIR_THREAD_GLOBAL_ALLFUNC_MUTEX);"
+
+#---- style issues ------------------------------------ 
+macros:
+    # style: succinct
+
+subcode: func_log_decl
+    $(if:style=succinct)
+        $print "    MPIR_FUNC_VERBOSE_STATE_DECL($state_name);"
+    $(else)
+        $if $state_name=~/MPI_.*SEND/
+            $print "    MPIR_FUNC_TERSE_STATE_DECL($state_name);"
+        $else
+            $print "    MPIR_FUNC_VERBOSE_STATE_DECL($state_name);"
+subcode: func_log_enter
+    $(if:style=succinct)
+        $print "    MPIR_FUNC_VERBOSE_ENTER($state_name);"
+    $(else)
+        $if $state_name=~/MPI_.*SEND/
+            $print "    MPIR_FUNC_TERSE_PT2PT_ENTER_FRONT($state_name);"
+        $else
+            $print "    MPIR_FUNC_VERBOSE_ENTER($state_name);"
+subcode: func_log_exit
+    $(if:style=succinct)
+        $print "    MPIR_FUNC_VERBOSE_EXIT($state_name);"
+    $(else)
+        $if $state_name=~/MPI_.*SEND/
+            $print "    MPIR_FUNC_TERSE_PT2PT_EXIT($state_name);"
+        $else
+            $print "    MPIR_FUNC_VERBOSE_EXIT($state_name);"
+
+subcode: error_check
+    $(if:style=succinct)
+        $print "MPIR_ERR_CHECK(mpi_errno);"
+    $(else)
+        $print "    if(mpi_errno != MPI_SUCCESS)"
+        $print "        goto fn_fail;"
+
+subcode: dump_Err_create_code
+    $(if:style=succinct)
+        $print $s
+    $(else)
+        $print "    {"
+        my $sp = ' ' x 8
+        $if $s=~/mpi_errno = (\w+)\((.*)/ -> $a, $t
+            $print "${sp}mpi_errno ="
+            $print "${sp}    $a\(-"
+            my $n_lead = 12 + length($a) + 1
+            my $sp = ' ' x $n_lead
+            my @tlist = split /, /, $t
+            my $a = shift @tlist # first one
+            $print "$a,-"
+            my $n = $n_lead + length($a)
+            my $a = pop @tlist # last one
+            $foreach $t in @tlist
+                $if $n + length($t) +2 <= 100
+                    $print " $t,-"
+                    $n += length($t)+2
+                $else
+                    $print
+                    $print "$sp$t,-"
+                    $n = $n_lead + length($t) + 1
+            $if $n + length($a) + 1 <= 100
+                $print " $a"
+            $else
+                $print
+                $print "$sp$a"
+        $print "    }"

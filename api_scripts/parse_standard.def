@@ -1,0 +1,141 @@
+include: common.def
+page: parse_standard
+    module: perl
+        &call cd_standard
+            $call load_standard_api
+        dump_api("$(standard_api_txt)")
+
+    subcode: cd_standard
+        $use Cwd
+        my $pwd = getcwd()
+        chdir "$(standard_dir)" or die "Can't chdir $(standard_dir)\n"
+        BLOCK
+        chdir $pwd or die "Can't get back to current directory\n"
+
+fncode: dump_api($api_txt)
+    &call open_W, $api_txt
+        $print "APIs"
+        $print ================
+        $foreach $f in sort keys %FUNCS
+            my $fn = $FUNCS{$f}
+            $print $fn->{name}:
+            $if $fn->{return_type}
+                $print "    .return: $fn->{return}"
+            $foreach $p in @{$fn->{params}}
+                my $name = $p->{name}
+                my $kind = $p->{kind}
+                my $s = "    $name: $kind"
+                $if $p->{t}
+                    $s.=", $p->{t}"
+                $if $p->{desc}
+                    $s.=", [$p->{desc}]"
+                $elif $default_descriptions{$kind}
+                    $s.=", [$default_descriptions{$kind}]"
+                $else
+                    # warn "Missing description for $fn->{name} param $name!\n"
+                $print $s
+
+        $print "\nType Mappings"
+        $print ================
+        $foreach $map in sort keys %MAPS
+            $if $map=~/^BASE_/
+                next
+            my $mapping = $MAPS{$map}
+            $print $map:
+            $foreach $k in sort keys %$mapping
+                $print "    $k: $mapping->{$k}"
+
+#---- Loading from mpi-standard ----
+subcode: load_standard_api
+    load_standard_funcs()
+    load_standard_types()
+    load_default_descriptions()
+
+fncode: load_standard_funcs
+    my @all_latexes = glob("*/*.tex")
+    $global %FUNCS
+    my $l
+    $foreach $a in @all_latexes
+        my $func
+        my $i_line=0
+        &call open_r, $a
+            $i_line++
+            $call parse_latex
+
+    subcode: parse_latex
+        $if /\\begin\{mpi-binding\}/
+            $func={name=>undef, params=>[]}
+        $elif /\\end\{mpi-binding\}/
+            $if $func->{name}
+                $FUNCS{$func->{name}} = $func
+            $elif !defined($func->{name})
+                warn "Missing name in $a:$i_line\n"
+            undef $func
+        $elif $func
+            chomp
+            $if $l
+                s/^\s+//
+                $l .= " $_"
+            $else
+                $l = $_
+            $if $l!~/,\s*$/
+                $if $l=~/^\s*function_name\(['"](.*)['"]\)/
+                    $func->{name} = $1
+                $elif $l=~/^\s*(return_type|parameters_c_only)\(['"](.*)['"]\)/
+                    $func->{$1} = $2
+                $elif $l=~/^\s*parameters_c_only\(['"](.*)['"]\)/ -> $t
+                    push @{$func->{params}}, "C-only: $t"
+                $elif $l=~/^\s*parameter\((.*)\)/ -> $t
+                    my $p = {}
+                    $t=~/(.*),\s*desc=['"]([^'"]*)['"](.*)/
+                        $p->{desc} = $2
+                        $t = "$1$3"
+                    $t=~s/['"]//g
+                    my @tlist = split /,\s*/, $t
+                    $p->{name} = shift @tlist
+                    $p->{kind} = shift @tlist
+                    $p->{t} = join(", ", @tlist)
+                    push @{$func->{params}}, $p
+                $elif $l=~/^\s*(callback|no_ierror)/
+                    $func->{$1}=1
+                undef $l
+
+fncode: load_standard_types
+    $global %MAPS
+    my $mapping
+    &call open_r, binding-tool/bindingtypes.py
+        s/#.*$//g
+        $if /^(\w+_KIND_MAP)\s*=\s*\{/
+            $mapping = {}
+            $MAPS{$1} = $mapping
+        $elif /^(\w+_KIND_MAP)\s*=\s*copy.deepcopy\((\w+)\)/
+            $mapping = {}
+            $MAPS{$1} = $mapping
+            %$mapping = %{$MAPS{$2}}
+        $if /^(\w+_KIND_MAP)\.update\(\{\s*$/
+            $mapping = $MAPS{$1}
+        $elif /^\}/
+            undef $mapping
+        $elif $mapping && /^\s*'(\w+)'\s*:\s*(.*)/ -> $key, $val
+            $if $val=~/['"](.*)['"]/
+                $val = $1
+            $elif $val=~/^(\w+)/
+                $val = $1
+            $mapping->{$key} = $val
+
+fncode: load_default_descriptions
+    $global %default_descriptions
+    &call open_r, binding-tool/bindinglis.py
+        $if /DEFAULT_DESCRIPTIONS.update\(\{/
+            $while <In>
+                $if /^\s*\}\)/
+                    last
+                $elif /^\s+'(\w+)':\s*'(.*)',/
+                    $default_descriptions{$1} = $2
+
+#---------------------------------------- 
+fncode: strip_quotes($t)
+    $if $t=~/^['"](.*)['"]/
+        return $1
+    return $t
+

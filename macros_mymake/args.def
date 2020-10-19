@@ -69,8 +69,13 @@ subcode: parse_args
         $foreach $a in @ARGV
             $if $a=~/^-quick/
                 $opts{quick}=1
-            $elif $a=~/^--(.*?)=(.*)/
+            $elif $a=~/^--(.*?)=(.*)/ -> $o, $v
                 $opts{$1}=$2
+                $if $v eq "no"
+                    $if $o=~/^with-(.*)/
+                        $opts{"without-$1"} = 1
+                    $elif $o=~/^enable-(.*)/
+                        $opts{"disable-$1"} = 1
             $elif $a=~/^--(.*)/
                 $opts{$1}=1
             $elif $a=~/^(\w+)=(.*)/

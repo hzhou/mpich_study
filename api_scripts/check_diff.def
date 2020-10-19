@@ -1,0 +1,36 @@
+page: check_diff
+    module: perl
+    arg: send.c
+
+    $if -f $ARGV[0]
+        check_diff($ARGV[0])
+
+macros:
+    orig: /home/hzhou/work/mpich-github
+
+fncode: check_diff($f)
+    my $orig_file="$(orig)/src/mpi/pt2pt/$f"
+    load_file($orig_file, "/tmp/t1.c")
+    load_file($f, "/tmp/t2.c")
+    system "diff -b /tmp/t1.c /tmp/t2.c"
+
+fncode: load_file($f, $f_out)
+    my @lines
+    my $line_cont
+    &call open_r, $f
+        $if /^(int \w+\(.*)/
+            $line_cont = $1
+        $elif $line_cont
+            $if /^\s*(.*)/
+                $line_cont .= " $1"
+        # ------------
+        $if $line_cont
+            $if $line_cont=~/(;|\))\s*$/
+                push @lines, "$line_cont\n"
+                $line_cont = undef
+        $else
+            push @lines, $_
+
+    &call open_W, $f_out
+        $foreach $l in @lines
+            print Out $l
