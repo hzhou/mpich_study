@@ -1,9 +1,12 @@
 page: check_diff
     module: perl
-    arg: send.c
 
-    $if -f $ARGV[0]
-        check_diff($ARGV[0])
+    my @files = glob("*.c")
+    $foreach $f in @files
+        $print \n\n---- $f ----\n
+        check_diff($f)
+        $if 0 && $f ge "is"
+            last
 
 macros:
     orig: /home/hzhou/work/mpich-github
@@ -17,20 +20,35 @@ fncode: check_diff($f)
 fncode: load_file($f, $f_out)
     my @lines
     my $line_cont
+    my @man_notes
     &call open_r, $f
         $if /^(int \w+\(.*)/
             $line_cont = $1
+        $elif /^\.N (\w+)/
+            push @man_notes, $1
+            next
+        $elif /^\@\*\//
+            $foreach $a in sort @man_notes
+                push @lines, ".N $a\n"
         $elif $line_cont
             $if /^\s*(.*)/
                 $line_cont .= " $1"
         # ------------
         $if $line_cont
-            $if $line_cont=~/(;|\))\s*$/
+            $if $line_cont=~/;$/
                 push @lines, "$line_cont\n"
-                $line_cont = undef
+                undef $line_cont
+            $elif /^{/
+                push @lines, "$line_cont\n"
+                undef $line_cont
+                push @lines, $_
+        $elif /^\s*(\/\*.*\*\/\s*)?$/
+            # skip empty line
+        $elif /^\s*MPIR_FUNC_.*(STATE_DECL|ENTER|EXIT)/
+            # skip function log
         $else
             push @lines, $_
 
-    &call open_W, $f_out
+    &call open_w, $f_out
         $foreach $l in @lines
             print Out $l

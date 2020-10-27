@@ -4,40 +4,122 @@ page: extract_custom
 
     $foreach $dir in "pt2pt"
         my @FUNCS
-        my @files = glob("$(mpich_dir)/src/mpi/$dir/*.c")
-        my ($flag, $func)
+        my @files = glob("$(orig_mpich_dir)/src/mpi/$dir/*.c")
         $foreach $f in @files
-             &call open_r, $f
-                $if /^#pragma weak\s+(MPI_\w+)\s*=/ -> $name
-                    my $file
-                    $if $f=~/.*src\/mpi\/$dir\/(.*)/
-                        $file = $1
-                    $func={name=>$name, file=>"$dir/$file"}
-                    push @FUNCS, $func
-                $elif /^\/\*\@/
-                    $flag = "man"
-                $elif /^\@\*\//
-                    undef $flag
-                $elif /^\s*\/\*\s*\.\.\.\s*body of routine \.\.\.\s*\*\//
-                    $flag = "body"
-                    $func->{body} = []
-                $elif /^\s*\/\*\s*\.\.\.\s*end of body of routine \.\.\.\s*\*\//
-                    undef $flag
-                $elif $flag eq "man" and /^\s*(MPI_\w+) -\s*(.*)/
-                    $func->{desc} = $2
-                $elif $flag eq "body"
-                    push @{$func->{body}}, $_
+            my ($flag, $func)
+            &call open_r, $f
+                $call parse_orig_file
+            $call filter_man_notes
 
-        &call open_W, mpi_${dir}_api.txt
-            $print "; vim: set ft=c:"
-            $foreach $func in @FUNCS
-                $print
-                $print $func->{name}:
-                $print "    .file: $func->{file}"
-                $print "    .desc: $func->{desc}"
-                my $body=$func->{body}
-                my $i1 = 0
-                my $i2 = @$body
+        &call open_W, $(mpich)/src/mpi/$dir/mpi_${dir}_api.txt
+            $call dump_custom
+
+    subcode: parse_orig_file
+        $if /^#pragma weak\s+(MPI_\w+)\s*=/ -> $name
+            my $file
+            $if $f=~/.*src\/mpi\/$dir\/(.*)/
+                $file = $1
+            $func={name=>$name, file=>"$dir/$file"}
+            push @FUNCS, $func
+        $elif /^\/\*\@/
+            $flag = "man"
+        $elif /^(int\s*MPIR_.*)/
+            $flag = "mpir"
+            $if !$func->{mpir}
+                $func->{mpir} = []
+            push @{$func->{mpir}}, "\n", $_
+        $elif /^\s*\/\*\s*\.\.\.\s*body of routine \.\.\.\s*\*\//
+            $flag = "body"
+            $func->{body} = []
+        $elif /^\.seealso:\s*(.*)/
+            $func->{seealso} = $1
+        $elif /^\.N (Errors|MPI.*_ERR_.*|MPI_SUCCESS)/
+            # skip
+        $elif /^\@\*\//
+            $flag = "after_man"
+        $elif /^\s*MPIR_FUNC_.*STATE_DECL/
+            $flag = "after_state_decl"
+
+        $elif $flag eq "after_man" and /^\s*(MPIR_Request \*)\s*(\w+)\s*.*;/
+            $if $2 eq "msgp" && $func->{name}=~/mrecv/i
+                # needed for validation
+                $if /\*rreq = NULL/
+                    push @{$func->{local_vars}}, "    MPIR_Request *rreq = NULL;"
+                next
+            $if !$func->{local_vars}
+                $func->{local_vars}=[]
+            push @{$func->{local_vars}}, $_
+        # ---- special actions under $flag ----
+        $elif $flag eq "man"
+            $if /^\s*(MPI_\w+) -\s*(.*)/
+                $func->{desc} = $2
+            $elif /^(Notes:|\.N )/
+                $func->{notes} = [$_]
+                $flag = "man_notes"
+        $elif $flag eq "man_notes" 
+            push @{$func->{notes}}, $_
+        $elif $flag eq "mpir"
+            push @{$func->{mpir}}, $_
+            $if /^}\s*$/
+                $flag = undef
+        $elif $flag eq "body"
+            $if /^\s*\/\*\s*\.\.\.\s*end of body of routine \.\.\.\s*\*\//
+                undef $flag
+            $else
+                push @{$func->{body}}, $_
+
+    subcode: filter_man_notes
+        $if $func and $func->{notes}
+            my %has
+            my $notes=$func->{notes}
+            $while @$notes
+                $if $notes->[-1]=~/^\s*$/
+                    pop @$notes
+                $elif $notes->[-1]=~/^\s*\.N\s*(ThreadSafe|Fortran|FortranStatus|FortStatusArray|FortranString)/
+                    $has{$1} = 1
+                    pop @$notes
+                $else
+                    last
+            $if !@$notes
+                $func->{notes} = undef
+            my @skips
+            $if !$has{ThreadSafe}
+                push @skips, "ThreadSafe"
+            $if !$has{Fortran}
+                push @skips, "Fortran"
+            $if @skips
+                $func->{skip}=join(', ', @skips)
+
+
+    subcode: dump_custom
+        $print "; vim: set ft=c:"
+        $foreach $func in @FUNCS
+            $print
+            $print $func->{name}:
+            $map dump_attr, file, desc, skip, seealso
+            $if $func->{notes}
+                $call dump_notes
+            $if $func->{mpir}
+                # $call dump_mpir
+            $call dump_body
+
+        subcode: dump_mpir
+            $foreach $l in @{$func->{mpir}}
+                $print $l-
+
+        subcode: dump_body
+            my $body=$func->{body}
+            my $i1 = 0
+            my $i2 = @$body
+            $call trim_empty_lines
+
+            $print "{"
+            $call dump_local_vars
+            $for $i=$i1:$i2
+                $print $body->[$i]-
+            $print "}"
+
+            subcode: trim_empty_lines
                 $while $i1<$i2
                     $if $body->[$i1]!~/^\s*$/
                         last
@@ -47,7 +129,26 @@ page: extract_custom
                         last
                     $i2--
 
-                $print "{"
-                $for $i=$i1:$i2
-                    $print $body->[$i]-
-                $print "}"
+            subcode: dump_local_vars
+                $if $func->{local_vars}
+                    $foreach $l in @{$func->{local_vars}}
+                        $print $l-
+                    $print
+
+        subcode: dump_attr(key)
+            $if $func->{$(key)}
+                $print "    .$(key): $func->{$(key)}"
+
+        subcode: dump_notes
+            my $notes = $func->{notes}
+            $while @$notes && $notes->[0]=~/^\s*$/
+                shift @$notes
+            $while @$notes && $notes->[-1] =~ /^\s*$/
+                pop @$notes
+
+            $print "/*"
+            my $sp = ' 'x4
+            $foreach $l in @{$func->{notes}}
+                $print "$sp$l-"
+            $print "*/"
+

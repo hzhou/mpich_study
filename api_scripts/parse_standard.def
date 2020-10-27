@@ -20,7 +20,7 @@ fncode: dump_api($api_txt)
             my $fn = $FUNCS{$f}
             $print $fn->{name}:
             $if $fn->{return_type}
-                $print "    .return: $fn->{return}"
+                $print "    .return: $fn->{return_type}"
             $foreach $p in @{$fn->{params}}
                 my $name = $p->{name}
                 my $kind = $p->{kind}
@@ -28,22 +28,30 @@ fncode: dump_api($api_txt)
                 $if $p->{t}
                     $s.=", $p->{t}"
                 $if $p->{desc}
+                    $call unescape_latex, $p->{desc}
                     $s.=", [$p->{desc}]"
-                $elif $default_descriptions{$kind}
-                    $s.=", [$default_descriptions{$kind}]"
                 $else
                     # warn "Missing description for $fn->{name} param $name!\n"
                 $print $s
 
         $print "\nType Mappings"
         $print ================
-        $foreach $map in sort keys %MAPS
-            $if $map=~/^BASE_/
-                next
+        $foreach $map in @MAPS
             my $mapping = $MAPS{$map}
             $print $map:
             $foreach $k in sort keys %$mapping
                 $print "    $k: $mapping->{$k}"
+
+        $print "\nDefault Descriptions"
+        $print ================
+        $foreach $k in sort keys %default_descriptions
+            $call unescape_latex, $default_descriptions{$k}
+            $print $k: $default_descriptions{$k}
+
+    subcode: unescape_latex(t)
+        $(t)=~s/\\+(consti?|constskip|mpiarg|mpicode|mpifunc)\{(.*?)\}/'$2'/g
+        $(t)=~s/\\+(mbox|emph)\{(.*)?\}/$2/g
+        $(t)=~s/\\+(MPI)\/?/$1/gi
 
 #---- Loading from mpi-standard ----
 subcode: load_standard_api
@@ -87,7 +95,10 @@ fncode: load_standard_funcs
                     push @{$func->{params}}, "C-only: $t"
                 $elif $l=~/^\s*parameter\((.*)\)/ -> $t
                     my $p = {}
-                    $t=~/(.*),\s*desc=['"]([^'"]*)['"](.*)/
+                    $if $t=~/(.*),\s*desc='([^']*)'(.*)/
+                        $p->{desc} = $2
+                        $t = "$1$3"
+                    $elif $t=~/(.*),\s*desc="([^"]*)"(.*)/
                         $p->{desc} = $2
                         $t = "$1$3"
                     $t=~s/['"]//g
@@ -101,17 +112,18 @@ fncode: load_standard_funcs
                 undef $l
 
 fncode: load_standard_types
-    $global %MAPS
+    $global %MAPS, @MAPS
     my $mapping
     &call open_r, binding-tool/bindingtypes.py
         s/#.*$//g
         $if /^(\w+_KIND_MAP)\s*=\s*\{/
             $mapping = {}
             $MAPS{$1} = $mapping
+            push @MAPS, $1
         $elif /^(\w+_KIND_MAP)\s*=\s*copy.deepcopy\((\w+)\)/
-            $mapping = {}
+            $mapping = {".base" => $2}
             $MAPS{$1} = $mapping
-            %$mapping = %{$MAPS{$2}}
+            push @MAPS, $1
         $if /^(\w+_KIND_MAP)\.update\(\{\s*$/
             $mapping = $MAPS{$1}
         $elif /^\}/

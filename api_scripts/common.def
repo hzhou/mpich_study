@@ -1,70 +1,82 @@
 macros:
     OUTDIR: .
     standard_dir: /home/hzhou/work/mpi-standard
-    mpich_dir: /home/hzhou/work/mpich-github
-    standard_api_txt: $(OUTDIR)/mpi_standard_api.txt
-    custom_api_txt: $(OUTDIR)/mpi_custom_api.txt
+    orig_mpich_dir: /home/hzhou/work/pull_requests/branch-2010_mpi_gen
+    mpich: /home/hzhou/work/mpich-github
+    standard_api_txt: maint/mpi_standard_api.txt
 
 subcode: load_api(@custom_list)
-    load_mpi_api("$(standard_api_txt)")
-    # load_mpi_api("$(custom_api_txt)")
+    $(if:do_sync)
+        $(set:mpich=.)
+    load_mpi_api("$(mpich)/$(standard_api_txt)")
     $(for:f in $(custom_list))
-        load_mpi_api("$(OUTDIR)/mpi_$(f)_api.txt")
+        load_mpi_api("$(mpich)/src/mpi/$(f)/mpi_$(f)_api.txt")
+
+subcode: _autoload
+    $global %FUNCS, %MAPS, %default_descriptions
 
 #---------------------------------------- 
 fncode: load_mpi_api($api_txt)
-    $global %FUNCS, %MAPS, %SEEALSO, @SEEALSO
     my $see_also_idx=0
     my ($cur_func, $cur_map, $cur_name)
-    my $stage
+    my $stage = ''
     &call open_r, $api_txt
-        $if /^(MPI\w+):\s*(.*)/
+        $if /^(MPI\w+):\s*(.*)/ -> $name, $attr
             $stage = "FUNC"
-            $cur_name = $1
-            $if $FUNCS{$1}
-                $cur_func = $FUNCS{$1}
-                $if $2
-                    $cur_func->{attrs} = $2
+            $cur_name = $name
+            $if exists $FUNCS{$name}
+                $cur_func = $FUNCS{$name}
+                $if $attr
+                    $cur_func->{attrs} = $attr
             $else
-                $cur_func = {name=>$1, params=>[], attrs=>$2}
-                $FUNCS{$1} = $cur_func
-        $elif /^(\w+_KIND_MAP):/
+                $cur_func = {name=>$name, params=>[], attrs=>$attr}
+                $FUNCS{$name} = $cur_func
+        $elif /^(\w+_KIND_MAP):/ -> $name
             $stage = "MAP"
-            $cur_name = $1
-            $cur_map = {_name=>$1}
-            $MAPS{$1} = $cur_map
-        $elif /^SEEALSO:\s*(.*)/ -> $t
-            $see_also_idx++
-            my @tlist = split /,\s*/, $t
-            $SEEALSO[$see_also_idx] = \@tlist
-            $foreach $a in @tlist
-                $SEEALSO{$a} = $see_also_idx
+            $cur_name = $name
+            $cur_map = {_name=>$name}
+            $MAPS{$name} = $cur_map
+        $elif /^Default Descriptions/
+            $stage = "default_descriptions"
+            $cur_name = "Default Descriptions"
         $elif $stage eq "FUNC"
-            $if /^\s+\.(\w+):\s*(.*)/
-                $cur_func->{$1} = $2
+            $if /^\s+\.(\w+):\s*(.*)/ -> $key, $val
+                $cur_func->{$key} = $val
             $elif /^\s+(\w+):\s*(\w+)(.*)/ -> $name, $kind, $t
                 my $p={name=>$name, kind=>$kind}
-                $if $t=~/,\s*\[(.*)\]\s*$/
-                    $t = $`;
-                    $p->{desc} = $1
-                    $global %mpich_man_maps=(COMMUNICATOR=>"handle", DATATYPE=>"handle", BUFFER=>"choice", TAG=>"integer", RANK=>"integer")
-                    $if $mpich_man_maps{$p->{kind}}
-                        $p->{desc} .= " ($mpich_man_maps{$p->{kind}})"
-                    
+                $if $t=~/^(.*),\s*\[(.*)\]\s*$/ -> $t*, $p->{desc}*
+                    # NOOP
                 $p->{t} = $t
                 push @{$cur_func->{params}}, $p
             $elif /^{/
-                my $body = $cur_func->{body}
-                $if !$body
-                    $body = []
-                    $cur_func->{body} = $body
-                $while <In>
-                    $if /^}/
-                        last
-                    push @$body, $_
+                $stage = "FUNC-body"
+                $if !exists $cur_func->{body}
+                    $cur_func->{body} = []
+            $elif /^\/\*/
+                $stage = "FUNC-notes"
+                $if !exists $cur_func->{notes}
+                    $cur_func->{notes} = []
         $elif $stage eq "MAP"
-            $if /^\s+(\w+):\s*(.*)/ -> $name, $type
+            $if /^\s+\.base:\s*(\w+)/ -> $name
+                %$cur_map = %{$MAPS{$name}}
+                $cur_map->{_name} = $cur_name
+                $MAPS{$cur_name} = $cur_map
+            $elif /^\s+(\w+):\s*(.*)/ -> $name, $type
                 $cur_map->{$name} = $type
+        $elif $stage eq "default_descriptions"
+            $if /^\s*(\w+):\s*(.*)/ -> $key, $val
+                $default_descriptions{$key} = $val
+        $elif $stage eq "FUNC-body"
+            $if /^}/
+                $stage = "FUNC"
+            $else
+                push @{$cur_func->{body}}, $_
+        $elif $stage eq "FUNC-notes"
+            $if /^\*\//
+                $stage = "FUNC"
+            $else
+                s/^    //
+                push @{$cur_func->{notes}}, $_
 
 #---------------------------------------- 
 fncode: get_C_params($func, $mapping)
@@ -77,11 +89,12 @@ fncode: get_C_params($func, $mapping)
         return \@param_list
 
 fncode: get_C_param($param, $mapping)
-    $if $param->{kind} eq "VARARGS"
+    my $kind = $param->{kind}
+    $if $kind eq "VARARGS"
         return "..."
 
-    $call get_param_type, $param->{kind}, $param->{t}
-    $call check_want_star, $param->{kind}, $param->{t}
+    $call get_param_type
+    $call check_want_star
 
     my $s
     $if $param->{t}=~/constant=True/
@@ -90,53 +103,56 @@ fncode: get_C_param($param, $mapping)
 
     $if $want_star
         $s.=" *"
+        $(if:style!=succinct)
+            $if $s!~/\b(void|int|char|size_t)\b/
+                $s.=" "
     $else
         $s.=" "
     $s.=$param->{name}
 
     $if $want_bracket
         $s.="[]"
-    $if $param->{t}=~/length=\[.*?, (\d+)\]/
-        $s.="[$1]"
+    $if $param->{t}=~/length=\[.*?, (\d+)\]/ -> $n
+        $s.="[$n]"
 
     return $s
 
     # -----------------------------
-    subcode: get_param_type(type, t)
-        my $type = $mapping->{$(type)}
-        $if $(type) eq "FUNCTION"
-            $if $(t)=~/func_type=(\w+)/
-                $type=$1
+    subcode: get_param_type
+        my $type = $mapping->{$kind}
+        $if $kind eq "FUNCTION"
+            $if $param->{t}=~/func_type=(\w+)/ -> $type*
+                NOOP
             $else
-                $print Function type for parameter $param->{name} not found!
+                $die Function type for parameter $param->{name} not found!
         $if !$type
-            $print Type mapping [$mapping] $(type) not found !
+            $die Type mapping [$mapping] $kind not found!
 
-    subcode: check_want_star(type, t)
+    subcode: check_want_star
+        my $t = $param->{t}
         my ($want_star, $want_bracket)
-        $if $(type)=~/^ATTRIBUTE_VAL(_10)?$/
+        $if $kind=~/^ATTRIBUTE_VAL(_10)?$/
             $want_star = 1
-        $elif $(type) eq "STRING"
-            $if $(t)=~/length=/ and $(t)!~/pointer=/
+        $elif $kind eq "STRING"
+            $if $t=~/length=/ and $t!~/pointer=/
                 $want_bracket = 1
             $else
                 $want_star = 1
-        $elif $(type)=~/^STRING_(2D)?ARRAY$/
+        $elif $kind=~/^STRING_(2D)?ARRAY$/
             $want_bracket = 1
-        $elif $(type)=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+        $elif $kind=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
             $want_star = 1
-        $elif $(t)=~/direction=(in)?out|pointer=/ and $(t)!~/length=/
+        $elif $t=~/direction=(in)?out|pointer=/ and $t!~/length=/
             $want_star = 1
 
 fncode: is_pointer_type($kind, $t)
-    $(set:type=$kind)
-    $if $(type)=~/^ATTRIBUTE_VAL(_10)?$/
+    $if $kind=~/^ATTRIBUTE_VAL(_10)?$/
         return 1
-    $elif $(type) eq "STRING"
+    $elif $kind eq "STRING"
         return 1
-    $elif $(type)=~/^STRING_(2D)?ARRAY$/
+    $elif $kind=~/^STRING_(2D)?ARRAY$/
         return 1
-    $elif $(type)=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+    $elif $kind=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
         return 1
     $elif $t=~/direction=(in)?out|pointer=/ and $t!~/length=/
         return 1
@@ -144,9 +160,8 @@ fncode: is_pointer_type($kind, $t)
         return 0
 
 #---- dump utils ------------------------------------ 
-fncode: dump_copy_right
-    $(set:print_to=Out)
-    $print "\x2f*"
+subcode: copy_right
+    $print "/*"
     $print " * Copyright (C) by Argonne National Laboratory"
     $print " *     See COPYRIGHT in top-level directory"
     $print " */"
