@@ -1,0 +1,74 @@
+page: get_ch4_api
+    module: perl
+
+    $global @apis, %apis
+    $call get_netmod_api
+    $call get_shmmod_api
+
+    &call open_W, ch4_api.txt
+        $print "API:"
+        $foreach $a in @apis
+            parse_api($a)
+            print Out "  $a->{name} : $a->{ret}\n"
+            $if $a->{params}
+                my $inline=" "
+                $if $a->{nm_inline}
+                    $inline="*"
+                print Out "      NM$inline: ", join(", ", @{$a->{params}}), "\n";
+            $if $a->{shm_params}
+                my $inline=" "
+                $if $a->{shm_inline}
+                    $inline="*"
+                print Out "     SHM$inline: ", join(", ", @{$a->{shm_params}}), "\n";
+        $print "\nPARAM:"
+            my @plist = sort keys %name_types
+            $foreach $p in @plist
+                $print "    $p: $name_types{$p}"
+
+subcode: get_netmod_api
+    my $cur_api
+    &call open_r, src/mpid/ch4/netmod/include/netmod.h
+        $if /^(.*?)\s*MPIDI_NM_(\w+)\((.*)/ -> $ret, $name, $param
+            $cur_api = {ret=>$ret, name=>$name, param=>$param}
+
+            $if $ret=~/^MPL_STATIC_INLINE_PREFIX\s+(.*)/
+                $ret = $1
+                $cur_api->{ret} = $ret
+                $cur_api->{nm_inline} = 1
+
+            push @apis, $cur_api
+            $apis{$name} = $cur_api
+            $if /;/
+                undef $cur_api
+        $elif $cur_api && /^\s+(.*)/
+            $cur_api->{param} .= " $1"
+            $if /;/
+                undef $cur_api
+
+subcode: get_shmmod_api
+    my $cur_api
+    &call open_r, src/mpid/ch4/shm/include/shm.h
+        $if /^(.*?)\s*MPIDI_SHM_(\w+)\((.*)/ -> $ret, $name, $param
+            $if $apis{$name}
+                $cur_api = $apis{$name}
+            $else
+                $cur_api = {name=>$name, shm_param=>$param}
+                push @apis, $cur_api
+
+            $if $ret=~/^MPL_STATIC_INLINE_PREFIX\s+(.*)/
+                $ret = $1
+                $cur_api->{shm_inline} = 1
+
+            $if !$cur_api->{ret}
+                $cur_api->{ret} = $ret
+            $elif $ret ne $cur_api->{ret}
+                warn "  ! New SHM ret: $ret [$cur_api->{ret}] $name\n"
+
+            $cur_api->{shm_param} = $param
+            $if /;/
+                undef $cur_api
+        $elif $cur_api && /^\s+(.*)/
+            $cur_api->{shm_param} .= " $1"
+            $if /;/
+                undef $cur_api
+

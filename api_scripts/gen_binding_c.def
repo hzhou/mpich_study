@@ -27,7 +27,7 @@ fncode: dump_mpi_c($func)
     $(set:print_to=)
 
     $call set_file
-    &call open_W, $file
+    &call open_W, $file_path
         $call dump_out
 
     subcode: push_to_out
@@ -47,10 +47,10 @@ fncode: dump_mpi_c($func)
     # ---------------------
     subcode: set_file
         $(if:do_sync)
-            my $file = "src/mpi/" . $func->{file}
+            my $file_path = "src/mpi/" . $func->{file}
         $(else)
-            my ($dir, $file)
-            $if $func->{file}=~/(.*)\/(.*\.c)/ -> $dir*, $file*
+            my ($dir, $file_path)
+            $if $func->{file}=~/(.*)\/(.*\.c)/ -> $dir*, $file_path*
                 # NOOP
 
 fncode: func_check_params($func)

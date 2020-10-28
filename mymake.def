@@ -21,10 +21,9 @@ page: mymake
     $call save_last_ARGV
     $call @dump_args
 
-    $if -f "maint/gen_ch4_api.pl" and !-f "src/mpid/ch4/netmod/include/netmod.h"
-        system "perl maint/gen_ch4_api.pl"
-    $if -f "maint/gen_binding_c.pl" and !-f "src/mpi/pt2pt/send.c"
-        system "perl maint/gen_binding_c.pl"
+    my $python = find_python3()
+    $call autogen, src/mpi/pt2pt/send.c, maint/gen_binding_c
+    $call autogen, src/mpid/ch4/netmod/include/netmod.h, maint/gen_ch4_api
 
     $if $opts{quick}
         $if !-f "libtool"
@@ -37,6 +36,13 @@ page: mymake
             system "perl $opts{mymake}_makefile.pl mpich"
     $else
         $call mpich_slow
+
+    subcode: autogen(check_file, script)
+        $if !-f "$(check_file)"
+            $if -f "$(script).pl"
+                system "perl $(script).pl"
+            $elif -f "$(script).py"
+                system "$python $(script).py"
 
     subcode: setup_mymake
         $if !-d "mymake"
@@ -55,6 +61,12 @@ page: mymake
     subcode: dump_args
         $(for:moddir,prefix,device)
             $print $1: $opts{$1}
+
+fncode: find_python3
+    $if `python -V 2>1` =~ /Python\s*3/
+        return "python"
+    $if `python3 -V 2>1` =~ /Python\s*3/
+        return "python3"
 
 subcode: short_circuits
     $if $ARGV[0]=~/^(clean|errmsg|cvars|log|log_show|logs|hydra|testing|test|makefile|config|libtool)$/

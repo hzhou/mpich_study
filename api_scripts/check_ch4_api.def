@@ -1,0 +1,14 @@
+page: t
+    module: sh
+    ref: /home/hzhou/work/pull_requests/mpich4836
+    netmod_inc: src/mpid/ch4/netmod/include
+    shmmod_inc: src/mpid/ch4/shm/include
+    netmod_dir: src/mpid/ch4/netmod
+
+    set -xe
+    $(for:netmod,netmod_impl)
+        diff output/$1.h $(ref)/$(netmod_inc)/$1.h
+    diff output/shm.h $(ref)/$(shmmod_inc)/shm.h
+    $(for:ofi,ucx,stubnm)
+        diff output/$1_func_table.c $(ref)/$(netmod_dir)/$1/func_table.c
+        diff output/$1_noinline.h $(ref)/$(netmod_dir)/$1/$1_noinline.h

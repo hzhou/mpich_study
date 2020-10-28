@@ -1,24 +1,40 @@
-module: perl
-# run: get_ch4_api
+# filter: perl_to_python
+macros:
+    OUTDIR: .
+    mpich: /home/hzhou/work/mpich-github
+    output: output
 
-page: gen_ch4
-    load_ch4_api("src/mpid/ch4/ch4_api.txt")
+page: gen_ch4_api
+    module: perl
 
-    dump_netmod_h("$(netmod_inc)/netmod.h")
+    $(if:do_sync)
+        $(set:mpich=.)
+    $(else)
+        $(set:netmod_inc=$(output))
+        $(set:shmmod_inc=$(output))
+        $(set:netmod_dir=$(output))
+
+    load_ch4_api("$(mpich)/src/mpid/ch4/ch4_api.txt")
+
     system "mkdir -p $(shmmod_inc)"
+    dump_netmod_h("$(netmod_inc)/netmod.h")
     dump_shm_h("$(shmmod_inc)/shm.h")
     dump_netmod_impl_h("$(netmod_inc)/netmod_impl.h")
 
-    $foreach $mod in "ofi", "ucx", "stubnm"
-        dump_func_table_c("$(netmod_dir)/$mod/func_table.c", $mod)
+    $foreach $m in "ofi", "ucx", "stubnm"
+        $(if:do_sync)
+            dump_func_table_c("$(netmod_dir)/$(func_table).c", $m)
+        $(else)
+            dump_func_table_c("$(netmod_dir)/${m}_$(func_table).c", $m)
 
-    $foreach $mod in "ofi", "ucx", "stubnm"
-        dump_noinline_h("$(netmod_dir)/$mod/${mod}_noinline.h", $mod)
+    $foreach $m in "ofi", "ucx", "stubnm"
+        dump_noinline_h("$(netmod_dir)/${m}_noinline.h", $m)
 
     macros:
         netmod_inc: src/mpid/ch4/netmod/include
         shmmod_inc: src/mpid/ch4/shm/include
-        netmod_dir: src/mpid/ch4/netmod
+        netmod_dir: src/mpid/ch4/netmod/$m
+        func_table: func_table
 
 #---------------------------------------- 
 fncode: dump_netmod_h($h_file)
@@ -81,11 +97,11 @@ fncode: dump_netmod_impl_h($h_file)
         $print "#ifndef NETMOD_DISABLE_INLINES"
         # ----
         &call each_netmod_api
-            $if !$(inline)
+            $if !$a->{'$(nm)_inline'}
                 next
             $call dump_api_impl
         # ----
-        $print "#endif \x2f\x2a NETMOD_DISABLE_INLINES */"
+        $print "#endif /* NETMOD_DISABLE_INLINES */"
         $print
         $print "#else"
         $(for:stubnm,ofi,ucx and 0,1,2)
@@ -97,7 +113,7 @@ fncode: dump_netmod_impl_h($h_file)
         $print "#else"
         $print "#error \"No direct netmod included\""
         $print "#endif"
-        $print "#endif \x2f\x2a NETMOD_INLINE */"
+        $print "#endif /* NETMOD_INLINE */"
 
 fncode: dump_func_table_c($c_file, $mod)
     my $MOD=uc($mod)
@@ -124,7 +140,7 @@ fncode: dump_func_table_c($c_file, $mod)
         $print "#endif"
 
     subcode: dump_func_table_entry
-        $if $a->{nm_inline}
+        $if $a->{'nm_inline'}
             $print "    .$a->{func_name} = MPIDI_NM_$a->{name},"
         $else
             $print "    .$a->{func_name} = MPIDI_${MOD}_$a->{name},"
@@ -135,23 +151,29 @@ fncode: dump_noinline_h($h_file, $mod)
         $print "#include \"${mod}_impl.h\""
         $print
         &call each_netmod_api
-            $if !$(inline)
+            $if !$a->{'$(nm)_inline'}
                 my $s
                 $call append_ret
                 $s.="MPIDI_${MOD}_$a->{name}("
                 my $tail = ");"
-                dump_s_param_tail($s, $(params), $tail)
+                dump_s_param_tail($Out, $s, $a->{'$(nm)_params'}, $tail)
         $print
         $print "#ifdef NETMOD_INLINE"
         &call each_netmod_api
-            $if !$(inline)
+            $if !$a->{'$(nm)_inline'}
                 $print "#define MPIDI_NM_$a->{name} MPIDI_${MOD}_$a->{name}"
         $print "#endif /* NETMOD_INLINE */"
 
 #---------------------------------------- 
+subcode: open_Out(file)
+    $(set:Out=$Out)
+    &call open_W, $(file)
+        dump_copyright($Out)
+        BLOCK
+        
+
 subcode: dump_h(h_file)
-    &call open_W, $(h_file)
-        dump_copy_right()
+    &call open_Out, $(h_file)
         my $INC = get_include_guard($(h_file))
         $print "#ifndef $INC"
         $print "#define $INC"
@@ -161,90 +183,16 @@ subcode: dump_h(h_file)
         $print "#endif /* $INC */"
 
 subcode: dump_c(c_file)
-    &call open_W, $(c_file)
-        dump_copy_right()
+    &call open_Out, $(c_file)
         BLOCK
 
-fncode: dump_copy_right
-    $(set:print_to=Out)
-    $print "\x2f*"
+fncode: dump_copyright($out)
+    $(set:print_to=$out)
+    $print "/*"
     $print " * Copyright (C) by Argonne National Laboratory"
     $print " *     See COPYRIGHT in top-level directory"
     $print " */"
     $print
-
-#---------------------------------------- 
-page: get_ch4_api
-    $global @apis, %apis
-    $call get_netmod_api
-    $call get_shmmod_api
-
-    &call open_W, ch4_api.txt
-        $print "API:"
-        $foreach $a in @apis
-            parse_api($a)
-            print Out "  $a->{name} : $a->{ret}\n"
-            $if $a->{params}
-                my $inline=" "
-                $if $a->{nm_inline}
-                    $inline="*"
-                print Out "      NM$inline: ", join(", ", @{$a->{params}}), "\n";
-            $if $a->{shm_params}
-                my $inline=" "
-                $if $a->{shm_inline}
-                    $inline="*"
-                print Out "     SHM$inline: ", join(", ", @{$a->{shm_params}}), "\n";
-        $print "\nPARAM:"
-            my @plist = sort keys %name_types
-            $foreach $p in @plist
-                $print "    $p: $name_types{$p}"
-
-subcode: get_netmod_api
-    my $cur_api
-    &call open_r, src/mpid/ch4/netmod/include/netmod.h
-        $if /^(.*?)\s*MPIDI_NM_(\w+)\((.*)/ -> $ret, $name, $param
-            $cur_api = {ret=>$ret, name=>$name, param=>$param}
-
-            $if $ret=~/^MPL_STATIC_INLINE_PREFIX\s+(.*)/
-                $ret = $1
-                $cur_api->{ret} = $ret
-                $cur_api->{nm_inline} = 1
-
-            push @apis, $cur_api
-            $apis{$name} = $cur_api
-            $if /;/
-                undef $cur_api
-        $elif $cur_api && /^\s+(.*)/
-            $cur_api->{param} .= " $1"
-            $if /;/
-                undef $cur_api
-
-subcode: get_shmmod_api
-    my $cur_api
-    &call open_r, src/mpid/ch4/shm/include/shm.h
-        $if /^(.*?)\s*MPIDI_SHM_(\w+)\((.*)/ -> $ret, $name, $param
-            $if $apis{$name}
-                $cur_api = $apis{$name}
-            $else
-                $cur_api = {name=>$name, shm_param=>$param}
-                push @apis, $cur_api
-
-            $if $ret=~/^MPL_STATIC_INLINE_PREFIX\s+(.*)/
-                $ret = $1
-                $cur_api->{shm_inline} = 1
-
-            $if !$cur_api->{ret}
-                $cur_api->{ret} = $ret
-            $elif $ret ne $cur_api->{ret}
-                warn "  ! New SHM ret: $ret [$cur_api->{ret}] $name\n"
-
-            $cur_api->{shm_param} = $param
-            $if /;/
-                undef $cur_api
-        $elif $cur_api && /^\s+(.*)/
-            $cur_api->{shm_param} .= " $1"
-            $if /;/
-                undef $cur_api
 
 #---------------------------------------- 
 fncode: parse_api($a)
@@ -264,7 +212,7 @@ fncode: parse_api($a)
 
 fncode: get_param_list($param)
     my @tlist
-    $foreach $t in split /,\s*/, $param
+    $foreach $t in split(/,\s*/, $param)
         $if $t=~/(.*?)\s*(\w+)(\[\])?$/ -> $type, $name, $array
             $if $array
                 $type .= $array
@@ -300,8 +248,7 @@ fncode: get_param_phrase($name, $is_arg)
             return $p
 
     my $t = $name_types{$name}
-    $if $t=~/(.*)\[\]/
-        $t = $1
+    $if $t=~/(.*)\[\]/ -> $t*
         $p .= '[]'
 
     $if $name eq "void"
@@ -325,13 +272,13 @@ fncode: get_space_after_type($type)
     $else
         return ' '
 
-fncode: dump_s_param_tail($s, $params, $tail, $is_arg)
+fncode: dump_s_param_tail($out, $s, $params, $tail, $is_arg=0)
     my $count = @$params
     my $n_lead = length($s)
     my $n = $n_lead
     my $space=""
 
-    $(set:print_to=Out)
+    $(set:print_to=$out)
     $if $count == 1
         my $t = get_param_phrase($params->[0], $is_arg)
         $if $n+ length($t) + length($tail) <= 100
@@ -358,8 +305,8 @@ fncode: dump_s_param_tail($s, $params, $tail, $is_arg)
         $n=length($s)
         $space = ' '
 
-    $if length($s) > 100 && $s=~/(.*) MPL_STATIC_INLINE_SUFFIX;/
-        $print $1
+    $if length($s) > 100 && $s=~/(.*) MPL_STATIC_INLINE_SUFFIX;/ -> $t
+        $print $t
         $print "    MPL_STATIC_INLINE_SUFFIX;"
     $else
         $print "$s"
@@ -369,44 +316,42 @@ fncode: load_ch4_api($ch4_api_txt)
     $global @apis, %name_types
     my ($cur_api, $flag)
     &call open_r, $ch4_api_txt
-        $if /^(.*API|PARAM):/
-            $flag=$1
+        $if /^(.*API|PARAM):/ -> $flag*
+            NOOP
         $elif $flag =~ /API$/
             $if /^\s+(NM|SHM)(\*?)\s*:\s*(.+)/ -> $nm, $inline, $t
-                my @tlist = split /,\s*/, $t
+                my @tlist = split(/,\s*/, $t)
                 $if $nm eq "NM"
                     $cur_api->{nm_params} = \@tlist
-                    $if $inline
-                        $cur_api->{nm_inline}=1
+                    $cur_api->{nm_inline} = $inline
                 $else
                     $cur_api->{shm_params} = \@tlist
-                    $if $inline
-                        $cur_api->{shm_inline}=1
-            $elif /^\s+(\w+)\s*:\s*(.+)/
-                $cur_api = {name=>$1, ret=>$2}
+                    $cur_api->{shm_inline} = $inline
+            $elif /^\s+(\w+)\s*:\s*(.+)/ -> $name, $ret
+                $cur_api = {name=>$name, ret=>$ret}
                 push @apis, $cur_api
-                my $func_name = $1
-                $if $func_name=~/mpi_(init|finalize)_hook/
-                    $func_name = "mpi_$1"
+                my $func_name = $name
+                $if $func_name=~/mpi_(init|finalize)_hook/ -> $init
+                    $func_name = "mpi_$init"
                 $cur_api->{func_name} = $func_name
 
                 $if $flag=~/^Native API/
                     $cur_api->{native}=1
+                $else
+                    $cur_api->{native}=0
         $elif $flag eq "PARAM"
-            $if /^\s+(\S+):\s*(.+)/
-                $name_types{$1} = $2
+            $if /^\s+(\S+):\s*(.+)/ -> $k, $v
+                $name_types{$k} = $v
 
 #---------------------------------------- 
 subcode: each_shm_api
-    $(set:params=$a->{shm_params})
-    $(set:inline=$a->{shm_inline})
+    $(set:nm=shm)
     $(set:NM=SHM)
     &call each_api
         BLOCK
 
 subcode: each_netmod_api
-    $(set:params=$a->{nm_params})
-    $(set:inline=$a->{nm_inline})
+    $(set:nm=nm)
     $(set:NM=NM)
     &call each_api
         BLOCK
@@ -414,7 +359,7 @@ subcode: each_netmod_api
 subcode: each_api
     $foreach $a in @apis
         # $print $a->{name}
-        $if !$(params)
+        $if !exists $a->{'$(nm)_params'}
             next
         BLOCK
 
@@ -429,17 +374,17 @@ subcode: each_api
         $call append_ret
         $s .= "MPIDI_$(NM)_$a->{name}("
         my $tail = ");"
-        $if $(inline)
+        $if $a->{'$(nm)_inline'}
             $s = "MPL_STATIC_INLINE_PREFIX $s"
             $tail = ") MPL_STATIC_INLINE_SUFFIX;"
-        dump_s_param_tail($s, $(params), $tail)
+        dump_s_param_tail($(Out), $s, $a->{'$(nm)_params'}, $tail)
 
     subcode: dump_typedef_t
         my $s = "typedef "
         $call append_ret
         $s .= "(*MPIDI_$(NM)_$a->{func_name}_t) ("
         my $tail = ");"
-        dump_s_param_tail($s, $(params), $tail)
+        dump_s_param_tail($(Out), $s, $a->{'$(nm)_params'}, $tail)
 
     subcode: dump_nm_funcs_t
         my $s="    "
@@ -448,12 +393,12 @@ subcode: each_api
 
     subcode: dump_api_impl
         my $s
-        $if $(inline)
+        $if $a->{'$(nm)_inline'}
             $s .= "MPL_STATIC_INLINE_PREFIX "
         $call append_ret
         $s .= "MPIDI_$(NM)_$a->{name}("
         my $tail = ")"
-        dump_s_param_tail($s, $(params), $tail)
+        dump_s_param_tail($(Out), $s, $a->{'$(nm)_params'}, $tail)
 
         $print "{"
         my $use_ret
@@ -473,7 +418,7 @@ subcode: each_api
         $else
             $s .= "MPIDI_$(NM)_func->$a->{name}("
         my $tail = ");"
-        dump_s_param_tail($s, $(params), $tail, 1)
+        dump_s_param_tail($(Out), $s, $a->{'$(nm)_params'}, $tail, 1)
         $print
 
         $print "    MPIR_FUNC_VERBOSE_EXIT(MPID_STATE_MPIDI_NM_$NAME);"

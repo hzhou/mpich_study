@@ -61,8 +61,8 @@ fncode: load_mpi_api($api_txt)
                 %$cur_map = %{$MAPS{$name}}
                 $cur_map->{_name} = $cur_name
                 $MAPS{$cur_name} = $cur_map
-            $elif /^\s+(\w+):\s*(.*)/ -> $name, $type
-                $cur_map->{$name} = $type
+            $elif /^\s+(\w+):\s*(.*)/ -> $name, $param_type
+                $cur_map->{$name} = $param_type
         $elif $stage eq "default_descriptions"
             $if /^\s*(\w+):\s*(.*)/ -> $key, $val
                 $default_descriptions{$key} = $val
@@ -99,7 +99,7 @@ fncode: get_C_param($param, $mapping)
     my $s
     $if $param->{t}=~/constant=True/
         $s.="const "
-    $s.=$type
+    $s.=$param_type
 
     $if $want_star
         $s.=" *"
@@ -119,13 +119,13 @@ fncode: get_C_param($param, $mapping)
 
     # -----------------------------
     subcode: get_param_type
-        my $type = $mapping->{$kind}
+        my $param_type = $mapping->{$kind}
         $if $kind eq "FUNCTION"
-            $if $param->{t}=~/func_type=(\w+)/ -> $type*
+            $if $param->{t}=~/func_type=(\w+)/ -> $param_type*
                 NOOP
             $else
                 $die Function type for parameter $param->{name} not found!
-        $if !$type
+        $if !$param_type
             $die Type mapping [$mapping] $kind not found!
 
     subcode: check_want_star

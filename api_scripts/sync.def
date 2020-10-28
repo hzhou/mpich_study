@@ -1,0 +1,20 @@
+page: sync
+    module: sh
+
+    $(if:0)
+        $call do_sync, gen_binding_c
+    $(elif:1)
+        $call do_sync, gen_ch4_api
+
+macros:
+    # sync_perl: 1
+    dest: $HOME/work/mpich-github/maint/
+
+subcode: do_sync(name)
+    $(if:sync_perl)
+        mydef_page -Mdo_sync=1 $(name).def
+        cp -v out/$(name).pl $(dest)
+    $(else)
+        perl_to_python $(name).def /tmp/t.def
+        mydef_page -mpython -Mdo_sync=1 /tmp/t.def
+        cp -v out/$(name).py $(dest)
