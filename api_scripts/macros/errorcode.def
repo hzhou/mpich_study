@@ -1,0 +1,51 @@
+fncode: dump_mpi_fn_fail($func, $mapping)
+    $print "/* --BEGIN ERROR HANDLINE-- */"
+    $print "#ifdef HAVE_ERROR_CHECKING"
+    $call set_mpi_func_errno
+    $print "#endif"
+    my $comm = "0"
+    $if exists $func->{_has_comm}
+        $comm  = "comm_ptr"
+    $print "mpi_errno = MPIR_Err_return_comm($comm, __func__, mpi_errno);"
+    $print "/* --END ERROR HANDLING-- */"
+    # -------------
+    subcode: set_mpi_func_errno
+        my $s = "mpi_errno = MPIR_Err_create_code(mpi_errno, MPIR_ERR_RECOVERABLE, __func__, __LINE__, MPI_ERR_OTHER,"
+
+        my $err_name=lc($func->{name})
+        $if $mapping->{_name}=~/BIG/
+            $err_name.="_l"
+
+        my ($fmts, $args) = ("", "")
+        $call add_args
+        
+        $s.=" \"**$err_name\", \"**$err_name$fmts\"$args);"
+
+        $call dump_Err_create_code
+
+    subcode: add_args
+        # ref: src/include/mpir_err.h
+        my %fmt_codes=(RANK=>"%i", TAG=>"%t", COMMUNICATOR=>"%C", ASSERT=>"%A", DATATYPE=>"%D", ERRHANDLER=>"%E", FILE=>"%F", GROUP=>"%G", INFO=>"%I", OPERATION=>"%O", REQUEST=>"%R", WINDOW=>"%W", SESSION=>"%S", KEYVAL=>"%K")
+        $foreach $p in @{$func->{params}}
+            my $kind = $p->{kind}
+            my $name = $p->{name}
+            $if $kind eq "STRING" and $p->{t}!~/direction=out/
+                $fmts .= " %s"
+                $args .=", $name"
+            $elif is_pointer_type($kind, $p->{t})
+                $fmts .= " %p"
+                $args .=", $name"
+            $elif exists $fmt_codes{$kind}
+                $fmts .= " $fmt_codes{$kind}"
+                $args .=", $name"
+            $elif $mapping->{$kind} eq "int"
+                $fmts .= " %d"
+                $args .=", $name"
+            $elif $mapping->{$kind} eq "MPI_Aint"
+                $fmts .= " %ld"
+                $args .=", (long) $name"
+            $elif $mapping->{$kind} eq "MPI_Count"
+                $fmts .= " %c"
+                $args .=", $name"
+            $else
+                $warn "Error format [$kind] not found"

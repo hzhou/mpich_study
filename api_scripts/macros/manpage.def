@@ -1,0 +1,79 @@
+fncode: dump_manpage($func)
+    my $func_name = $func->{name}
+    $print "/*\@"
+    $print "   $func_name - $func->{desc}"
+    $print
+    my $lis_map = $MAPS{LIS_KIND_MAP}
+    $foreach $p in @{$func->{params}}
+        my $lis_type = $lis_map->{$p->{kind}}
+        $if !exists $p->{desc}
+            $if exists $default_descriptions{$p->{kind}}
+                $p->{desc} = $default_descriptions{$p->{kind}}
+            $else
+                $p->{desc} = $p->{name}
+        $p->{desc} .= " ($lis_type)"
+
+    my (@input_list, @output_list, @inout_list)
+    $foreach $p in @{$func->{params}}
+        $if $p->{t}=~/direction=out/
+            push @output_list, $p
+        $elif $p->{t}=~/direction=inout/
+            push @inout_list, $p
+        $else
+            push @input_list, $p
+    dump_manpage_list(\@inout_list, "Input/Output Parameters")
+    dump_manpage_list(\@input_list, "Input Parameters")
+    dump_manpage_list(\@output_list, "Output Parameters")
+    $if exists $func->{notes}
+        # $print "Notes:"
+        $foreach $l in @{$func->{notes}}
+            $print $l-
+
+    my ($skip_thread_safe, $skip_fortran) = (0, 0)
+    $if exists $func->{skip}
+        $if $func->{skip}=~/ThreadSafe/
+            $skip_thread_safe = 1
+        $if $func->{skip}=~/Fortran/
+            $skip_fortran = 1
+
+    $if !$skip_thread_safe
+        $print ".N ThreadSafe"
+        $print
+    $if !$skip_fortran
+        $print ".N Fortran"
+        my %has
+        $foreach $p in @{$func->{params}}
+            $if $p->{kind} eq "status"
+                $if $p->{t}=~/length=/
+                    $has{FortStatusArray} = 1
+                $else
+                    $has{FortranStatus} = 1
+        $foreach $k in keys %has
+            $print ".N $k"
+        $print
+
+    $print "[ERR CODES]"
+    $print
+    $if exists $func->{seealso}
+         $print ".seealso: $func->{seealso}"
+    $print "\@*/"
+    $print
+
+fncode: dump_manpage_list($list, $header)
+    my $count = @$list
+    $if $count==0
+        return
+    $print $header:
+    $if $count == 1
+        my $p = $list->[0]
+        $print ". $p->{name} - $p->{desc}"
+    $else
+        $foreach $i, $p in @$list
+            my $lead = "."
+            $if $i==0
+                $lead = "+"
+            $elif $i==$count-1
+                $lead = "-"
+            $print "$lead $p->{name} - $p->{desc}"
+    $print
+

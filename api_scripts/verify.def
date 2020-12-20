@@ -1,0 +1,49 @@
+include: macros/common.def
+
+page: verify
+    module: perl
+
+    $call load_api, output/api_session.txt
+    $call load_mpi_check
+
+    # my @flist = qw(MPI_Send MPI_Scatterv MPI_Waitall)
+    my @flist = sort keys %CHECK
+
+    my $mapping = $MAPS{"SMALL_C_KIND_MAP"}
+    my ($n_total, $n_wrong)
+    $foreach $func_name in @flist
+        $n_total++
+        my $func = $FUNCS{$func_name}
+        my $s = declare_function($func, $mapping)
+        $s=~s/(\*) /$1/g
+        $if $s ne $CHECK{$func_name}
+            $print " -- $CHECK{$func_name}"
+            $print "    $s"
+            $n_wrong++
+        $else
+            # $print " ok: $s"
+    $print $n_wrong / $n_total
+
+subcode: load_mpi_check
+    $global %CHECK
+    &call open_r, output/mpinew.h
+        $if /^(\w+ (MPI_\w+)\(.*\));/ -> $t, $name
+            $t=~s/(\*+) / $1/g
+            $t=~s/\s\s+/ /g
+            $t=~s/,\s*/, /g
+            $CHECK{$name}= $t
+
+fncode: declare_function($func, $mapping)
+    my $name = $func->{name}
+    $if $mapping->{_name}=~/BIG/
+        $name .= "_l"
+
+    my $ret = "int"
+    $if exists $func->{return}
+        $ret = $mapping->{$func->{return}}
+
+    my $params = get_C_params($func, $mapping)
+    my $s_param = join(', ', @$params)
+    my $s = "$ret $name($s_param)"
+
+    return $s

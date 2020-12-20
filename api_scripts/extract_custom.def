@@ -1,17 +1,33 @@
-include: common.def
+include: macros/common.def
 page: extract_custom
     module: perl
+    orig_mpich_dir: /home/hzhou/work/mpich-github
+    # do_sync: 1
+    # dir_list: attr  coll  comm  datatype  debugger  errhan  group  info  init  misc  request  rma  spawn  timer  topo
+    # dir_list: romio
+    # dir_list: attr
+    dir_list: mpi_t
 
-    $foreach $dir in "pt2pt"
+    $foreach $dir in qw($(dir_list))
         my @FUNCS
-        my @files = glob("$(orig_mpich_dir)/src/mpi/$dir/*.c")
+        my @files
+        $if $dir eq "mpi_t"
+            @files = glob("$(orig_mpich_dir)/src/mpi_t/*.c")
+        $else
+            @files = glob("$(orig_mpich_dir)/src/mpi/$dir/*.c")
+        $if !@files
+            $print "No apis found in [$(orig_mpich_dir)/src/mpi/$dir/*.c]"
         $foreach $f in @files
             my ($flag, $func)
             &call open_r, $f
                 $call parse_orig_file
             $call filter_man_notes
 
-        &call open_W, $(mpich)/src/mpi/$dir/mpi_${dir}_api.txt
+        $(if:do_sync)
+            $(set:api_txt=$(orig_mpich_dir)/src/binding/c/${dir}_api.txt)
+        $(else)
+            $(set:api_txt=output/${dir}_api.txt)
+        &call open_W, $(api_txt)
             $call dump_custom
 
     subcode: parse_orig_file
@@ -19,20 +35,19 @@ page: extract_custom
             my $file
             $if $f=~/.*src\/mpi\/$dir\/(.*)/
                 $file = $1
-            $func={name=>$name, file=>"$dir/$file"}
+            $func={name=>$name}
             push @FUNCS, $func
+        $elif /^#define (MPI_\w+) PMPI_\w+/
+            $flag = "mpir_impl"
         $elif /^\/\*\@/
             $flag = "man"
-        $elif /^(int\s*MPIR_.*)/
-            $flag = "mpir"
-            $if !$func->{mpir}
-                $func->{mpir} = []
-            push @{$func->{mpir}}, "\n", $_
         $elif /^\s*\/\*\s*\.\.\.\s*body of routine \.\.\.\s*\*\//
             $flag = "body"
             $func->{body} = []
-        $elif /^\.seealso:\s*(.*)/
+        $elif /^\.seealso:?\s*(.*)/
             $func->{seealso} = $1
+        $elif /^\s*MPIR_ERRTEST_INITIALIZED_ORDIE/
+            $func->{has_init_check} ++
         $elif /^\.N (Errors|MPI.*_ERR_.*|MPI_SUCCESS)/
             # skip
         $elif /^\@\*\//
@@ -50,6 +65,13 @@ page: extract_custom
                 $func->{local_vars}=[]
             push @{$func->{local_vars}}, $_
         # ---- special actions under $flag ----
+        $elif $flag eq "mpir_impl"
+            $if /^#/
+                #skip
+            $elif /^\s*\/\*.*\*\/\s*$/
+                #skip
+            $elif /\S/
+                $func->{mpir_impl}++
         $elif $flag eq "man"
             $if /^\s*(MPI_\w+) -\s*(.*)/
                 $func->{desc} = $2
@@ -58,10 +80,6 @@ page: extract_custom
                 $flag = "man_notes"
         $elif $flag eq "man_notes" 
             push @{$func->{notes}}, $_
-        $elif $flag eq "mpir"
-            push @{$func->{mpir}}, $_
-            $if /^}\s*$/
-                $flag = undef
         $elif $flag eq "body"
             $if /^\s*\/\*\s*\.\.\.\s*end of body of routine \.\.\.\s*\*\//
                 undef $flag
@@ -92,20 +110,23 @@ page: extract_custom
 
 
     subcode: dump_custom
-        $print "; vim: set ft=c:"
+        $print "# vim: set ft=c:"
         $foreach $func in @FUNCS
             $print
             $print $func->{name}:
-            $map dump_attr, file, desc, skip, seealso
+            $if !$func->{has_init_check}
+                $call append_skip, initcheck
+            $map dump_attr, file, desc, skip, seealso, mpir_impl
             $if $func->{notes}
                 $call dump_notes
-            $if $func->{mpir}
-                # $call dump_mpir
-            $call dump_body
+            $if $func->{body}
+                $call dump_body
 
-        subcode: dump_mpir
-            $foreach $l in @{$func->{mpir}}
-                $print $l-
+        subcode: append_skip(key)
+            $if $func->{skip}
+                $func->{skip} .= ", $(key)"
+            $else
+                $func->{skip} = "$(key)"
 
         subcode: dump_body
             my $body=$func->{body}

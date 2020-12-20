@@ -1,0 +1,540 @@
+fncode: process_func_parameters($func)
+    my (@validation_list, @handle_ptr_list, @impl_arg_list) 
+
+    my $func_name = $func->{name}
+    my $n = @{$func->{params}}
+    my $i = 0
+    $while $i < $n
+        my $p = $func->{params}->[$i]
+        $call check_userbuffer
+        $if $group_count > 0
+            $call add_arg_group
+            $i+=$group_count
+            next
+        $call check_param_kind
+
+        $if $do_handle_ptr
+            push @handle_ptr_list, $p
+            push @impl_arg_list, $p->{name} . "_ptr"
+        $else
+            push @impl_arg_list, $p->{name}
+        $i+=1
+
+    $func->{need_validation} = 0
+    $if @validation_list
+        $func->{validation_list} = \@validation_list
+        $func->{need_validation} = 1
+    $if @handle_ptr_list
+        $func->{handle_ptr_list} = \@handle_ptr_list
+        $func->{need_validation} = 1
+    $func->{impl_arg_list} = \@impl_arg_list
+
+    #---------------------------------------- 
+    subcode: add_arg_group
+        my $t
+        $for $j=0:$group_count
+            my $a = $func->{params}->[$i+$j]->{name}
+            $if $t
+                $t .= ","
+            $t .= $a
+            push @impl_arg_list, $a
+        push @validation_list, {kind=>$group_kind, name=>$t}
+
+    subcode: check_userbuffer
+        # - buf, count, datatype is validated together
+        my ($group_kind, $group_count) = ("", 0)
+        $if $i+3 <= $n and $p->{kind} =~/BUFFER/
+            my $p2 = $func->{params}->[$i+1]
+            my $p3 = $func->{params}->[$i+2]
+            # ---------------
+            $if $func_name=~/^mpi_i?(alltoall|allgather|gather|scatter)/i
+                my $type = "inplace"
+                $if $p->{name}=~/send/i and $func_name=~/scatter/i
+                    $type = "noinplace"
+                $elif $p->{name}=~/recv/i and $func_name!~/scatter/i
+                    $type = "noinplace"
+
+                $if $func_name=~/alltoallw/i
+                    $group_kind = "USERBUFFER-$type-w"
+                    $group_count = 4
+                $elif $p3->{kind} eq "DATATYPE"
+                    $group_kind = "USERBUFFER-$type"
+                    $group_count = 3
+                $else
+                    $group_kind = "USERBUFFER-$type-v"
+                    $group_count = 4
+            $elif $func_name=~/^mpi_i?(allreduce|reduce|scan|exscan)/i
+                $group_kind = "USERBUFFER-reduce"
+                $group_count = 5
+            $elif $p2->{kind}=~/XFER_NUM_ELEM/ and $p3->{kind}=~/DATATYPE/
+                $group_kind = "USERBUFFER-simple"
+                $group_count = 3
+
+    subcode: check_param_kind
+        my $do_handle_ptr = 0
+        my ($kind, $name) = ($p->{kind}, $p->{name})
+        $if $name eq "comm"
+            $func->{_has_comm} = $name
+
+        $if $p->{t}=~/direction=out/i
+            push @validation_list, {kind=>"ARGNULL", name=>$name}
+        $elif $kind eq "DATATYPE"
+            $if $func_name=~/^mpi_type_(get|set|delete)_attr/i
+                $do_handle_ptr = 1
+            $elif $func_name=~/^mpi_(compare_and_swap)/i
+                push @validation_list, {kind=>"TYPE_RMA_ATOMIC", name=>$name}
+            $else
+                push @validation_list, {kind=>"datatype_and_ptr", name=>$name}
+        $elif $kind eq "OPERATION"
+            $if $func_name=~/^mpi_r?accumulate/i
+                push @validation_list, {kind=>"OP_ACC", name=>$name}
+            $elif $func_name=~/^mpi_(r?get_accumulate|fetch_and_op)/i
+                push @validation_list, {kind=>"OP_GACC", name=>$name}
+            $else
+                push @validation_list, {kind=>"op_and_ptr", name=>$name}
+        $elif $kind eq "REQUEST"
+            $do_handle_ptr = 1
+            $if $func_name =~/^mpi_start/i
+                $if $p->{t}=~/length=/
+                    push @validation_list, {kind=>"request-array-start", name=>$name}
+                $else
+                    push @validation_list, {kind=>"request-start", name=>$name}
+            $elif $func_name =~/^mpi_(wait|test)/i
+                $if $p->{t}=~/length=/
+                    # skip handle ptrs
+                    $do_handle_ptr = 0
+                    push @validation_list, {kind=>"request-array-wait", name=>$name}
+        $elif $kind eq "MESSAGE" and $p->{t}=~/direction=inout/
+            $do_handle_ptr = 1
+            # push @validation_list, {kind=>"MESSAGE", name=>$name}
+        $elif $kind=~/^(COMMUNICATOR|GROUP|ERRHANDLER|OPERATION|INFO|WINDOW|KEYVAL|MESSAGE|SESSION|GREQ_CLASS)$/ and $p->{t}!~/direction=out/i 
+            $do_handle_ptr=1
+        $elif $kind eq "RANK" and $name eq "root"
+            # need to be validated before user buffers
+            unshift @validation_list, {kind=>"ROOT", name=>$name}
+        $elif $kind=~/^(COUNT|RANK|TAG)$/ -> $a
+            push @validation_list, {kind=>$a, name=>$name}
+        $elif $kind=~/^(POLY)?(XFER_NUM_ELEM|DTYPE_NUM_ELEM_NNI)/
+            push @validation_list, {kind=>"COUNT", name=>$name}
+        $elif $kind=~/^(RMA_DISPLACEMENT)/
+            push @validation_list, {kind=>"DISP", name=>$name}
+        $elif $kind=~/^(.*_NNI)/
+            push @validation_list, {kind=>"ARGNEG", name=>$name}
+        $elif $kind=~/^(.*_PI)/
+            push @validation_list, {kind=>"ARGNONPOS", name=>$name}
+        $elif is_pointer_type($kind, $p->{t})
+            push @validation_list, {kind=>"ARGNULL", name=>$name}
+        $elif 1
+            $warn "Missing error checking: $kind"
+
+
+fncode: dump_handle_ptr_var($func, $p)
+    my ($kind, $name) = ($p->{kind}, $p->{name})
+    $if $kind eq "REQUEST" and $p->{t}=~/length=(\w+)/ -> $count
+        # startall
+        $call request_array_var
+    $elif $kind eq "COMMUNICATOR"
+        $: \x23 need init to NULL since MPIR_Err_return_comm will use it
+        $print "MPIR_Comm *comm_ptr = NULL;\n"
+    $else
+        my $mpir = $handle_mpir_types{$kind}
+        $print "$mpir *${name}_ptr;"
+
+    subcode: request_array_var
+        $print "MPIR_Request *request_ptr_array[MPIR_REQUEST_PTR_ARRAY_SIZE];"
+        $print "MPIR_Request **request_ptrs = request_ptr_array;"
+
+fncode: dump_convert_handle($func, $p)
+    my ($kind, $name) = ($p->{kind}, $p->{name})
+    my $ptr_name = $name . "_ptr"
+    $if $p->{t}=~/direction=inout/ and $p->{t}!~/length=/
+        $name = "*".$p->{name}
+
+    $if $kind eq "REQUEST" and $p->{t}=~/length=(\w+)/ -> $count
+        # startall
+        $call request_array_convert
+    $else
+        my $mpir = $handle_mpir_types{$kind}
+        $print "${mpir}_get_ptr($name, $ptr_name);"
+
+    subcode: request_array_convert
+        $print "if ($count > MPIR_REQUEST_PTR_ARRAY_SIZE) {"
+        $print "    int nbytes = $count * sizeof(MPIR_Request *);"
+        $print "    request_ptrs = (MPIR_Request **) MPL_malloc(nbytes, MPL_MEM_OBJECT);"
+        $print "    if (request_ptrs == NULL) {"
+        $print "        MPIR_CHKMEM_SETERR(mpi_errno, nbytes_, \"request pointers\");"
+        $print "        goto fn_fail;"
+        $print "    }"
+        $print "}"
+        push @{$func->{exit_routines}}, "if ($count > MPIR_REQUEST_PTR_ARRAY_SIZE) {"
+        push @{$func->{exit_routines}}, "    MPL_free(request_ptrs);"
+        push @{$func->{exit_routines}}, "}"
+
+        $print "\n"
+        $print "for (int i = 0; i < $count; i++) {"
+        $print "    MPIR_Request_get_ptr(${name}[i], request_ptrs[i]);"
+        $print "}"
+
+fncode: dump_validate_handle($func, $p)
+    my $func_name = $func->{name}
+    my ($kind, $name) = ($p->{kind}, $p->{name})
+    $if $p->{t}=~/direction=inout/ and $p->{t}!~/length=/
+        $name = "*".$p->{name}
+
+    $if $kind eq "COMMUNICATOR"
+        $err_codes->{MPI_ERR_COMM} = 1
+        $print "MPIR_ERRTEST_COMM($name, mpi_errno);"
+    $elif $kind eq "GROUP"
+        $err_codes->{MPI_ERR_GROUP} = 1
+        $print "MPIR_ERRTEST_GROUP($name, mpi_errno);"
+    $elif $kind eq "WINDOW"
+        $err_codes->{MPI_ERR_WIN} = 1
+        $print "MPIR_ERRTEST_WIN($name, mpi_errno);"
+    $elif $kind eq "ERRHANDLER"
+        $err_codes->{MPI_ERR_ARG} = 1
+        $print "MPIR_ERRTEST_ERRHANDLER($name, mpi_errno);"
+    $elif $kind eq "REQUEST"
+        $err_codes->{MPI_ERR_REQUEST} = 1
+        $if $p->{t} =~/length=(\w+)/ -> $count
+            &call if_cond, $count > 0
+                $print "MPIR_ERRTEST_ARGNULL($name, \"$name\", mpi_errno);"
+                $print "for (int i = 0; i < $count; i++) {"
+                $if $func_name=~/^mpi_(wait|test)(all|any|some)$/i
+                    $print "    MPIR_ERRTEST_ARRAYREQUEST_OR_NULL(${name}[i], i, mpi_errno);"
+                $else
+                    $print "    MPIR_ERRTEST_REQUEST(${name}[i], mpi_errno);"
+                $print "}"
+        $else
+            $if $func_name=~/^mpi_(request_get_status|wait|test)$/i
+                $print "MPIR_ERRTEST_REQUEST_OR_NULL($name, mpi_errno);"
+            $else
+                $print "MPIR_ERRTEST_REQUEST($name, mpi_errno);"
+    $elif $kind eq "MESSAGE"
+        $err_codes->{MPI_ERR_REQUEST} = 1
+        $print "MPIR_ERRTEST_REQUEST($name, mpi_errno);"
+    $elif $kind eq "DATATYPE"
+        $err_codes->{MPI_ERR_TYPE} = 1
+        $print "MPIR_ERRTEST_DATATYPE($name, mpi_errno);"
+    $elif $kind eq "OP"
+        $err_codes->{MPI_ERR_OP} = 1
+        $print "MPIR_ERRTEST_OP($name, mpi_errno);"
+    $elif $kind eq "INFO"
+        $err_codes->{MPI_ERR_ARG} = 1
+        $if $func_name=~/^mpi_(info_.*|.*_set_info)$/i
+            $print "MPIR_ERRTEST_INFO($name, mpi_errno);"
+        $else
+            $print "MPIR_ERRTEST_INFO_OR_NULL($name, mpi_errno);"
+    $elif $kind eq "KEYVAL"
+        $err_codes->{MPI_ERR_KEYVAL} = 1
+        $if $func_name=~/^mpi_comm_/i
+            $print "MPIR_ERRTEST_KEYVAL($name, MPIR_COMM, \"communicator\", mpi_errno);"
+        $elif $func_name=~/^mpi_type_/i
+            $print "MPIR_ERRTEST_KEYVAL($name, MPIR_DATATYPE, \"datatype\", mpi_errno);"
+        $elif $func_name=~/^mpi_win_/i
+            $print "MPIR_ERRTEST_KEYVAL($name, MPIR_WIN, \"window\", mpi_errno);"
+
+        $if $func_name!~/^\w+_(get_attr)/i
+            $print "MPIR_ERRTEST_KEYVAL_PERM($name, mpi_errno);"
+
+fncode: dump_validate_handle_ptr($func, $p)
+    my $func_name = $func->{name}
+    my ($kind, $name) = ($p->{kind}, $p->{name})
+    my $mpir = $handle_mpir_types{$kind}
+    $if $kind eq "REQUEST" and $p->{t}=~/length=(\w+)/ -> $count
+        $call request_array_validate_ptr
+    $elif $p->{kind} eq "MESSAGE"
+        $call message_validate_ptr
+    $elif $kind eq "COMMUNICATOR"
+        my $ignore_revoke = 0
+        $if $func_name=~/^mpi_comm_(create.*|i?dup.*|split.*|accept|connect|spawn.*|test_inter)$/i
+            $ignore_revoke = 0
+        $elif $func_name=~/^mpi_cart_(create.*|sub)$/i
+            $ignore_revoke = 0
+        $elif $func_name=~/^mpi_(comm_|cart_|cartdim_get|graph_get|graphdims_get|(dist_)?graph_neighbors_count|topo_test)$/i
+            # all local operations are ok
+            $ignore_revoke = 1
+
+        $if $ignore_revoke
+            $print "MPIR_Comm_valid_ptr(${name}_ptr, mpi_errno, TRUE);"
+        $else
+            $print "MPIR_Comm_valid_ptr(${name}_ptr, mpi_errno, FALSE);"
+        dump_error_check("")
+
+        $if $func_name=~/^mpi_(i?exscan|i?scan|comm_spawn.*|.*_create)$/i
+            $print "MPIR_ERRTEST_COMM_INTRA(${name}_ptr, mpi_errno);"
+    $else
+        $print "${mpir}_valid_ptr(${name}_ptr, mpi_errno);"
+        dump_error_check("")
+        
+        $if $kind eq "WINDOW" and $func_name=~/^mpi_win_shared_query/i
+            $print "MPIR_ERRTEST_WIN_FLAVOR(win_ptr, MPI_WIN_FLAVOR_SHARED, mpi_errno);"
+
+    subcode: request_array_validate_ptr
+        $print "for (int i = 0; i < $count; i++) {"
+        $print "    MPIR_Request_valid_ptr(request_ptrs[i], mpi_errno);"
+        dump_error_check("    ")
+        $print "}"
+
+    subcode: message_validate_ptr
+        $print "if (*$name != MPI_MESSAGE_NO_PROC) {"
+        $print "    MPIR_Request_valid_ptr(${name}_ptr, mpi_errno);"
+        dump_error_check("    ")
+        $print "    MPIR_ERR_CHKANDJUMP((${name}_ptr->kind != MPIR_REQUEST_KIND__MPROBE),"
+        $print "                        mpi_errno, MPI_ERR_ARG, \"**reqnotmsg\");"
+        $print "}"
+
+
+fncode: dump_validation($func, $t)
+    my $func_name = $func->{name}
+    # ref: mpir_err.h
+    my ($kind, $name) = ($t->{kind}, $t->{name})
+    $if $kind eq "RANK"
+        $err_codes->{MPI_ERR_RANK} = 1
+        $if $func_name=~/^mpi_(i?m?probe|i?recv|recv_init)$/i or $name eq "recvtag"
+            # allow MPI_ANY_SOURCE, MPI_PROC_NULL
+            $print "MPIR_ERRTEST_RECV_RANK(comm_ptr, $name, mpi_errno);"
+        $elif $name=~/^(dest|target_rank)$/ or $func_name=~/^mpi_win_/
+            # allow MPI_PROC_NULL
+            $print "MPIR_ERRTEST_SEND_RANK(comm_ptr, $name, mpi_errno);"
+        $else
+            $print "MPIR_ERRTEST_RANK(comm_ptr, $name, mpi_errno);"
+    $elif $kind eq "TAG"
+        $err_codes->{MPI_ERR_TAG} = 1
+        $if $func_name=~/^mpi_(i?m?probe|i?recv|recv_init)$/i or $name eq "recvtag"
+            # allow MPI_ANY_TAG
+            $print "MPIR_ERRTEST_RECV_TAG($name, mpi_errno);"
+        $else
+            $print "MPIR_ERRTEST_SEND_TAG($name, mpi_errno);"
+    $elif $kind eq "ROOT"
+        $if $func_name=~/mpi_comm_/i
+            $print "MPIR_ERRTEST_INTRA_ROOT(comm_ptr, root, mpi_errno);"
+        $else
+            $print "if (comm_ptr->comm_kind == MPIR_COMM_KIND__INTRACOMM) {"
+            $print "    MPIR_ERRTEST_INTRA_ROOT(comm_ptr, root, mpi_errno);"
+            $print "} else {"
+            $print "    MPIR_ERRTEST_INTER_ROOT(comm_ptr, root, mpi_errno);"
+            $print "}"
+    $elif $kind eq "COUNT"
+        $err_codes->{MPI_ERR_COUNT} = 1
+        $print "MPIR_ERRTEST_COUNT($name, mpi_errno);"
+    $elif $kind=~/DISPLACEMENT/
+        $err_codes->{MPI_ERR_DISP} = 1
+        $print "MPIR_ERRTEST_DISP($name, mpi_errno);"
+    $elif $kind =~/USERBUFFER/
+        my @p = split /,/, $name
+        #  ----
+        $if $kind eq "USERBUFFER-simple"
+            dump_validate_userbuffer_simple($func, $p[0], $p[1], $p[2])
+        $elif $kind eq "USERBUFFER-reduce"
+            dump_validate_userbuffer_reduce($func, $p[0], $p[1], $p[2], $p[3], $p[4])
+        $elif $kind=~/-[vw]$/
+            dump_validate_userbuffer_coll($func, $kind, $p[0], $p[1], $p[3], $p[2])
+        $else
+            dump_validate_userbuffer_coll($func, $kind, $p[0], $p[1], $p[2], "")
+    $elif $kind=~/^(ARGNULL)$/
+        $err_codes->{MPI_ERR_ARG} = 1
+        $if $name eq "array_of_statuses"
+            &call if_cond, count > 0
+                $print "MPIR_ERRTEST_ARGNULL($name, \"$name\", mpi_errno);"
+        $else
+            $print "MPIR_ERRTEST_ARGNULL($name, \"$name\", mpi_errno);"
+    $elif $kind=~/^(ARGNEG)$/
+        $err_codes->{MPI_ERR_ARG} = 1
+        $print "MPIR_ERRTEST_ARGNEG($name, \"$name\", mpi_errno);"
+    $elif $kind=~/^(ARGNONPOS)$/
+        $err_codes->{MPI_ERR_ARG} = 1
+        $print "MPIR_ERRTEST_ARGNONPOS($name, \"$name\", mpi_errno, MPI_ERR_ARG);"
+    $elif $kind=~/^(TYPE_RMA_ATOMIC|OP_ACC|OP_GACC)$/ -> $a
+        $print "MPIR_ERRTEST_$a($name, mpi_errno);"
+    $elif $kind eq "datatype_and_ptr"
+        $err_codes->{MPI_ERR_TYPE} = 1
+        dump_validate_datatype($name)
+    $elif $kind eq "op_and_ptr"
+        $err_codes->{MPI_ERR_OP} = 1
+        dump_validate_op($name, "")
+
+    $elif $kind eq "request-start"
+        my $ptr = $name."_ptr"
+        $print "MPIR_ERRTEST_PERSISTENT($ptr, mpi_errno);"
+        $print "MPIR_ERRTEST_PERSISTENT_ACTIVE($ptr, mpi_errno);"
+
+    $elif $kind eq "request-array-start"
+        $print "for (int i = 0; i < count; i++) {"
+        $print "INDENT"
+        my $ptr = $name."_ptrs[i]"
+        $print "MPIR_ERRTEST_PERSISTENT($ptr, mpi_errno);"
+        $print "MPIR_ERRTEST_PERSISTENT_ACTIVE($ptr, mpi_errno);"
+        $print "DEDENT"
+        $print "}"
+
+    $elif $kind eq "request-wait"
+        $print "MPIR_ERRTEST_ARGNULL($name, \"$name\", mpi_errno);"
+        $print "MPIR_ERRTEST_REQUEST_OR_NULL(*$name, mpi_errno);"
+
+    $elif $kind eq "request-array-wait"
+        $print "if (count > 0) {"
+        $print "    MPIR_ERRTEST_ARGNULL($name, \"$name\", mpi_errno);"
+        $print "    for (int i = 0; i < count; i++) {"
+        $print "        MPIR_ERRTEST_ARRAYREQUEST_OR_NULL(${name}[i], i, mpi_errno);"
+        $print "    }"
+        $print "}"
+
+subcode: iter_comm_i
+    $print "for (int i = 0; i < comm_size; i++) {"
+    BLOCK
+    $print "}"
+
+subcode: if_cond(cond)
+    $print "if ($(cond)) {"
+    $print "INDENT"
+    BLOCK
+    $print "DEDENT"
+    $print "}"
+
+fncode: dump_validate_userbuffer_simple($func, $buf, $ct, $dt)
+    $print "MPIR_ERRTEST_COUNT($ct, mpi_errno);"
+    &call if_cond, $ct > 0  # string
+        dump_validate_datatype($dt)
+        $print "MPIR_ERRTEST_USERBUFFER($buf, $ct, $dt, mpi_errno);"
+
+fncode: dump_validate_userbuffer_reduce($func, $sbuf, $rbuf, $ct, $dt, $op)
+    dump_validate_datatype($dt)
+    dump_validate_op($op, $dt)
+    my ($sct, $rct) = ($ct, $ct)
+    $if $func->{name}=~/reduce_scatter$/i
+        dump_validate_get_comm_size($func)
+        $print "int sum = 0;"
+        &call iter_comm_i
+            $print "    MPIR_ERRTEST_COUNT(${ct}[i], mpi_errno);"
+            $print "    sum += ${ct}[i];"
+        $sct = "sum"
+        $rct = $ct . "[comm_ptr->rank]"
+    $print "MPIR_ERRTEST_RECVBUF_INPLACE(${rbuf}, ${rct}, mpi_errno);"
+    $print "if (comm_ptr->comm_kind == MPIR_COMM_KIND__INTERCOMM) {"
+    $print "    MPIR_ERRTEST_SENDBUF_INPLACE($sbuf, $sct, mpi_errno);"
+    $print "} else if (${sbuf} != MPI_IN_PLACE && ${sct} != 0) {"
+    $print "    MPIR_ERRTEST_ALIAS_COLL(${sbuf}, ${rbuf}, mpi_errno);"
+    $print "}"
+    $print "MPIR_ERRTEST_USERBUFFER(${rbuf}, ${rct}, $dt, mpi_errno);"
+    $print "MPIR_ERRTEST_USERBUFFER(${sbuf}, sum, $dt, mpi_errno);"
+
+fncode: dump_validate_userbuffer_coll($func, $kind, $buf, $ct, $dt, $op)
+    my $func_name = $func->{name}
+    &call gather_scatter_root_only
+        # $dump $func, $kind, $buf
+        $if $kind!~/-w$/
+            dump_validate_datatype($dt)
+
+        &call vw_iter_comm_i
+            $print "MPIR_ERRTEST_COUNT($ct, mpi_errno);"
+
+            my $SEND = "SEND"
+            $if $buf=~/recv/
+                $SEND = "RECV"
+            $if $kind=~/-noinplace/
+                $print "MPIR_ERRTEST_${SEND}BUF_INPLACE($buf, $ct, mpi_errno);"
+            $else
+                $print "if (comm_ptr->comm_kind == MPIR_COMM_KIND__INTERCOMM) {"
+                $print "    MPIR_ERRTEST_${SEND}BUF_INPLACE($buf, $ct, mpi_errno);"
+                $print "}"
+            $print "MPIR_ERRTEST_USERBUFFER($buf, $ct, $dt, mpi_errno);"
+
+        &call inplace_alias_check
+            $if $func_name=~/i?(alltoall)/i
+                my $cond = "sendtype == recvtype && sendcount == recvcount && sendcount != 0"
+                $if $kind=~/-v$/
+                    $cond = "sendtype == recvtype && sendcounts == recvcounts"
+                $elif $kind =~ /-w$/
+                    $cond = "sendtypes == recvtypes && sendcounts == recvcounts"
+                $print "if ($cond) {"
+                $print "    MPIR_ERRTEST_ALIAS_COLL(sendbuf, recvbuf, mpi_errno);"
+                $print "}"
+            $elif $func_name=~/i?(allgather|gather|scatter)(v?)$/i -> $t1, $t2
+                my $cond = "sendtype == recvtype && sendcount == recvcount && sendcount != 0"
+                my ($a, $b) = ("send", "recv")
+                $if $t1=~/^scatter/i
+                    ($a, $b) = ("recv", "send")
+
+                my $buf2 = "(char *) ${b}buf + comm_ptr->rank * ${b}count * ${b}type_size"
+                $if $t2 eq "v"
+                    $buf2 = "(char *) ${b}buf + displs[comm_ptr->rank] * ${b}type_size"
+
+                $print "if ($cond) {"
+                $print "    MPI_Aint ${b}type_size;"
+                $print "    MPIR_Datatype_get_size_macro(${b}type, ${b}type_size);"
+                $print "    MPIR_ERRTEST_ALIAS_COLL($buf, $buf2, mpi_errno);"
+                $print "}"
+            $else
+                $die dump_validate_userbuffer_coll: inplace alias check: unexpected $func_name
+
+    # -------------------------
+    subcode: vw_iter_comm_i
+        $if $kind=~/-[vw]$/
+            dump_validate_get_comm_size($func)
+            $print "for (int i = 0; i < comm_size; i++) {"
+            $print "INDENT"
+            $ct .= '[i]'
+            $if $kind=~/-w$/
+                $dt .= '[i]'
+                dump_validate_datatype($dt)
+
+        BLOCK
+
+        $if $kind=~/-[vw]$/
+            $print "DEDENT"
+            $print "}"
+
+    subcode: gather_scatter_root_only
+        $if $func_name=~/(gather|scatter)/i && $kind=~/-noinplace/
+            $print "if (comm_ptr->rank == root) {"
+            $print "INDENT"
+
+        BLOCK
+
+        $if $func_name=~/(gather|scatter)/i && $kind=~/-noinplace/
+            $print "DEDENT"
+            $print "}"
+
+    subcode: inplace_alias_check
+        $if $kind=~/-inplace/
+            my $cond = "comm_ptr->comm_kind == MPIR_COMM_KIND__INTRACOMM && $buf != MPI_IN_PLACE"
+            $if $func_name=~/(gather|scatter)/i
+                $cond .= " && comm_ptr->rank == root"
+            $print "if ($cond) {"
+            $print "INDENT"
+            BLOCK
+            $print "DEDENT"
+            $print "}"
+
+fncode: dump_validate_get_comm_size($func)
+    $if !exists $func->{got_comm_size}
+        $print "int comm_size;"
+        $print "if (comm_ptr->comm_kind == MPIR_COMM_KIND__INTERCOMM) {"
+        $print "    comm_size = comm_ptr->remote_size;"
+        $print "} else {"
+        $print "    comm_size = comm_ptr->local_size;"
+        $print "}"
+        $func->{got_comm_size} = 1
+
+fncode: dump_validate_datatype($dt)
+    $print "MPIR_ERRTEST_DATATYPE($dt, \"datatype\", mpi_errno);"
+    $print "if (!HANDLE_IS_BUILTIN($dt)) {"
+    $print "    MPIR_Datatype *datatype_ptr = NULL;"
+    $print "    MPIR_Datatype_get_ptr($dt, datatype_ptr);"
+    $print "    MPIR_Datatype_valid_ptr(datatype_ptr, mpi_errno);"
+    dump_error_check("    ")
+    $print "    MPIR_Datatype_committed_ptr(datatype_ptr, mpi_errno);"
+    dump_error_check("    ")
+    $print "}"
+
+fncode: dump_validate_op($op, $dt)
+    $print "MPIR_ERRTEST_OP($op, mpi_errno);"
+    $print "if (!HANDLE_IS_BUILTIN($op)) {"
+    $print "    MPIR_Op *op_ptr = NULL;"
+    $print "    MPIR_Op_get_ptr($op, op_ptr);"
+    $print "    MPIR_Op_valid_ptr(op_ptr, mpi_errno);"
+    $if $dt
+        $print "} else {"
+        $print "    mpi_errno = (*MPIR_OP_HDL_TO_DTYPE_FN($op)) ($dt);"
+    $print "}"
+    dump_error_check("")

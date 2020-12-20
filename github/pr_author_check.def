@@ -7,7 +7,9 @@ page: pr_author_check
         my $pr_author = "shintaro-iwasaki"
     $if !$pr_author
         die "Author's github username not set.\n"
-    my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
+    # my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"; # mpichbot
+    my $gh_token= "308801e9e7fc0aaf96e23c81094a71451fff8ec5";   # hzhou
+
     my $curl = "curl -H \"Authorization: token $gh_token\""
 
     $print Checking PR author [$pr_author]\n\n

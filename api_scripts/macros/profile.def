@@ -1,0 +1,22 @@
+fncode: dump_profiling($func, $map_name)
+    $call get_mapping_func_name
+    $print "/* -- Begin Profiling Symbol Block for routine $func_name */"
+    &call if_defined, HAVE_PRAGMA_WEAK
+        $print "#pragma weak $func_name = P$func_name"
+    &call elif_defined, HAVE_PRAGMA_HP_SEC_DEF
+        $print "#pragma _HP_SECONDARY_DEF P$func_name  $func_name"
+    &call elif_defined, HAVE_PRAGMA_CRI_DUP
+        $print "#pragma _CRI duplicate $func_name as P$func_name"
+    &call elif_defined, HAVE_WEAK_ATTRIBUTE
+        declare_function($func, $mapping, " __attribute__ ((weak, alias(\"P$func_name\")));")
+    $print "#endif"
+    $print "/* -- End Profiling Symbol Block */"
+
+    $print
+    $print "/* Define MPICH_MPI_FROM_PMPI if weak symbols are not supported to build"
+    $print "   the MPI routines */"
+    $print "#ifndef MPICH_MPI_FROM_PMPI"
+    $print "#undef $func_name"
+    $print "#define $func_name P$func_name"
+    $print "\n#endif"
+

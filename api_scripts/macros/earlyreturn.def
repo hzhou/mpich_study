@@ -1,0 +1,53 @@
+fncode: check_early_returns($func)
+    $if exists $func->{earlyreturn}
+        my @early_returns = split /,\s*/, $func->{earlyreturn}
+        $foreach $kind in @early_returns
+            $if $kind=~/pt2pt_proc_null/i
+                dump_early_return_pt2pt_proc_null($func)
+
+fncode: dump_early_return_pt2pt_proc_null($func)
+    $call check_rank_request
+    $print "/* Return immediately for dummy process */"
+    &call if_cond, unlikely($check_rank == MPI_PROC_NULL) # string
+        $call set_var_out
+        $print "goto fn_exit;"
+    # ----
+    subcode: set_var_out
+        $if $has_request
+            $call null_request_out
+        $if $has_message
+            $print "*message = MPI_MESSAGE_NO_PROC;"
+        $if $has_status
+            $print "MPIR_Status_set_procnull(status);"
+        $if $has_flag
+            $print "*flag = TRUE;"
+
+        subcode: null_request_out
+            my $request_kind
+            $if $func->{name}=~/mpi_.*(send|recv|probe)$/i -> $a
+                $request_kind="MPIR_REQUEST_KIND__".uc($a)
+            $else
+                $die Unexpected $func->{name} for pt2pt_proc_null
+            $print "MPIR_Request *request_ptr = MPIR_Request_create_complete($request_kind);"
+            $print "MPIR_ERR_CHKANDSTMT(request_ptr == NULL, mpi_errno, MPIX_ERR_NOREQ, goto fn_fail,"
+            $print "                    \"**nomemreq\");"
+            $print "*request = request_ptr->handle;"
+
+
+    subcode: check_rank_request
+        my ($check_rank, $has_request, $has_message, $has_status, $has_flag)
+        $foreach $p in @{$func->{params}}
+            my $kind = $p->{kind}
+            my $name = $p->{name}
+            $if $kind eq "RANK"
+                $check_rank = $name
+            $elif $p->{t}=~/direction=out/
+                $if $kind eq "REQUEST"
+                    $has_request = $name
+                $elif $kind eq "MESSAGE"
+                    $has_message = $name
+                $elif $kind eq "STATUS"
+                    $has_status = $name
+                $elif $name eq "flag"
+                    $has_flag = $name
+

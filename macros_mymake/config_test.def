@@ -38,6 +38,7 @@ subcode: make_test
     $autoconf_vars{threadlib} = "-lpthread"
     my @all_am = glob("test/mpi/*/Makefile.am")
     push @all_am, glob("test/mpi/threads/*/Makefile.am")
+    push @all_am, glob("test/mpi/errors/*/Makefile.am")
     # $foreach $dir in "attr", "comm", "datatype", "pt2pt", "coll", "rma", "threads/pt2pt"
     $foreach $a in @all_am
         my $dir

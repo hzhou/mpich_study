@@ -1,14 +1,30 @@
-include: common.def
+# include: macros/common.def
+
+filter: perl_to_python
+
+macros:
+    standard_dir: /home/hzhou/work/mpi-standard
+
+subcode: _autoload
+    $global  $standard_dir = "$(standard_dir)"
+    $global  $output_dir = "output"
+    $(block:frame_init)
+        $: \x23 Run this script to scrape API from MPI standard repositories.
+        $: \x23 Modify $standard_dir and $output_dir to customize locations.
+        $: \x23 The output, mpi_standard_api.txt, will be used to generate bindings.
+        NEWLINE
+
 page: parse_standard
     module: perl
-        &call cd_standard
-            $call load_standard_api
-        dump_api("$(standard_api_txt)")
+
+    &call cd_standard
+        $call load_standard_api
+    dump_api("output/mpi_standard_api.txt")
 
     subcode: cd_standard
         $use Cwd
         my $pwd = getcwd()
-        chdir "$(standard_dir)" or die "Can't chdir $(standard_dir)\n"
+        chdir $standard_dir or die "Can't chdir $standard_dir\n"
         BLOCK
         chdir $pwd or die "Can't get back to current directory\n"
 
@@ -28,7 +44,6 @@ fncode: dump_api($api_txt)
                 $if $p->{t}
                     $s.=", $p->{t}"
                 $if $p->{desc}
-                    $call unescape_latex, $p->{desc}
                     $s.=", [$p->{desc}]"
                 $else
                     # warn "Missing description for $fn->{name} param $name!\n"
@@ -48,11 +63,6 @@ fncode: dump_api($api_txt)
             $call unescape_latex, $default_descriptions{$k}
             $print $k: $default_descriptions{$k}
 
-    subcode: unescape_latex(t)
-        $(t)=~s/\\+(consti?|constskip|mpiarg|mpicode|mpifunc)\{(.*?)\}/'$2'/g
-        $(t)=~s/\\+(mbox|emph)\{(.*)?\}/$2/g
-        $(t)=~s/\\+(MPI)\/?/$1/gi
-
 #---- Loading from mpi-standard ----
 subcode: load_standard_api
     load_standard_funcs()
@@ -62,10 +72,10 @@ subcode: load_standard_api
 fncode: load_standard_funcs
     my @all_latexes = glob("*/*.tex")
     $global %FUNCS
-    my $l
     $foreach $a in @all_latexes
         my $func
         my $i_line=0
+        my $l
         &call open_r, $a
             $i_line++
             $call parse_latex
@@ -73,43 +83,63 @@ fncode: load_standard_funcs
     subcode: parse_latex
         $if /\\begin\{mpi-binding\}/
             $func={name=>undef, params=>[]}
+            undef $l
         $elif /\\end\{mpi-binding\}/
             $if $func->{name}
                 $FUNCS{$func->{name}} = $func
-            $elif !defined($func->{name})
-                warn "Missing name in $a:$i_line\n"
+            $elif !$func->{name} && !$func->{render}
+                $warn "Missing name in $a:$i_line\n"
             undef $func
         $elif $func
             chomp
+            $if /^\s*#/
+                next
             $if $l
+                # $print [$l]
                 s/^\s+//
                 $l .= " $_"
             $else
                 $l = $_
-            $if $l!~/,\s*$/
-                $if $l=~/^\s*function_name\(['"](.*)['"]\)/
-                    $func->{name} = $1
-                $elif $l=~/^\s*(return_type|parameters_c_only)\(['"](.*)['"]\)/
-                    $func->{$1} = $2
-                $elif $l=~/^\s*parameters_c_only\(['"](.*)['"]\)/ -> $t
-                    push @{$func->{params}}, "C-only: $t"
-                $elif $l=~/^\s*parameter\((.*)\)/ -> $t
-                    my $p = {}
-                    $if $t=~/(.*),\s*desc='([^']*)'(.*)/
-                        $p->{desc} = $2
-                        $t = "$1$3"
-                    $elif $t=~/(.*),\s*desc="([^"]*)"(.*)/
-                        $p->{desc} = $2
-                        $t = "$1$3"
-                    $t=~s/['"]//g
-                    my @tlist = split /,\s*/, $t
-                    $p->{name} = shift @tlist
-                    $p->{kind} = shift @tlist
-                    $p->{t} = join(", ", @tlist)
-                    push @{$func->{params}}, $p
-                $elif $l=~/^\s*(callback|no_ierror)/
-                    $func->{$1}=1
+
+            $if $l=~/^\s*(\w+)\(\s*(.*)\)\s*$/ -> $cmd, $args
+                $call parse_binding_python
                 undef $l
+
+        subcode: parse_binding_python
+            $if $cmd eq "function_name"
+                $if $args=~/"(\w+)",\s*"(\w+)"/
+                    $func->{name} = $1
+                    $func->{fortran_name}=$2
+                $else
+                    $func->{name} = strip_quotes($args)
+            $elif $cmd=~/^(return_type|parameters_c_only)/
+                $func->{$1} = strip_quotes($args)
+            $elif $cmd eq "parameters_c_only"
+                push @{$func->{params}}, "C-only: ".strip_quotes($args)
+            $elif $cmd eq "parameter"
+                my $t = $args
+                my $p = {}
+                $t=~s/\s+$//
+                $t=~s/,$//
+                $if $t=~/(.*),\s*desc\s*=\s*(.*?)(,\s*\w+=.*)?$/
+                    $t = "$1$3"
+                    my $desc = $2
+                    $call unescape_latex, $desc
+                    $call unquote_python, $desc
+                    $p->{desc} = $desc
+                $t=~s/['"]//g
+                $t=~s/lis:\w+,\s*param://
+                my @tlist = split /,\s*/, $t
+                $p->{name} = shift @tlist
+                $p->{kind} = shift @tlist
+                $p->{t} = join(", ", @tlist)
+                push @{$func->{params}}, $p
+            $elif $cmd=~/^(callback|no_ierror|no_.*_binding|with_uppercase_index|f90_use_colons|not_with_mpif)$/
+                $func->{$1}=1
+            $elif $cmd=~/^(render|no_render|predefined_function|f90_overload|not_abstract_interface)$/
+                $func->{$1}=$args
+            $else
+                $print unparsed: [$l]
 
 fncode: load_standard_types
     $global %MAPS, @MAPS
@@ -150,4 +180,17 @@ fncode: strip_quotes($t)
     $if $t=~/^['"](.*)['"]/
         return $1
     return $t
+
+subcode: unescape_latex(t)
+    $(t)=~s/\\+(consti?|constskip|mpiarg|mpicode|mpifunc)\{(.*?)\}/'$2'/g
+    $(t)=~s/\\+(mbox|emph)\{(.*)?\}/$2/g
+    $(t)=~s/\\+(MPI)\/?/$1/gi
+
+subcode: unquote_python(t)
+    $if $(t)=~/^\s*\((.*)\)\s*$/
+        $(t) = $1
+    $(t)=~s/['"]//g
+    $(t)=~s/^\s+//
+    $(t)=~s/\s+$//
+    $(t)=~s/\s\s+/ /g
 

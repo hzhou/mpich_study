@@ -1,26 +1,51 @@
 macros:
-    OUTDIR: .
     standard_dir: /home/hzhou/work/mpi-standard
     orig_mpich_dir: /home/hzhou/work/pull_requests/branch-2010_mpi_gen
     mpich: /home/hzhou/work/mpich-github
-    standard_api_txt: maint/mpi_standard_api.txt
 
 subcode: load_api(@custom_list)
     $(if:do_sync)
         $(set:mpich=.)
-    load_mpi_api("$(mpich)/$(standard_api_txt)")
-    $(for:f in $(custom_list))
-        load_mpi_api("$(mpich)/src/mpi/$(f)/mpi_$(f)_api.txt")
+        $(set:standard_api=maint/mpi_standard_api.txt)
+    $(else)
+        $(set:standard_api=output/mpi_standard_api.txt)
+    load_mpi_api("$(standard_api)", "")
+    $(if:do_sync)
+        chdir "src/binding/c"
+        my @api_files = glob("*_api.txt")
+        $foreach $f in @api_files
+            $if $f=~/^(\w+)_api.txt/ -> $dir
+                load_mpi_api($f, $dir)
+    $(else)
+        $(for:f in $(custom_list))
+            $(if:f~.*\.txt)
+                load_mpi_api("$(f)", ".")
+            $(else)
+                load_mpi_api("$(mpich)/src/mpi/$(f)/mpi_$(f)_api.txt", ".")
 
 subcode: _autoload
-    $global %FUNCS, %MAPS, %default_descriptions
+    $global %FUNCS, %MAPS, %default_descriptions, %handle_mpir_types
+    $handle_mpir_types{COMMUNICATOR} = "MPIR_Comm"
+    $handle_mpir_types{GROUP} = "MPIR_Group"
+    $handle_mpir_types{DATATYPE} = "MPIR_Datatype"
+    $handle_mpir_types{ERRHANDLER} = "MPIR_Errhandler"
+    $handle_mpir_types{OPERATION} = "MPIR_Op"
+    $handle_mpir_types{INFO} = "MPIR_Info"
+    $handle_mpir_types{WINDOW} = "MPIR_Win"
+    $handle_mpir_types{KEYVAL} = "MPII_Keyval"
+    $handle_mpir_types{REQUEST} = "MPIR_Request"
+    $handle_mpir_types{MESSAGE} = "MPIR_Request"
+    $handle_mpir_types{SESSION} = "MPIR_Session"
+    $handle_mpir_types{GREQ_CLASS} = "MPIR_Grequest_class"
+    NEWLINE
 
 #---------------------------------------- 
-fncode: load_mpi_api($api_txt)
+fncode: load_mpi_api($api_txt, $dir)
     my $see_also_idx=0
     my ($cur_func, $cur_map, $cur_name)
     my $stage = ''
     &call open_r, $api_txt
+        $: \x23 -- stage header --
         $if /^(MPI\w+):\s*(.*)/ -> $name, $attr
             $stage = "FUNC"
             $cur_name = $name
@@ -29,8 +54,10 @@ fncode: load_mpi_api($api_txt)
                 $if $attr
                     $cur_func->{attrs} = $attr
             $else
-                $cur_func = {name=>$name, params=>[], attrs=>$attr}
+                $cur_func = {name=>$name, params=>[], attrs=>$attr, desc=>""}
                 $FUNCS{$name} = $cur_func
+            $if $dir
+                $cur_func->{dir} = $dir
         $elif /^(\w+_KIND_MAP):/ -> $name
             $stage = "MAP"
             $cur_name = $name
@@ -39,6 +66,7 @@ fncode: load_mpi_api($api_txt)
         $elif /^Default Descriptions/
             $stage = "default_descriptions"
             $cur_name = "Default Descriptions"
+        $: \x23 -- per-stage parsing --
         $elif $stage eq "FUNC"
             $if /^\s+\.(\w+):\s*(.*)/ -> $key, $val
                 $cur_func->{$key} = $val
@@ -82,7 +110,8 @@ fncode: load_mpi_api($api_txt)
 fncode: get_C_params($func, $mapping)
     my @param_list
     $foreach $p in @{$func->{params}}
-        push @param_list, get_C_param($p, $mapping)
+        $if $p->{t} !~/suppress=c_parameter/
+            push @param_list, get_C_param($p, $mapping)
     $if !@param_list
         return ["void"]
     $else
@@ -93,8 +122,10 @@ fncode: get_C_param($param, $mapping)
     $if $kind eq "VARARGS"
         return "..."
 
+    my ($want_star, $want_bracket)
     $call get_param_type
-    $call check_want_star
+    $if !$want_star
+        $call check_want_star
 
     my $s
     $if $param->{t}=~/constant=True/
@@ -102,7 +133,7 @@ fncode: get_C_param($param, $mapping)
     $s.=$param_type
 
     $if $want_star
-        $s.=" *"
+        $s.=" " . "*" x $want_star
         $(if:style!=succinct)
             $if $s!~/\b(void|int|char|size_t)\b/
                 $s.=" "
@@ -120,41 +151,41 @@ fncode: get_C_param($param, $mapping)
     # -----------------------------
     subcode: get_param_type
         my $param_type = $mapping->{$kind}
-        $if $kind eq "FUNCTION"
-            $if $param->{t}=~/func_type=(\w+)/ -> $param_type*
-                NOOP
-            $else
-                $die Function type for parameter $param->{name} not found!
+
+        $if $param->{t}=~/func_type=(\w+)/ -> $func_type
+            $param_type = $func_type
+
         $if !$param_type
             $die Type mapping [$mapping] $kind not found!
 
     subcode: check_want_star
         my $t = $param->{t}
-        my ($want_star, $want_bracket)
-        $if $kind=~/^ATTRIBUTE_VAL(_10)?$/
-            $want_star = 1
-        $elif $kind eq "STRING"
-            $if $t=~/length=/ and $t!~/pointer=/
+        $if is_pointer_type($kind, $t)
+            $if $kind eq "STRING_ARRAY"
+                $want_star = 1
+                $want_bracket = 1
+            $elif $kind eq "STRING_2DARRAY"
+                $want_star = 2
+                $want_bracket = 1
+            $elif $kind eq "ARGUMENT_LIST"
+                $want_star = 3
+            $elif $t=~/pointer=False/i
+                $want_bracket = 1
+            $elif $t=~/length=/ && $kind ne "STRING"
                 $want_bracket = 1
             $else
                 $want_star = 1
-        $elif $kind=~/^STRING_(2D)?ARRAY$/
-            $want_bracket = 1
-        $elif $kind=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
-            $want_star = 1
-        $elif $t=~/direction=(in)?out|pointer=/ and $t!~/length=/
-            $want_star = 1
 
 fncode: is_pointer_type($kind, $t)
-    $if $kind=~/^ATTRIBUTE_VAL(_10)?$/
+    $if $kind=~/^(STRING\w*)$/
         return 1
-    $elif $kind eq "STRING"
+    $elif $kind=~/^(ATTRIBUTE_VAL\w*|(C_)?BUFFER\d?|STATUS|EXTRA_STATE\d*|TOOL_MPI_OBJ|FUNCTION\w*)$/
         return 1
-    $elif $kind=~/^STRING_(2D)?ARRAY$/
+    $elif $t=~/direction=(in)?out/i
         return 1
-    $elif $kind=~/^((C_)?BUFFER\d?|STRING|EXTRA_STATE|FUNCTION)$/
+    $elif $t=~/length=/
         return 1
-    $elif $t=~/direction=(in)?out|pointer=/ and $t!~/length=/
+    $elif $t=~/pointer=True/
         return 1
     $else
         return 0
@@ -168,13 +199,18 @@ subcode: copy_right
     $print
 
 subcode: begin_error_checking
+    $print
     $print "#ifdef HAVE_ERROR_CHECKING"
+    $print "{"
+    $print "    MPID_BEGIN_ERROR_CHECKS;"
     $print "    {"
-    $print "        MPID_BEGIN_ERROR_CHECKS;"
-    $print "        {"
-    my $sp = ' ' x 12;
+    $print INDENT
+    $print INDENT
     BLOCK
-    $print "        }"
-    $print "        MPID_END_ERROR_CHECKS;"
+    $print DEDENT
+    $print DEDENT
     $print "    }"
+    $print "    MPID_END_ERROR_CHECKS;"
+    $print "}"
     $print "#endif \x2f* HAVE_ERROR_CHECKING */"
+    $print
