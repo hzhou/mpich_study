@@ -1,7 +1,7 @@
 include: macros/sockaddr.def
+module: c
 
 page: tcp, basic_frame
-    module: c
     CFLAGS: -D_XOPEN_SOURCE=500
 
     $local struct sockaddr_storage addr
@@ -44,7 +44,6 @@ subcode: check_get_sockaddr
 
 #-- Test EADDRINUSE ----------------------
 page: t, basic_frame
-    module: c
     $my struct sockaddr_storage addr
     MPL_get_sockaddr_direct(MPL_SOCKADDR_ANY, &addr)
 

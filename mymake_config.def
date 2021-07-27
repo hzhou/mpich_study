@@ -97,18 +97,20 @@ page: mymake_makefile
         @programs = ()
 
         $make_vars{LIBTOOL} = "./libtool"
-        $make_vars{CC} = $opts{CC}
-        $make_vars{CXX} = $opts{CXX}
-        $if !$make_vars{CC}
-            $make_vars{CC} = "gcc"
-        $if !$make_vars{CXX}
-            $make_vars{CXX} = "gcc"
+        $(for:CC,CXX,F77,FC and gcc,g++,gfortran,gfortran)
+            $if !$opts{$1}
+                $make_vars{$1} = "$2"
+            $else
+                $make_vars{$1} = $opts{$1}
         $make_vars{CCLD} = $make_vars{CC}
         $make_vars{CXXLD} = $make_vars{CXX}
+        $make_vars{FCLD} = $make_vars{FC}
         $make_vars{DEFS} = "-DHAVE_CONFIG_H"
 
         $make_vars{CFLAGS} = $opts{cflags}
         $make_vars{LDFLAGS} = $opts{ldflags}
+        $make_vars{FFLAGS} = '-O2'
+        $make_vars{FCFLAGS} = '-O2'
 
         $make_vars{EXEEXT}=""
         $make_vars{OBJEXT}="o"
@@ -250,6 +252,7 @@ subcode: get_c_sizeof
     $global %sizeof_hash
     my @header_list=("stdio.h")
     my @type_list=("void *", "char", "short", "int", "long", "long long", "size_t", "off_t", "float", "double", "long double")
+    push @type_list, "__float128"
     $if $config eq "mpich"
         $call additional_types
     get_sizeof(\@type_list, \@header_list)
@@ -344,7 +347,6 @@ subcode: get_c_features
     $(for:a in WEAK_ATTRIBUTE,PRAGMA_WEAK,MULTIPLE_PRAGMA_WEAK, GCC_ATTRIBUTE, MACRO_VA_ARGS, VA_COPY, VISIBILITY, BUILTIN_EXPECT, C11__STATIC_ASSERT, H_ADDR_LIST, SCHED_GETAFFINITY, SCHED_SETAFFINITY, SETITIMER, STRUCT_RANDOM_DATA)
         $config_defines{HAVE_$(a)}=1
     $config_defines{USE_WEAK_SYMBOLS}=1
-    $config_defines{USE_SYM_HEAP} = 1
     $config_defines{WORDS_LITTLEENDIAN}=1
 
     $config_defines{restrict} = '__restrict'
@@ -353,7 +355,12 @@ subcode: get_c_features
     # functions
     $(for:a in alarm,alloca,gethostname,putenv,qsort,random_r, signal, snprintf, strdup, strerror, strerror_r, strncmp, strncasecmp, vsnprintf, vsprintf, mkstemp, CPU_SET_T, CPU_SET_MACROS, DECL_STRERROR_R, posix_memalign, select, sched_yield, pthread_yield, mmap, munmap, inet_pton)
         $config_defines{HAVE_$(a:uc)}=1
-    $config_defines{STRERROR_R_CHAR_P} = 1
+    
+    # (more) system-specific
+    $if $opts{uname}=~/Linux/i
+        $config_defines{USE_SYM_HEAP} = 1
+    $if $opts{uname}=~/Linux/i
+        $config_defines{STRERROR_R_CHAR_P} = 1
 
 #---------------------------------------- 
 fncode: get_config_name($type)
@@ -362,6 +369,8 @@ fncode: get_config_name($type)
             return "TWO_INT"
         $else
             $type="$1 int"
+    $elif $type eq "__float128"
+        $type = "float128"
 
     $type =~ tr/\* \/./p_/
     return uc($type)
@@ -387,7 +396,7 @@ fncode: get_make_objects($a, $is_program)
         $t = "$a.c"
     my @tlist
     $foreach $a in  split /\s+/, $t
-        $if $a=~/(.*)\.(c)$/
+        $if $a=~/(.*)\.(c|f90)$/
             $if $is_program
                 push @tlist, "$1.o"
             $else

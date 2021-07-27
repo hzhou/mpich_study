@@ -159,22 +159,16 @@ subcode: get_err_usage(f)
             $if !$KnownErrRoutines{$name}
                 next
             $while 1
-                $if $args=~/^$(RE_PAREN)/
-                    $args=substr($1, 1, -1)
+                $if $args=~/^\((.*)\);/
+                    $args=$1
                     last
                 $args=~s/\\$// # macros
                 $_=<In>
                 chomp
                 $args.=' '.$_
-            my @arglist=arg_split($args)
-            my $pat=$KnownErrRoutines{$name}
-            my @idx=split /:/, $pat
-            # $if $(f)=~/comm_join/
-            #     print "$(f) $name - $idx[0]: ", join(", ", @arglist), "\n"
-            $if $arglist[$idx[0]]=~/"(\*\*.*)"/
+            $if $args=~/"(\*\*\w+)"/
                 $generics{$1}++
-            # $if $idx[2] == 1
-            $if $arglist[$idx[0]+1]=~/"(\*\*.*)"/
+            $if $args=~/"(\*\*\w+ [^"]*)"/
                 $specifics{$1}++
 
     subcode: ignore_mpir_err_h

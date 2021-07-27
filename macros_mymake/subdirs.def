@@ -73,7 +73,7 @@ subcode: need_mpl
         $foreach $t in @config_args
             $if $t=~/--enable-(g|strict)/
                 $configure.=" $t"
-            $elif $t=~/--with-(mpl|thread-package|argobots|uti|cuda)/
+            $elif $t=~/--with(out)?-(mpl|thread-package|argobots|uti|cuda)/
                 $configure.=" $t"
 
 #---------------------------------------- 
@@ -174,13 +174,14 @@ subcode: need_ucx
         system "find $ucxdir -name '*.la' | xargs sed -i \"s,MODDIR,$ucxdir,g\""
         system "find $ucxdir -name '*.la*' | xargs sed -i \"s,/MODPREFIX,$opts{prefix},g\""
         system "mkdir -p $opts{prefix}/lib/ucx"
+        $ENV{LIBRARY_PATH}="$opts{prefix}/lib:$opts{prefix}/lib/ucx:$ENV{LIBRARY_PATH}"
         $foreach $m in "ucm", "ucs", "uct", "ucp"
             system "$ucxdir/libtool --mode=install --quiet install $ucxdir/src/$m/lib$m.la $opts{prefix}/lib"
         my @tlist = glob("$ucxdir/modules/*.la")
         $foreach $m in @tlist
             &call open_r, $m
-                $if /relink_command="\(cd \S+ucx.src.uct.(\S+);/
-                    my $dir = "src/uct/$1"
+                $if /relink_command="\(cd \S+ucx.(src.\S+);/
+                    my $dir = "$1"
                     $m=~s/modules/$dir/
             system "$ucxdir/libtool --mode=install --quiet install $m $opts{prefix}/lib/ucx"
         unlink "$ucxdir/need_sed"

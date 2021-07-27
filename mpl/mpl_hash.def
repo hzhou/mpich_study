@@ -1,12 +1,13 @@
-include: ../mpich_frame.def
+include: ../study/mpich_frame.def
 include: macros/hash.def
 
 subcode: _autoload
     $include "mplconfig.h"
 
-page: mpl_hash
+page: mpl_hash, -
     module: c
-    dump_h: mpl_hash.h from ../templates/frame.h
+    # dump_h: mpl_hash.h
+    has_bool: 1
 
     $list MPL_hash_new
     $list MPL_hash_has
@@ -18,4 +19,4 @@ subcode: document
     &call doc, Rationale:
         An open addressing hash implementation specialized for string keys and string values. All strings are stored in a managed string pool in a insertion only manner. Deletion is achieved by simply overwrite the hash item with sentinel value/NULL. Deletion and reassignement will result in expired strings still being held in memory, which may be a concern if the application requires frequent deletion and modification and memory consumption is of concern. All memory will be released upon final free.
 
-        Compared to uthash.h, the usage interface is cleaner and ituitive -- hash_new, hash_set, hash_get, hash_has, and hash_free. No need to declare extra data structure. No need to manage string memory. The code base is much shorter (~250 lines vs ~1000 lines), and it is much more readable (straight C code vs. macros). The hash performance is in the same order as uthash and about 1/4 faster from limited tests. Becuase all the strings are managed in a contiguous string pool, it is much faster at deletion time. 
+        Compared to uthash.h, the usage interface is cleaner and more intuitive -- hash_new, hash_set, hash_get, hash_has, and hash_free. In comparison, uthash requires extra data structure, does not manage string memory, and the code is more complex. This implementation is faster than uthash as well.

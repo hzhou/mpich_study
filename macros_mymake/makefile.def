@@ -87,7 +87,8 @@ fncode: dump_makefile($makefile)
     # FIXME: add -module src/binding/fortran/use_mpi
     #    or modify to install modules from srcdir
     subcode: dump_fortran
-        $(for:F77,FC and F,FC)
+        # $(for:F77,FC and F,FC)
+        $(for:FC and FC)
             my $fc = get_make_var("$1")
             my $flags = get_make_var("$2FLAGS")
             my $am_flags = get_make_var("AM_$2FLAGS")
@@ -129,7 +130,7 @@ fncode: dump_makefile($makefile)
             $print
         $if !$opts{disable_fortran}
             $print "%.lo: %.f"
-            $call quiet_rule, LTF77, \x24(LTF77) -c -o \$\@ \$<
+            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
             $print
             $print "%.lo: %.f90"
             $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
@@ -156,7 +157,7 @@ fncode: dump_makefile($makefile)
         $if @$t1 or @$t2 or @$t3
             $foreach $t in @$t1, @$t2, @$t3
                 $t=~s/use_mpi_f08/use_mpi/
-                $dst_hash{$t} = "$opts{prefix}/include"
+                $dst_hash{$t} = "\x24(PREFIX)/include"
 
         my (%dirs, @install_list, @install_deps, @lns_list)
         $foreach $k in sort keys %dst_hash
@@ -227,7 +228,7 @@ fncode: dump_makefile($makefile)
         $foreach $p in @$(which)
             my $ld = "LTLD"
             $if $p=~/libmpifort.la/
-                $ld = "F77LD"
+                $ld = "FCLD"
             $elif $p=~/libmpicxx.la/
                 $ld = "CXXLD"
             my $cmd = "\x24($ld)"

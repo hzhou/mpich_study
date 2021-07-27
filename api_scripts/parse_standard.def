@@ -1,6 +1,6 @@
 # include: macros/common.def
 
-filter: perl_to_python
+# filter: perl_to_python
 
 macros:
     standard_dir: /home/hzhou/work/mpi-standard
@@ -184,7 +184,7 @@ fncode: strip_quotes($t)
 subcode: unescape_latex(t)
     $(t)=~s/\\+(consti?|constskip|mpiarg|mpicode|mpifunc)\{(.*?)\}/'$2'/g
     $(t)=~s/\\+(mbox|emph)\{(.*)?\}/$2/g
-    $(t)=~s/\\+(MPI)\/?/$1/gi
+    $(t)=~s/\\+(MPI|RMA)\/?/$1/gi
 
 subcode: unquote_python(t)
     $if $(t)=~/^\s*\((.*)\)\s*$/

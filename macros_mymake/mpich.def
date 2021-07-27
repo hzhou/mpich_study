@@ -1,6 +1,7 @@
 include: macros_mymake/dependency.def
 
 subcode: mpich_slow
+    $call @preproc_bindings
     $(setmacro:makefile=mpich)
     $call set_general_make_rules
     $call mpich_make_setup
@@ -131,8 +132,6 @@ subcode: mpich_make_setup
         $call need_ofi
     $elif $opts{device}=~/ch3.*:ofi/ and (!$opts{"with-ofi"} or $opts{"with-ofi"} eq "embedded")
         $call need_ofi
-
-    $call @preproc_bindings
 
     $call add_rule_cpi
     $call @add_rule_dep

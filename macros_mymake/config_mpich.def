@@ -1,3 +1,4 @@
+include: macros_mymake/mpif_h.def
 subcode: config_init_mpich
     $config_in = "$mymake_dir/config_templates/mpichconf.h"
     $config_out = "src/include/mpichconf.h"
@@ -13,6 +14,26 @@ subcode: config_mpich
     $call patch_mpichinfo_h
     $if !$opts{disable_cxx}
         $call patch_mpicxx_h
+    $if !$opts{disable_fortran}
+        $call load_mpi_h, src/include/mpi.h
+        my $dir="src/binding/fortran/mpif_h"
+        $call write_mpif_h, $dir/mpif.h
+        my $dir="src/binding/fortran/use_mpi"
+        $call patch_mpif90model_h
+        $call write_mpi_constants_f90, $dir/mpi_constants.f90
+        my %confs
+        $confs{WTIME_DOUBLE_TYPE} = "REAL*8"
+        $confs{SIZEOF_FC_INTEGER} = $sizeof_hash{INTEGER}
+        $confs{SIZEOF_FC_REAL} = $sizeof_hash{REAL}
+        $confs{SIZEOF_FC_DOUBLE_PRECISION} = $sizeof_hash{DOUBLE_PRECISION}
+        $confs{SIZEOF_FC_CHARACTER} = $sizeof_hash{CHARACTER}
+        autoconf_file("$dir/mpi_sizeofs.f90", \%confs)
+        autoconf_file("$dir/mpi_base.f90", \%confs)
+        my $dir="src/binding/fortran/use_mpi_f08"
+        $call write_f08_types, $dir/mpi_f08_types.f90
+        $call write_f08_c_interface_types, $dir/mpi_c_interface_types.f90
+        $call write_f08_constants, $dir/mpi_f08_compile_constants.f90
+        $call write_f08_link_constants_f90, $dir/mpi_f08_link_constants.f90
     $call set_make_conds
 
     # if 64-bit
@@ -37,8 +58,12 @@ subcode: config_mpich
         $temp{HAVE_TAG_ERROR_BITS} = 1
         $temp{USE_PMI_PORT} = 1
         $temp{HAVE_NAMEPUB_SERVICE} = 1
+        $temp{HAVE_HWLOC} = 1
 
-        $temp{HAVE_ERROR_CHECKING}='MPID_ERROR_LEVEL_ALL'
+        $if $opts{"disable-error-checking"}
+            NOOP
+        $else
+            $temp{HAVE_ERROR_CHECKING}='MPID_ERROR_LEVEL_ALL'
         $temp{MPICH_ERROR_MSG_LEVEL} = 'MPICH_ERROR_MSG__ALL'
         $temp{MPICH_IS_THREADED} = 1
         $temp{MPICH_THREAD_GRANULARITY} = 'MPICH_THREAD_GRANULARITY__GLOBAL'
@@ -52,13 +77,15 @@ subcode: config_mpich
         $if $opts{device}=~/ch4/
             $if $opts{"without-ch4-shmmods"}
                 $temp{MPIDI_CH4_DIRECT_NETMOD} = 1
+            $if $opts{"enable-ch4-am-only"}
+                $temp{MPIDI_ENABLE_AM_ONLY} = 1
             $temp{MPIDI_BUILD_CH4_LOCALITY_INFO}=1
             $temp{MPIDI_CH4U_USE_PER_COMM_QUEUE}=1
             $temp{MPIDI_CH4_MAX_VCIS}=1
             $temp{MPIDI_CH4_USE_MT_DIRECT}=1
             $temp{MPIDI_CH4_VCI_METHOD}='MPICH_VCI__ZERO'
-            $temp{CH4_RANK_BITS}=32
             $temp{HAVE_CH4_SHM_EAGER_IQUEUE}=1
+            $temp{ENABLE_LOCAL_SESSION_INIT}=1
 
             $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_YAKSA'
 
@@ -68,6 +95,7 @@ subcode: config_mpich
                 $temp{HAVE_LIBUCP} = 1
                 $temp{HAVE_UCP_PUT_NB}=1
                 $temp{HAVE_UCP_GET_NB}=1
+                $temp{CH4_UCX_RANKBITS}=16
             $elif $opts{device}=~/ch4:ofi/
                 $temp{HAVE_CH4_NETMOD_OFI}=1
                 $temp{MPIDI_OFI_VNI_USE_DOMAIN}=1
@@ -79,6 +107,7 @@ subcode: config_mpich
                 $if !$temp{MPIDI_CH4_DIRECT_NETMOD}
                     $temp{MPIDI_CH4_SHM_ENABLE_GPU}=1
                     $make_conds{BUILD_SHM_IPC_GPU} = 1
+                $temp{ENABLE_PVAR_MULTINIC}=0 
         $elif $opts{device}=~/ch3/
             $temp{CH3_RANK_BITS} = 16
             $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_DATALOOP'
@@ -88,10 +117,6 @@ subcode: config_mpich
             $else
                 $temp{MPID_NEM_INLINE}=1
                 $temp{MPID_NEM_LOCAL_LMT_IMPL}="MPID_NEM_LOCAL_LMT_SHM_COPY"
-
-        $if 1
-            $temp{HAVE_F08_BINDING} = 0
-            $temp{HAVE_NO_FORTRAN_MPI_TYPES_IN_C} = 1
 
         $if $opts{device} =~ /ch4/
             $if -f "src/mpid/ch4/shm/posix/posix_eager_array.c.in"
@@ -104,11 +129,18 @@ subcode: config_mpich
         $elif $opts{device} =~ /ch3/ and $opts{device}!~/:sock/
             $call patch_ch3_nemesis
 
-        $temp{MPIF_STATUS_SIZE} = $sizeof_hash{MPI_STATUS}
-
+        $if !$opts{disable_fortran}
+            $temp{HAVE_NO_FORTRAN_MPI_TYPES_IN_C} = 1
+            $temp{HAVE_FORTRAN_BINDING} = 1
+            $if $sizeof_hash{VOID_P} > $sizeof_hash{INT}
+                $temp{HAVE_AINT_LARGER_THAN_FINT} = 1
+            $temp{MPIR_FC_REAL_CTYPE} = "float"
+            $temp{MPIR_FC_DOUBLE_CTYPE} = "double"
+            $call patch_setbot_c
         $if 0 # cxx
             $temp{HAVE_NAMESPACES}=1
             $temp{HAVE_NAMESPACE_STD}=1
+
     subcode: set_make_conds
         $call set_conds_off
         $call set_conds_optional
@@ -135,6 +167,7 @@ subcode: config_mpich
             # $call set_conds_off
             $if $opts{device} =~ /ch3/
                 $make_conds{BUILD_CH3} = 1
+                $make_conds{BUILD_DATALOOP_ENGINE} = 1
                 $if $opts{device} =~/ch3:sock/
                     $make_conds{BUILD_CH3_SOCK}=1
                     $make_conds{BUILD_CH3_UTIL_SOCK}=1
@@ -169,7 +202,7 @@ subcode: config_mpich
                 $if 0
                     $make_conds{BUILD_CH4_COLL_TUNING} = 1
 
-            $(for:SCHED,THREAD)
+            $(for:SCHED,THREAD,SELF)
                 $make_conds{BUILD_MPID_COMMON_$1} = 1
             $if $opts{device}=~/ch4/
                 $(for:SHM,BC,GENQ)
@@ -189,6 +222,14 @@ subcode: config_mpich
             $if !$opts{disable_fortran}
                 $make_conds{BUILD_F77_BINDING} = 1
                 $make_conds{BUILD_FC_BINDING} = 1
+                $if $opts{f08}
+                    $make_conds{BUILD_F08_BINDING} = 1
+                    $config_defines{HAVE_F08_BINDING} = 1
+                $else
+                    $config_defines{HAVE_F08_BINDING} = 0
+            $else
+                $(for:mpif_h,use_mpi, use_mpi_f08)
+                    system "touch src/binding/fortran/$1/Makefile.mk"
 
             $if 1
                 $make_conds{BUILD_PMI_SIMPLE} = 1
@@ -214,6 +255,7 @@ subcode: patch_mpi_h
     $call set_mpi_aint
     $call set_mpi_datatypes
     autoconf_file("src/include/mpi.h", \%confs)
+    my $mpi_h_confs = \%confs
 
     subcode: set_mpi_misc
         $confs{MPICH_VERSION} = $version
@@ -279,69 +321,84 @@ subcode: patch_mpi_h
         $sizeof_hash{"C_FLOAT16"} = 2
         $(for:FLOAT,DOUBLE,LONG_DOUBLE)
             $sizeof_hash{"C_$1_COMPLEX"} = $sizeof_hash{"$1__COMPLEX"}
+        # fortran
+        $sizeof_hash{CHARACTER} = $sizeof_hash{CHAR}
+        $sizeof_hash{INTEGER} = $sizeof_hash{INT}
+        $sizeof_hash{REAL} = $sizeof_hash{FLOAT}
+        $sizeof_hash{DOUBLE_PRECISION} = $sizeof_hash{DOUBLE}
 
-        my $idx = 1 # 0x01 - 0x11
-        $(for:01-11%02x and $(basic_set))
+        $(for:$(DT_basic_range) and $(DT_basic_set))
             $call set_datatype, $2, $1
-        $(for:00-04%02x and FLOAT_INT, DOUBLE_INT, LONG_INT, SHORT_INT, LONG_DOUBLE_INT)
+
+        $(for:$(DT_pair_range) and $(DT_pair_set))
             $call set_pairtype, $2, $1
-        $(for:16 and 2INT)
-            $call set_datatype, $2, $1
-        $(for:18-19%x and SIGNED_CHAR, UNSIGNED_LONG_LONG)
-            $call set_datatype, $2, $1
+
         # -- FORTRAN --
         $if !$opts{disable_fortran}
-            $(for:1a-25%x and $(fortran_set))
+            $(for:$(DT_fortran_range) and $(DT_fortran_set))
                 $call set_datatype, $2, $1
+            # MPIR_INTERGER#_CTYPE
+            $foreach $n in 1,2,4,8
+                $foreach $type in "char", "short", "int", "long", "long long"
+                    my $a = get_config_name($type)
+                    $if $sizeof_hash{$a} == $n
+                        $config_defines{"MPIR_INTEGER${n}_CTYPE"} = $type
+                        last
+            $foreach $n in 4,8,16
+                $foreach $type in "float", "double", "__float128"
+                    my $a = get_config_name($type)
+                    $if $sizeof_hash{$a} == $n
+                        $config_defines{"MPIR_REAL${n}_CTYPE"} = $type
+                        last
         $else
-            $(for:$(fortran_set))
+            $(for:$(DT_fortran_set))
                 $call set_datatype_null, $1
 
-        $(for:27-32%x and REAL4,COMPLEX8,REAL8,COMPLEX16,REAL16,COMPLEX32,INTEGER1,-,INTEGER2,INTEGER4,INTEGER8,INTEGER16)
-            $call set_datatype_n, $2, $1
         # -- CXX --
         $if !$opts{disable_cxx}
-            $(for:33-36%x and $(cxx_set))
+            $(for:$(DT_cxx_range) and $(DT_cxx_set))
                 $call set_datatype_cxx, $2, $1
         $else
-            $(for:$(cxx_set))
+            $(for:$(DT_cxx_set))
                 $call set_datatype_null_r, $1
 
-        $(for:37-42%x and INT8_T,INT16_T,INT32_T,INT64_T,UINT8_T,UINT16_T,UINT32_T,UINT64_T,C_BOOL,C_FLOAT_COMPLEX,C_DOUBLE_COMPLEX,C_LONG_DOUBLE_COMPLEX)
+        $(for:$(DT_extra_range) and $(DT_extra_set))
             $call set_datatype, $2, $1
 
-        $(for:43-45%x and AINT,OFFSET,COUNT)
+        $(for:$(DT_aint_range) and $(DT_aint_set))
             $call set_datatype_aint, $2, $1
 
-        $(for:46 and C_FLOAT16)
+        $(for:$(DT_x_range) and $(DT_x_set))
             $call set_datatype_x, $2, $1
         
-    macros:
-        basic_set: CHAR, UNSIGNED_CHAR, SHORT, UNSIGNED_SHORT, INT, UNSIGNED_INT, LONG, UNSIGNED_LONG, LONG_LONG, FLOAT, DOUBLE, LONG_DOUBLE, BYTE, WCHAR, PACKED, LB, UB
-        fortran_set: CHARACTER, INTEGER, REAL, LOGICAL, COMPLEX, DOUBLE_PRECISION, 2INTEGER, 2REAL, DOUBLE_COMPLEX, 2DOUBLE_PRECISION, 2COMPLEX, 2DOUBLE_COMPLEX
-        cxx_set: CXX_BOOL,CXX_COMPLEX,CXX_DOUBLE_COMPLEX,CXX_LONG_DOUBLE_COMPLEX
-
     subcode: set_datatype(T, idx)
-        $confs{MPI_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
-    subcode: set_pairtype(T, idx) 
-        $confs{MPI_$(T)} = "0x8c0000$(idx)"
-    subcode: set_datatype_n(T, idx)
         $(if:T!=-)
-            $confs{MPI_$(T)} = sprintf("0x4c00%02x$(idx)", $(T:regex:(\d+)))
+            $(if:T~(INTEGER|REAL|COMPLEX)\d+)
+                $confs{MPI_$(T)} = sprintf("0x4c00%02x$(idx)", $(T:regex:(\d+)))
+            $(else)
+                $confs{MPI_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
+    subcode: set_pairtype(T, idx) 
+        $(if:T!=-)
+            $confs{MPI_$(T)} = "0x8c0000$(idx)"
 
     subcode: set_datatype_cxx(T, idx)
-        $confs{MPIR_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
+        $(if:T!=-)
+            $confs{MPIR_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
 
     subcode: set_datatype_aint(T, idx)
-        $confs{MPI_$(T)_DATATYPE} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{$(T)})
+        $(if:T!=-)
+            $confs{MPI_$(T)_DATATYPE} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{$(T)})
 
     subcode: set_datatype_x(T, idx)
-        $confs{MPIX_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
+        $(if:T!=-)
+            $confs{MPIX_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
 
     subcode: set_datatype_null(T)
-        $confs{MPI_$(T)} = "MPI_DATATYPE_NULL"
+        $(if:T!=-)
+            $confs{MPI_$(T)} = "MPI_DATATYPE_NULL"
     subcode: set_datatype_null_r(T)
-        $confs{MPIR_$(T)} = "MPI_DATATYPE_NULL"
+        $(if:T!=-)
+            $confs{MPIR_$(T)} = "MPI_DATATYPE_NULL"
 
 #---------------------------------------- 
 subcode: patch_mpir_ext_h
@@ -382,7 +439,8 @@ subcode: patch_mpicxx_h
     subcode: set_datatype_cxx(T, idx)
         $confs{MPIR_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
 
-#---------------------------------------- 
+subcode: patch_mpif_h
+
 #---------------------------------------- 
 subcode: patch_mpicc_etc
     my %confs
@@ -416,8 +474,11 @@ subcode: patch_mpicc_etc
             $confs{"MPICH_MPI${P}_$1FLAGS"}=""
         $confs{"MPICH_MPI${P}_LIBS"}=""
 
-        $if -f "src/env/mpi$p.bash.in"
-            $call get_file_lines, src/env/mpi$p.bash.in
+        my $script = "src/env/mpi$p.bash.in"
+        $if $opts{sh}
+            $script = "src/env/mpi$p.sh.in"
+        $if -f $script
+            $call get_file_lines, $script
             &call open_W, mymake/mpi$p
                 $foreach $l in @lines
                     $l=~s/\@(\w+)\@/$confs{$1}/g
@@ -441,6 +502,13 @@ subcode: patch_mpicc_etc
         my $dtags="enable_dtags_flag=\"\\\$wl--enable-new-dtags\"\n"
         $dtags  .="disable_dtags_flag=\"\\\$wl--disble-new-dtags\"\n"
 
+subcode: patch_setbot_c
+    my %confs
+    $confs{MPI_STATUS_SIZE} = 5
+    $confs{CMB_1INT_ALIGNMENT}='__attribute__((aligned(16)))'
+    $confs{CMB_STATUS_ALIGNMENT}='__attribute__((aligned(32)))'
+    autoconf_file("src/binding/fortran/mpif_h/setbot.c", \%confs)
+
 #---------------------------------------- 
 subcode: get_c_sizeof_mpich
     $if $config eq "mpich"
@@ -453,16 +521,20 @@ subcode: get_c_sizeof_mpich
         $config_defines{SIZEOF_WCHAR_T}=0
 
         $config_defines{MAX_ALIGNMENT} = 16
+        $config_defines{MPIR_Ufint} = "unsigned int"
         my $MPI_AINT
-        $if $sizeof_hash{LONG} == $sizeof_hash{LONG_LONG}
+        $if $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
             $MPI_AINT = "long"
             $config_defines{MPIR_AINT_MAX} = 'LONG_MAX'
+        $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG_LONG}
+            $MPI_AINT = "long long"
+            $config_defines{MPIR_AINT_MAX} = 'LONG_LONG_MAX'
+
+        $if $sizeof_hash{LONG} == $sizeof_hash{LONG_LONG}
             $config_defines{MPIR_COUNT_MAX} = 'LONG_MAX'
             $config_defines{MPIR_OFFSET_MAX} = 'LONG_MAX'
             $config_defines{MPIR_Ucount} = "unsigned long"
         $else
-            $MPI_AINT = "long long"
-            $config_defines{MPIR_AINT_MAX} = 'LONG_LONG_MAX'
             $config_defines{MPIR_COUNT_MAX} = 'LONG_LONG_MAX'
             $config_defines{MPIR_OFFSET_MAX} = 'LONG_LONG_MAX'
             $config_defines{MPIR_Ucount} = "unsigned long long"
@@ -470,20 +542,6 @@ subcode: get_c_sizeof_mpich
         $config_defines{HAVE_LONG_LONG_INT} = 1
 
         get_sizeof_bsend_status($MPI_AINT)
-
-        # MPIR_INTERGER#_CTYPE
-        $foreach $n in 1,2,4,8
-            $foreach $type in "char", "short", "int", "long", "long long"
-                my $a = get_config_name($type)
-                $if $sizeof_hash{$a} == $n
-                    $config_defines{"MPIR_INTEGER${n}_CTYPE"} = $type
-                    last
-        $foreach $n in 4,8,16
-            $foreach $type in "float", "double", "__float128"
-                my $a = get_config_name($type)
-                $if $sizeof_hash{$a} == $n
-                    $config_defines{"MPIR_REAL${n}_CTYPE"} = $type
-                    last
 
 fncode: get_sizeof_bsend_status($MPI_AINT)
     $call dump_c_test, mymake/t.c
@@ -509,10 +567,8 @@ fncode: get_sizeof_bsend_status($MPI_AINT)
                 print Out "#include \"$pwd/src/include/mpir_bsend.h\"\n"
             $elif -f "src/include/mpii_bsend.h"
                 print Out "#include \"$pwd/src/include/mpii_bsend.h\"\n"
-            print Out "typedef struct {int lo; int hi; int src; int tag; int err;} MPI_Status;" 
             print Out "int main() {\n"
             print Out "    printf(\"MPII_BSEND_DATA_T: %lu\\n\", sizeof(MPII_Bsend_data_t));\n"
-            print Out "    printf(\"MPI_STATUS: %lu\\n\", sizeof(MPI_Status));\n"
             print Out "    return 0;\n"
             print Out "}\n"
 
@@ -527,7 +583,9 @@ subcode: make_mpich
     $call mpich_make_setup
 
     $autoconf_vars{MPILIBNAME} = "mpi"
+    $autoconf_vars{MPIFCLIBNAME} = "mpifort"
     $autoconf_vars{MPICXXLIBNAME} = "mpicxx"
+
     $autoconf_vars{VISIBILITY_CFLAGS} = "-fvisibility=hidden"
 
     $if !$opts{"disable-ch4-netmod-inline"}
@@ -542,6 +600,25 @@ subcode: make_mpich
 
     $call load_mpich_conds
     load_automake("Makefile.am", \%conds)
+
+    $if !$opts{disable_cxx}
+        $call config_cxx
+    $if !$opts{disable_fortran}
+        $call config_fortran
+        my $U="src/binding/fortran"
+        # ----
+        $make_vars{AM_FCFLAGS} = "-I$U/use_mpi"
+        my @mods
+        $(for:mpi,mpi_sizeofs,mpi_constants,mpi_base)
+            push @mods, "$U/use_mpi/$1.mod"
+        $if $opts{f08}
+            $(for:pmpi_f08,mpi_f08)
+                push @mods, "$U/use_mpi/$1.mod"
+            $(for:callbacks,compile_constants,link_constants,types)
+                push @mods, "$U/use_mpi/mpi_f08_$1.mod"
+            $(for:cdesc,glue,nobuf,types)
+                push @mods, "$U/use_mpi/mpi_c_interface_$1.mod"
+        $make_vars{modinc_HEADERS} = join(' ', @mods)
 
     $if 1 # linux
         $make_vars{lib_libmpi_la_LIBADD} .= " $L_list"
@@ -677,3 +754,34 @@ subcode: patch_coll_algo_params_h
 
     autoconf_file("src/mpid/ch4/include/coll_algo_params.h", \%confs)
     autoconf_file("src/mpid/ch4/src/ch4_coll_globals_default.c", \%confs)
+
+#---- list of contants ----
+macros:
+    status_fields: count_lo, count_hi_and_cancelled, MPI_SOURCE, MPI_TAG, MPI_ERROR
+
+    HANDLE_LIST: Comm, Win, File, Group, Op, Datatype, Request, Info, Errhandler, Message, Session
+    OP_SET: MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR, LXOR, BXOR, MINLOC, MAXLOC, REPLACE, NO_OP
+
+macros:
+    DT_basic_range: 01-19%02x
+    DT_basic_set: CHAR, UNSIGNED_CHAR, SHORT, UNSIGNED_SHORT, INT, UNSIGNED_INT, LONG, UNSIGNED_LONG, LONG_LONG, FLOAT, DOUBLE, LONG_DOUBLE, BYTE, WCHAR, PACKED, LB, UB, -,-,-,-, 2INT, -, SIGNED_CHAR, UNSIGNED_LONG_LONG
+
+    DT_fortran_range: 1a-32%02x
+    DT_fortran_set: CHARACTER, INTEGER, REAL, LOGICAL, COMPLEX, DOUBLE_PRECISION, 2INTEGER, 2REAL, DOUBLE_COMPLEX, 2DOUBLE_PRECISION, 2COMPLEX, 2DOUBLE_COMPLEX, -, REAL4,COMPLEX8,REAL8,COMPLEX16,REAL16,COMPLEX32,INTEGER1,-,INTEGER2,INTEGER4,INTEGER8,INTEGER16
+
+    DT_cxx_range: 33-36%02x
+    DT_cxx_set: CXX_BOOL,CXX_COMPLEX,CXX_DOUBLE_COMPLEX,CXX_LONG_DOUBLE_COMPLEX
+
+    DT_extra_range: 37-42%02x
+    DT_extra_set: INT8_T,INT16_T,INT32_T,INT64_T,UINT8_T,UINT16_T,UINT32_T,UINT64_T,C_BOOL,C_FLOAT_COMPLEX,C_DOUBLE_COMPLEX,C_LONG_DOUBLE_COMPLEX
+
+    DT_aint_range: 43-45%02x
+    DT_aint_set: AINT,OFFSET,COUNT
+
+    DT_x_range: 46
+    DT_x_set: C_FLOAT16
+
+    DT_pair_range: 00-04%02x
+    DT_pair_set: FLOAT_INT, DOUBLE_INT, LONG_INT, SHORT_INT, LONG_DOUBLE_INT
+
+    DT_ALL_SET: $(DT_basic_set), $(DT_fortran_set), $(DT_cxx_set), $(DT_extra_set), $(DT_aint_set), $(DT_x_set), $(DT_pair_set)

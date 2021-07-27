@@ -17,7 +17,7 @@ page: mymake_libtool
     &call open_w, configure.ac
         print Out "AC_INIT\n"
         print Out "LT_INIT\n"
-        $(if:0)
+        $(if:1)
             print Out "AC_PROG_CXX\n"
             print Out "AC_PROG_F77\n"
             print Out "AC_PROG_FC\n"

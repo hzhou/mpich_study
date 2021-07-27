@@ -41,6 +41,8 @@ subcode: config_hydra
         $config_defines{HAVE_BSS_PERSIST}=1
         $config_defines{HAVE_ERROR_CHECKING}=1
         $config_defines{HAVE_EXTERN_ENVIRON}=1
+        $if $opts{uname}=~/FreeBSD/i
+            $config_defines{MANUAL_EXTERN_ENVIRON}=1
         $config_defines{ENABLE_PROFILING}=1
 
         $(for:CXX,F77,F90)

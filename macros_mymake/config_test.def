@@ -7,6 +7,7 @@ subcode: config_init_test
 subcode: config_test
     $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/
     $call set_config_defines
+    $call patch_runtests
 
     subcode: set_config_defines
         # datatypes
@@ -33,12 +34,25 @@ subcode: config_test
         $if $opts{device}!~/ch4:ucx/
             $config_defines{HAVE_MPI_SPAWN} = 1
 
+        $if $opts{"with-cuda"}
+            $config_defines{HAVE_GPU} = 1
+            $config_defines{HAVE_CUDA} = 1
+
+    subcode: patch_runtests
+        my %confs
+        $confs{PERL}="/usr/bin/perl"
+        $confs{MPIEXEC} = "mpiexec"
+        $confs{MPI_IS_STRICT} = "false"
+        $confs{RUN_XFAIL} = "false"
+        autoconf_file("test/mpi/runtests", \%confs)
+
 subcode: make_test
     my %conds
     $autoconf_vars{threadlib} = "-lpthread"
     my @all_am = glob("test/mpi/*/Makefile.am")
     push @all_am, glob("test/mpi/threads/*/Makefile.am")
     push @all_am, glob("test/mpi/errors/*/Makefile.am")
+    push @all_am, glob("test/mpi/impls/mpich/comm/Makefile.am")
     # $foreach $dir in "attr", "comm", "datatype", "pt2pt", "coll", "rma", "threads/pt2pt"
     $foreach $a in @all_am
         my $dir
@@ -56,6 +70,13 @@ subcode: make_test
 
         @extra_make_rules=()
         $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
+
+        $if $opts{"with-cuda"}
+            my $p = $opts{"with-cuda"}
+            $conds{HAVE_CUDA} = 1
+            $make_vars{CPPFLAGS} .= " -I$p/include"
+            $make_vars{LDFLAGS} .= " -L$p/lib64"
+            $make_vars{LIBS} .= " -lcudart -lcuda"
 
         $make_vars{LIBTOOL} = "$top_srcdir/libtool"
         $make_vars{CC} = "mpicc"

@@ -15,11 +15,10 @@ subcode: config_mpl
 
         $config_defines{THREAD_PACKAGE_NAME} = "MPL_THREAD_PACKAGE_POSIX"
         $config_defines{PROC_MUTEX_PACKAGE_NAME} = "MPL_PROC_MUTEX_PACKAGE_POSIX"
-        $if !$config_defines{MPL_POSIX_MUTEX_NAME}
-            $config_defines{MPL_POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_NATIVE"
+        $if !$config_defines{POSIX_MUTEX_NAME}
+            $config_defines{POSIX_MUTEX_NAME} = "MPL_POSIX_MUTEX_NATIVE"
 
         $config_defines{USE_MMAP_SHM} = 1
-        $config_defines{MPL_USE_MMAP_SHM} = 1
         $config_defines{USE_NOTHING_FOR_YIELD} = 1
 
         # --enable-timer-type=[gethrtime,clock_gettime,gettimeofday,mach_absolute_time,linux86_cycle,gcc_ia64_cycle,ppc64_cycle]
@@ -42,11 +41,14 @@ subcode: config_mpl
         $(for:a in VAR_ATTRIBUTE_USED,VAR_ATTRIBUTE_ALIGNED,_BOOL,__TYPEOF)
             $config_defines{HAVE_$(a)}=1
 
-        $(for:a in aligned_alloc,backtrace,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
+        # No backtrace
+        $(for:a in aligned_alloc,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
             $config_defines{HAVE_$(a:uc)}=1
 
         $if $opts{"with-cuda"}
-            $config_defines{HAVE_CUDA}=1
+            $config_defines{HAVE_GPU} = 1
+            $config_defines{HAVE_CUDA} = 1
+
         $config_defines{HAVE_PTHREAD_MUTEXATTR_SETPSHARED} = 1
 
         $config_defines{backtrace_size_t} = "int"

@@ -5,6 +5,7 @@ subcode: init_config_defines
     $call init_opt, enable-legacy-ofi,    MPIDI_ENABLE_LEGACY_OFI
     $call init_opt, enable-ch4-am-only,   MPIDI_ENABLE_AM_ONLY
     $call init_opt, with-ch4-max-vcis,    MPIDI_CH4_MAX_VCIS
+    $call init_opt, with-ch4-rank-bits,   CH4_RANK_BITS
     $call init_opt, enable-nolocal,       ENABLE_NO_LOCAL
     $call init_opt, enable-izem-queue,    ENABLE_IZEM_QUEUE
 
@@ -59,6 +60,10 @@ subcode: post_config_defines
         $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
     $if $config_defines{MPICH_THREAD_GRANULARITY} =~/VCI|POBJ/
         $config_defines{MPICH_THREAD_REFCOUNT} = "MPICH_REFCOUNT__LOCKFREE"
+        $if !$config_defines{MPIDI_CH4_MAX_VCIS}
+            $config_defines{MPIDI_CH4_MAX_VCIS} = 64
+        $if !$config_defines{MPIDI_CH4_VCI_METHOD}
+            $config_defines{MPIDI_CH4_VCI_METHOD} = "MPICH_VCI__COMM"
     $else
         $config_defines{MPICH_THREAD_REFCOUNT} = "MPICH_REFCOUNT__NONE"
 

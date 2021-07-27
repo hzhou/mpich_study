@@ -6,7 +6,7 @@ page: extract_custom
     # dir_list: attr  coll  comm  datatype  debugger  errhan  group  info  init  misc  request  rma  spawn  timer  topo
     # dir_list: romio
     # dir_list: attr
-    dir_list: mpi_t
+    dir_list: coll
 
     $foreach $dir in qw($(dir_list))
         my @FUNCS
@@ -75,7 +75,9 @@ page: extract_custom
         $elif $flag eq "man"
             $if /^\s*(MPI_\w+) -\s*(.*)/
                 $func->{desc} = $2
-            $elif /^(Notes:|\.N )/
+            $elif /^(\s*)(Notes:|\.N )/
+                $if length($1) > 0
+                    warn "Potentially miss notes in $f - $func->{name}\n"
                 $func->{notes} = [$_]
                 $flag = "man_notes"
         $elif $flag eq "man_notes" 

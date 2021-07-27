@@ -28,6 +28,7 @@ subcode: parse_args
     $call set_moddir
 
     my $uname = `uname`
+    $opts{uname} = $uname
     $if $uname=~/Darwin/
         $opts{do_pmpi} = 1
 
@@ -35,10 +36,19 @@ subcode: parse_args
         my $mod_tarball
         $if $ENV{MODTARBALL}
             $mod_tarball = $ENV{MODTARBALL}
-        $elif -e "modules.tar.gz"
-            $mod_tarball = "modules.tar.gz"
-        $elif -e "mymake/modules.tar.gz"
-            $mod_tarball = "mymake/modules.tar.gz"
+        $(for:a in modules,modules-yaksa-new,modules-gpu)
+            $elif -e "$(a).tar.gz"
+                $mod_tarball = "$(a).tar.gz"
+        # --
+        $if $mod_tarball =~/modules\.tar\.gz$/
+            my $cmd = "git log --after=\"2021-2-16\" |grep 'Yaksa has been updated to use intptr_t'"
+            $if `$cmd`
+                $mod_tarball=~s/modules\.tar\.gz/modules-yaksa-new.tar.gz/
+            $if $opts{"with-cuda"} && $mod_tarball
+                $mod_tarball=~s/modules.*\.tar\.gz/modules-gpu.tar.gz/
+            $if !-e $mod_tarball
+                $print "$mod_tarball not found! Using module.tar.gz."
+                $mod_tarball = "modules.tar.gz"
         # --------------
         $if $ENV{MODDIR}
             $opts{moddir} = Cwd::abs_path($ENV{MODDIR})
@@ -67,8 +77,8 @@ subcode: parse_args
 
     subcode: parse_ARGV
         $foreach $a in @ARGV
-            $if $a=~/^-quick/
-                $opts{quick}=1
+            $if $a=~/^-(quick|f08|noclean|sh)/
+                $opts{$1}=1
             $elif $a=~/^--(.*?)=(.*)/ -> $o, $v
                 $opts{$1}=$2
                 $if $v eq "no"
@@ -139,7 +149,7 @@ subcode: save_last_ARGV
             print Out $t, "\n"
         $call save_opts
 
-        $if -f "Makefile"
+        $if -f "Makefile" and !$opts{noclean}
             system "make realclean"
 
 subcode: save_opts

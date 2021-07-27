@@ -17,7 +17,8 @@ page: report_make_log
         $else
             $call parse_make_log
 
-    dump_report(\@make_log, $dur)
+    my $n_fails = dump_report(\@make_log, $dur)
+    exit $n_fails
 
     # --------------------
     subcode: parse_make_log
@@ -76,8 +77,8 @@ fncode: parse_warning($t)
         $if $t=~/warning #177:/
             # icc: label "xxx" was declared but never referenced
             $o->{skip}="icc: warning #177: unused label"
-        $elif $compiler eq "gcc-4" and $t=~/\[(-Wmaybe-uninitialized)\]/
-            $o->{skip}="gcc-4: $1"
+        # $elif $compiler eq "gcc-4" and $t=~/\[(-Wmaybe-uninitialized)\]/
+        #     $o->{skip}="gcc-4: $1"
         $elif $compiler eq "pgi"
             $if $t=~/warning: transfer of control bypasses initialization of/
                 $o->{skip}="pgi: goto bypasses variable initialization"
@@ -113,6 +114,7 @@ fncode: dump_report($warning_list, $dur)
                 
         $print </testsuite>
         $print </testsuites>
+    return $n_fails
 
     subcode: dump_warning
         $t=~s/"//g

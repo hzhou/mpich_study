@@ -109,7 +109,7 @@ subcode: testing_config
                 $config_args .= " $t"
             $elif $t=~/--(dis|en)able-(fortran|cxx|romio)/
                 $config_args .= " $t"
-            $elif $t=~/--with-(thread-package|argobots)/
+            $elif $t=~/--with-(thread-package|argobots|cuda|ze)/
                 $config_args .= " $t"
 
 subcode: echo_system(@cmd)

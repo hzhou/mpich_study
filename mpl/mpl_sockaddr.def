@@ -1,4 +1,4 @@
-include: ../mpich_frame.def
+include: ../study/mpich_frame.def
 include: macros/sockaddr.def
 
 subcode: _autoload

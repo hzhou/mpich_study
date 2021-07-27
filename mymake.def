@@ -24,6 +24,11 @@ page: mymake
     my $python = find_python3()
     $call autogen, src/mpi/pt2pt/send.c, maint/gen_binding_c
     $call autogen, src/mpid/ch4/netmod/include/netmod.h, maint/gen_ch4_api
+    $call autogen, src/mpi/coll/mpir_coll.c, maint/gen_coll
+    $if !$opts{disable_cxx}
+        $call autogen_cxx
+    $if !$opts{disable_fortran}
+        $call autogen_fortran
 
     $if $opts{quick}
         $if !-f "libtool"
@@ -31,9 +36,13 @@ page: mymake
                 $call patch_libtool, mymake/libtool/libtool
             $else
                 system "perl $opts{mymake}_libtool.pl"
+        $else
+            $print "libtool" already exist.
         $if !-f "$(mpich_config_h)"
             system "perl $opts{mymake}_config.pl mpich"
             system "perl $opts{mymake}_makefile.pl mpich"
+        $else
+            $print "$(mpich_config_h)" already exist.
     $else
         $call mpich_slow
 
@@ -147,7 +156,9 @@ page: mymake_stage
 page: mymake_clean
     module: perl
 
-    $call load_opts
+    $if -f "mymake/opts"
+        $call load_opts
+
     my @realclean_list
     push @realclean_list, "subsys_include.m4"
     push @realclean_list, "src/mpi/errhan/defmsg.h"
@@ -167,6 +178,9 @@ page: mymake_clean
 
     $if -d $opts{prefix}
         push @realclean_list, "$opts{prefix}/lib/libmpi*"
+
+    push @realclean_list, "src/binding/c/*/*.c"
+    push @realclean_list, "src/mpid/ch4/netmod/include/netmod.h"
 
     $foreach $t in @realclean_list
         $print "rm -rf $t"
