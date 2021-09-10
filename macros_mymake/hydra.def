@@ -77,6 +77,8 @@ subcode: hydra_config
                 next
             $elif $l=~/^(\s*)(PAC_CONFIG_SUBDIR|PAC_CONFIG_ALL_SUBDIRS)/
                 next
+            $elif $l=~/^(\s*)(PAC_CONFIG_(HWLOC|MPL)/
+                next
 
     subcode: modify_hydra2_configure
         $call modify_hydra_configure

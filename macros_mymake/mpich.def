@@ -66,7 +66,7 @@ subcode: mpich_slow
                     $print $1
 
     subcode: patch_mpicc_etc
-        $(for:p in mpicc,mpicxx,mpif77,mpifort)
+        $(for:p in mpicc,mpicxx,mpifort)
             $if -f "src/env/$(p).bash"
                 $call get_file_lines, src/env/$(p).bash
                 my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")
@@ -146,10 +146,11 @@ subcode: mpich_make_setup
 
     # install mpicc etc.
     my $bin="\x24(PREFIX)/bin"
-    $(for:p in mpicc,mpicxx,mpif77,mpifort)
+    $(for:p in mpicc,mpicxx,mpifort)
             $dst_hash{"mymake/$(p)"}=$bin
     $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
     $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
+    $dst_hash{"LN_S-$bin/mpif77"}="$bin/mpifort"
 
 
     subcode: need_mpich_preproc
@@ -219,6 +220,8 @@ subcode: mpich_configure
             $if $l=~/AC_CONFIG_SUBDIRS/
                 next
             $elif $l=~/^\s*HWLOC_/
+                next
+            $elif $l=~/^\s*PAC_CONFIG_(HWLOC|MPL)/
                 next
         &call modify, Makefile.am
             $if $l=~/ACLOCAL_AMFLAGS/

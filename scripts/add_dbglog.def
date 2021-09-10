@@ -1,13 +1,13 @@
 page: add_dbglog
     module: perl
-    arg: /home/hzhou/work/mpich-github
+    arg: /home/hzhou/work/mpich-github/src/mpid/ch4
 
     parse_args()
     $call process_opts
     $call get_files
     my $n = @files
     $print processing $n files
-    $call add_trace
+    $call add_trace2
 
 fncode: parse_args
     $global $subdir, %opts
@@ -42,7 +42,8 @@ subcode: get_files
     $(set:prune=-path ./examples -prune -o)
     &call open_r, "find . $(prune) -name '*.[ch]' |"
         chomp;
-        push @files, $_;
+        $if !/\/(ch3|fortran|test)\//
+            push @files, $_;
 
 subcode: add_trace
     my $count = 0
@@ -87,3 +88,68 @@ subcode: add_trace
                         print Out $l
 
     $print Added tracing logs to $count functions.
+
+# !! NOT WORKING YET
+subcode: add_trace2
+    my $count = 0
+    $foreach $f in @files
+        my @lines
+        my @temp
+        my ($got_function, $got_exit)
+        &call open_r, $f
+            $(set:TYPE=[^#\s].*)
+            $if /^[^#\s{]/
+                # exits function when encounter a starting non-space
+                undef $got_function
+
+            $if /^$(TYPE)\s+(\w+)\s*\(.*\)\s*$/
+                $got_function = $1
+            $elif /^$(TYPE)\s+(\w+)\s*\(.*$/
+                $got_function = $1
+
+            $if @temp && /^\s+MPIR_FUNC_/
+                # already have logging
+                $call dump_temp
+                @temp = ()
+                undef $got_function
+
+            $if /^{/ && $got_function
+                print "function opening [$f - $got_function]...\n"
+                push @temp, "{\n"
+                push @temp, "    MPIR_FUNC_ENTER;\n"
+                $got_exit = 0
+                $count++
+            $elif /^(\s+)return/ && $got_function
+                my $return= $_
+                my $sp = $1
+                $if !@temp
+                    die "missing function opening -- $got_function\n"
+                push @lines, $sp."MPIR_FUNC_EXIT;\n"
+                push @lines, $return
+                $got_exit = 1
+            $elif /^}/ && $got_function
+                $call dump_temp
+                push @lines, $_
+            $elif @temp
+                push @temp, $_
+            $else
+                push @lines, $_
+
+        $call dump_temp
+        $if @lines
+            &call open_w, $f
+                $foreach $l in @lines
+                    print Out $l
+
+    $print Added tracing logs to $count functions.
+
+    subcode: dump_temp
+        $if @temp
+            $if $got_exit
+                $foreach $l in @temp
+                    push @lines, $l
+            $else
+                $foreach $l in @temp
+                    $if $l!~/MPIR_FUNC_/
+                        push @lines, $l
+            @temp = ()

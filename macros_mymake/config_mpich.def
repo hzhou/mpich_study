@@ -88,6 +88,13 @@ subcode: config_mpich
             $temp{ENABLE_LOCAL_SESSION_INIT}=1
 
             $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_YAKSA'
+            $if !$temp{MPIDI_CH4_DIRECT_NETMOD}
+                $if $opts{"with-cuda"}
+                    $temp{MPIDI_CH4_SHM_ENABLE_GPU}=1
+                    $make_conds{BUILD_SHM_IPC_GPU} = 1
+                $if $opts{"with-xpmem"}
+                    $temp{MPIDI_CH4_SHM_ENABLE_XPMEM}=1
+                    $make_conds{BUILD_SHM_IPC_XPMEM} = 1
 
             $if $opts{device}=~/ch4:ucx/
                 $temp{MPIDI_CH4_DIRECT_NETMOD}=1
@@ -104,9 +111,6 @@ subcode: config_mpich
                     $temp{"MPIDI_CH4_OFI_USE_SET_$set"}=1
                 $else
                     $temp{MPIDI_CH4_OFI_USE_SET_RUNTIME}=1
-                $if !$temp{MPIDI_CH4_DIRECT_NETMOD}
-                    $temp{MPIDI_CH4_SHM_ENABLE_GPU}=1
-                    $make_conds{BUILD_SHM_IPC_GPU} = 1
                 $temp{ENABLE_PVAR_MULTINIC}=0 
         $elif $opts{device}=~/ch3/
             $temp{CH3_RANK_BITS} = 16
@@ -622,6 +626,13 @@ subcode: make_mpich
 
     $if 1 # linux
         $make_vars{lib_libmpi_la_LIBADD} .= " $L_list"
+
+    $if $opts{"with-xpmem"}
+        my $p = $opts{"with-xpmem"}
+        $if $p=~/\w+\//
+            $make_vars{CPPFLAGS} .= " -I$p/include"
+            $make_vars{LDFLAGS} .= " -L$p/lib64"
+        $make_vars{LIBS} .= " -lxpmem"
 
     dump_makefile("Makefile")
 

@@ -40,10 +40,8 @@ subcode: parse_args
             $elif -e "$(a).tar.gz"
                 $mod_tarball = "$(a).tar.gz"
         # --
+        # my $cmd = "git log --after=\"2021-2-16\" |grep 'Yaksa has been updated to use intptr_t'"
         $if $mod_tarball =~/modules\.tar\.gz$/
-            my $cmd = "git log --after=\"2021-2-16\" |grep 'Yaksa has been updated to use intptr_t'"
-            $if `$cmd`
-                $mod_tarball=~s/modules\.tar\.gz/modules-yaksa-new.tar.gz/
             $if $opts{"with-cuda"} && $mod_tarball
                 $mod_tarball=~s/modules.*\.tar\.gz/modules-gpu.tar.gz/
             $if !-e $mod_tarball

@@ -8,6 +8,7 @@ subcode: config_test
     $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/
     $call set_config_defines
     $call patch_runtests
+    $call patch_testlists
 
     subcode: set_config_defines
         # datatypes
@@ -45,6 +46,15 @@ subcode: config_test
         $confs{MPI_IS_STRICT} = "false"
         $confs{RUN_XFAIL} = "false"
         autoconf_file("test/mpi/runtests", \%confs)
+        system "chmod a+x test/mpi/runtests"
+
+    subcode: patch_testlists
+        my %confs
+        my @all_testlists = glob("test/mpi/*/testlist.in")
+        push @all_testlists, glob("test/mpi/*/*/testlist.in")
+        $foreach $a in @all_testlists
+            $a=~s/\.in$//
+            autoconf_file($a, \%confs)
 
 subcode: make_test
     my %conds

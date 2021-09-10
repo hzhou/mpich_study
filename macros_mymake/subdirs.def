@@ -246,16 +246,21 @@ subcode: copy_subdir_module(dir)
                 $call do_cmd, cp -r confdb $(D)/
 
 subcode: add_subdir_inc_lib(name)
-    $(if:embed_$(name))
-        push @CONFIGS, "\x24(MODS)/$(H$(name))"
-        $I_list .= " -I\x24(MODS)/$(I$(name))"
-        $(if:name=ucx)
-            $L_list .= " \x24(PREFIX)/lib/libucp.la"
+    my $L=$opts{"with-$(name)"}
+    $if $L and -d $L
+        $I_list .= " -I$L/include"
+        $L_list .= " -L$L/lib -l$(name)"
+    $else
+        $(if:embed_$(name))
+            push @CONFIGS, "\x24(MODS)/$(H$(name))"
+            $I_list .= " -I\x24(MODS)/$(I$(name))"
+            $(if:name=ucx)
+                $L_list .= " \x24(PREFIX)/lib/libucp.la"
+            $(else)
+                $L_list .= " \x24(MODDIR)/$(L$(name))"
         $(else)
-            $L_list .= " \x24(MODDIR)/$(L$(name))"
-    $(else)
-        push @CONFIGS, "$(H$(name))"
-        $I_list .= " -I$(I$(name))"
+            push @CONFIGS, "$(H$(name))"
+            $I_list .= " -I$(I$(name))"
 
 subcode: add_subdir_make(name)
     $(if:embed_$(name))
