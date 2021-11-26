@@ -1,0 +1,68 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: COLL
+    # dry_run: 1
+
+#---------------------------------------- 
+subcode: grep_COLL
+    # src/mpi/coll/ialltoall/ialltoall_tsp_brucks_algos.h
+    my @files = glob("src/mpi/coll/*/*.[ch]")
+    push @files, "src/include/mpir_coll.h"
+    push @files, "src/mpid/ch4/src/ch4_coll.h"
+    push @files, "src/mpid/ch4/src/ch4_coll_impl.h"
+    push @files, "src/mpid/ch4/shm/posix/posix_coll.h"
+    push @files, "src/mpid/ch4/netmod/ofi/ofi_coll.h"
+    push @files, "src/mpid/ch4/netmod/ucx/ucx_coll.h"
+    push @files, "src/mpid/ch4/netmod/include/netmod_am_fallback_coll.h"
+    push @files, "src/mpid/ch4/shm/src/shm_am_fallback_coll.h"
+    push @files, "src/mpid/ch4/shm/src/shm_coll.h"
+
+    push @files, "src/mpid/ch3/include/mpid_coll.h"
+
+macros:
+    COLL: (bcast|gather|scatter|reduce|alltoall|barrier|scan)
+
+subcode: filter_lines_COLL
+    $(block:_patch_local)
+        my $in_decl
+    $if !$in_decl and $(l)=~/^int\s+(\w*$(COLL)\w*)\(/i
+        $in_decl = $1
+        # $print [$in_decl]
+    $elif !$in_decl and $(l)=~/^MPL_STATIC_INLINE_PREFIX int\s+(\w*$(COLL)\w*)\(/i
+        $in_decl = $1
+    $elif !$in_decl and $(l)=~/^static inline int\s+(\w*$(COLL)\w*)\(/i
+        $in_decl = $1
+    $elif !$in_decl and $(l)=~/^(\w*$(COLL)\w*)\(/i
+        $in_decl = $1
+    $if $in_decl
+        # $call @debug
+        $call replace_2
+
+        $if $(l)=~/\)/
+            undef $in_decl
+
+    subcode: replace_1
+        $(l)=~s/ int (count|sendcount|recvcount),/ MPI_Aint \1,/g
+        $cnt++
+    subcode: replace_2
+        $(l)=~s/ int (sendcounts|recvcounts|[sr]?displs)\[/ MPI_Aint \1\[/g
+        $(l)=~s/ int \*(sendcounts|recvcounts|[sr]?displs),/ MPI_Aint * \1,/g
+        $cnt++
+
+    subcode: debug
+        $while $(l)=~/ int (\w+),/g -> $t
+            $if $t=~/^(count|sendcount|recvcount)$/
+                # skip
+            $elif $t=~/^(nbytes|segsize|extent)$/
+                # skip
+            $elif $t=~/^(root|tag|n*ranks*|k|bblock|(is|step\d)_.*|.*_(size|k|pofk|id|type)|buffer_per_.*|per_nbr_buffer|n_invtcs|nrecvs|T)$/
+                # skip
+            $else
+                $print $in_decl: $t
+
+        $while $(l)=~/ int (\w+)\[/g -> $t
+            $if $t=~/^(sendcounts|recvcounts|[sr]?displs)$/
+                # skip
+            $else
+                $print [$in_decl] $t

@@ -1,0 +1,56 @@
+page: compare_f08
+    module: perl
+
+    # my $old = "/home/hzhou/work/mpich-2020"
+    my $old = "/home/hzhou/work/mpich-github"
+    my $new = "/home/hzhou/work/pull_requests/2102_gen_f08"
+    my $f08 = "src/binding/fortran/use_mpi_f08/wrappers_f"
+
+    my @func_list
+
+    &call open_r, $new/$f08/f08ts.f90
+        $if /^(?:SUBROUTINE|FUNCTION) (MPI\w+)\(/i
+            push @func_list, $1
+            # $print $1
+
+    my %load_old
+
+    my @files = glob("$old/$f08/*.f90")
+    $foreach $f in @files
+        $if $f =~ /f_sync_reg_f08ts/
+            next
+        my @lines
+        &call open_r, $f
+            $if /^(?:SUBROUTINE|FUNCTION)\s*(MPI\w+)\s*\(/i
+                push @lines, $_
+                $load_old{$1} = \@lines
+            $elif @lines
+                push @lines, $_
+        $if !@lines
+            warn "Unable to recognize $f\n"
+
+    my %got
+    my @missing_in_old
+    my @missing_in_new
+    &call open_W, out/old_f08ts.f90
+        $foreach $name in @func_list
+            $if $load_old{$name}
+                print Out "\n"
+                print Out @{$load_old{$name}}
+                $got{$name} = 1
+            $else
+                push @missing_in_old, $name
+
+    $foreach $name in keys %load_old
+        $if !$got{$name}
+            push @missing_in_new, $name
+
+    $(for:old, new)
+        $if @missing_in_$1
+            $print "Missing in $1:"
+            $foreach $name in @missing_in_$1
+                $print "    $name"
+
+
+    system "diff -iwZB out/old_f08ts.f90 $new/$f08/f08ts.f90 > out/t.diff"
+    system "wc out/t.diff"

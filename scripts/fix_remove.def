@@ -1,0 +1,15 @@
+include: macros/patch.def
+page: t, patch_frame
+    module: perl
+    patch: T
+    root: $ENV{HOME}/work/mpich-github/src/mpi/attr
+
+#---------------------------------------- 
+subcode: grep_T
+    $call grep_l, 'include \"attr.h\"'
+
+subcode: filter_lines_T
+    $if $(l)=~/#include "attr.h"/
+        $cnt++
+        $call delete, $(l)
+

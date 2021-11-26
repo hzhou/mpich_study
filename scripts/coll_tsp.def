@@ -1,0 +1,82 @@
+page: t
+    module: perl
+    my %h
+    $foreach $a in @algos
+        $if $a=~/(\w+)_tsp_(\w+)/ -> $coll, $algo
+            $if !$h{$coll}
+                $h{$coll} = []
+            push @{$h{$coll}}, $algo
+            # $print $coll - $algo
+    # $call remove_prototypes_h
+    # $call mod_Makefile_mk
+    # $call mod_algos_2
+    # $call mod_algos_c
+    $call remove_tsp_gentran_h
+
+subcode: _autoload
+    my $root = "$ENV{HOME}/work/mpich-github"
+    chdir "$root/src/mpi/coll" or die
+
+    my @algos = qw(iallgather_tsp_brucks iallgather_tsp_recexch iallgather_tsp_ring iallgatherv_tsp_brucks iallgatherv_tsp_recexch iallgatherv_tsp_ring iallreduce_tsp_recexch iallreduce_tsp_recexch_reduce_scatter_recexch_allgatherv iallreduce_tsp_ring iallreduce_tsp_tree ialltoall_tsp_brucks ialltoall_tsp_ring ialltoall_tsp_scattered ialltoallv_tsp_blocked ialltoallv_tsp_inplace ialltoallv_tsp_scattered ialltoallw_tsp_blocked ialltoallw_tsp_inplace ibcast_tsp_scatterv_allgatherv igather_tsp_tree igatherv_tsp_linear ineighbor_allgather_tsp_linear ineighbor_allgatherv_tsp_linear ineighbor_alltoall_tsp_linear ineighbor_alltoallv_tsp_linear ineighbor_alltoallw_tsp_linear ireduce_tsp_tree ireduce_scatter_block_tsp_recexch ireduce_scatter_tsp_recexch iscan_tsp_recursive_doubling iscatter_tsp_tree iscatterv_tsp_linear)
+
+subcode: remove_prototypes_h
+    my @files = glob("*/*.c")
+    $foreach $f in @files
+        system "perl -n -i -e 'print unless /^#include .*_prototypes.h/' $f"
+        system "git diff $f"
+
+subcode: remove_tsp_gentran_h
+    my @files = glob("*/*.c")
+    $foreach $f in @files
+        # system "perl -n -i -e 'print unless /^#include .*\\btsp_gentran.h/' $f"
+        # system "perl -n -i -e 'print unless /^#include .*\\bgentran_utils.h/' $f"
+        system "perl -n -i -e 'print unless /^\\/\\* for MPIR_TSP_sched_t/' $f"
+        system "git diff $f"
+
+subcode: mod_Makefile_mk
+    $foreach %h
+        $foreach $algo in @$v
+            system  "git mv $k/${k}_tsp_${algo}_algos.h $k/${k}_tsp_${algo}.c"
+        my @lines
+        &call open_r, $k/Makefile.mk
+            $if /src.mpi.coll.\w+.\w+_gentran_algos\.c(.*)/ -> $tail
+                my $n = @$v
+                $foreach $algo in @$v
+                    push @lines, "    src/mpi/coll/$k/${k}_tsp_$algo.c \\\n"
+                $if !$tail
+                    $lines[-1] =~ s/\s+\\$//
+            $else
+                push @lines, $_
+        &call open_W, $k/Makefile.mk
+            $foreach $l in @lines
+                print Out $l
+
+subcode: mod_algos_2
+    $foreach %h
+        system "git rm $k/${k}_gentran_algos.c"
+        $foreach $algo in @$v
+            system "git rm $k/${k}_tsp_${algo}_algos_undef.h"
+
+subcode: mod_algos_c
+    $foreach %h
+        $foreach $algo in @$v
+            my $f = "$k/${k}_tsp_$algo.c"
+            my @lines
+            &call open_r, $f
+                $if /^\/\* Header protection.*/
+                    $while <In>
+                        $if /^\s*\*/
+                            next
+                        $if !/^\s*$/
+                            die "Error parsing Header protection comments\n"
+                        last
+                    push @lines, "#include \"mpiimpl.h\"\n"
+                    push @lines, "#include \"tsp_gentran.h\"\n"
+                $elif /^#include.*tsp_namespace_def\.h/
+                    #skip
+                $else
+                    push @lines, $_
+            &call open_W, $f
+                $foreach $l in @lines
+                    print Out $l
+

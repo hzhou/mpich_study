@@ -1,0 +1,115 @@
+page: test
+    chdir "/home/hzhou/work/mpich-github/src/mpi/romio/mpi-io" or die
+    $(if:1)
+        my @files=qw(read read_all read_allb read_at read_atall rd_atallb read_ord read_ordb read_sh)
+        push @files, qw(write write_all write_allb write_at write_atall wr_atallb write_ord write_ordb write_sh)
+        push @files, qw(iread iread_all iread_at iread_atall iread_sh) 
+        push @files, qw(iwrite iwrite_all iwrite_at iwrite_atall iwrite_sh)
+        push @files, qw(get_extent register_datarep)
+    $(else)
+        my @files=qw(read)
+    $foreach $f in @files
+        move_weak_c("$f.c")
+        # add_assert("src/mpi/romio/mpi-io/$f.c")
+
+fncode: move_weak_c($f)
+    my @lines
+    my @block
+    my $stage = 0
+    my $ifdef_level = 0
+    &call open_r, $f
+        $if /^#if(def|ndef)?/
+            $ifdef_level++
+        $elif /^#endif/
+            $ifdef_level--
+
+        $if /^#ifdef\s+HAVE_WEAK_SYMBOLS/
+            $stage++
+            $if $stage == 3
+                next
+        $elif /^#endif/ && $ifdef_level == 0 && $stage % 2 == 1
+            $stage++
+            $if $stage == 4
+                next
+        
+        $if $stage == 3
+            push @block, $_
+        $else
+            push @lines, $_
+            $if /^#endif/ && $stage == 1 && $ifdef_level==1
+                push @lines, "INSERT"
+
+    $if $stage == 4
+        &call open_W, $f
+            $foreach $l in @lines
+                $if $l=~/^INSERT/
+                    $foreach $l2 in @block
+                        print Out $l2
+                        $if $l2=~/^#endif/
+                            last
+                $else
+                    print Out $l
+    $else
+        $print "Parse error - $f"
+
+fncode: add_assert($f)
+    my @lines
+    my @block
+    my $func_name
+    &call open_r, $f
+        $if /^int\ (MPI_\w+)\(/
+            $func_name = $1
+
+        push @lines, $_
+
+        $if /^#include "mpioimpl.h"/
+            push @lines, "#include <limits.h>\n"
+            push @lines, "#include <assert.h>\n"
+        $elif /^{/ and $func_name=~/^MPI_File_\w+_c$/
+            push @lines, "    assert(count <= INT_MAX);\n"
+
+    &call open_W, $f
+        $foreach $l in @lines
+            print Out $l
+
+fncode: filter_file($f)
+    my @lines
+    my @block
+    my $stage
+    my $double_block
+    &call open_r, $f
+        $if /^#ifdef\s+HAVE_WEAK_SYMBOLS/
+            $stage = 1
+            $if @block
+                $double_block = 1
+                last
+
+        push @lines, $_
+
+        $if $stage
+            $if /^(\/\*\s+Include|#define MPIO_BUILD_PROFILING|#include "mpioprof.h")/
+                NOOP
+            $elif /^\/\*\s*status object not filled currently/
+                NOOP
+            $else
+                push @block, $_
+            $if /^}/
+                $stage = 0
+                $call insert_block
+
+    $if !$double_block
+        &call open_W, $f
+            $foreach $l in @lines
+                print Out $l
+
+subcode: insert_block
+    push @lines, "\n"
+    push @lines, "/* large count function */\n"
+    push @lines, "\n"
+    $foreach $l in @block
+        $l=~s/\b(P?MPI_File_\w+)/$1_c/g
+        $l=~s/\b(P?MPI_Register_datarep)/$1_c/g
+        $l=~s/\bint count,/MPI_Count count,/
+        $l=~s/\bMPI_Aint \*\s*extent/MPI_Count * extent/
+        $l=~s/MPI_Datarep_conversion_function\b/MPI_Datarep_conversion_function_c/g
+        push @lines, $l

@@ -1,0 +1,19 @@
+include: macros/patch.def
+
+page: t, patch_frame
+    module: perl
+    patch: T
+
+#---------------------------------------- 
+subcode: grep_T
+    $call grep_l, 'MPIR_FUNC_'
+
+subcode: filter_lines_T
+    $if $(l)=~/MPIR_FUNC_\w+_STATE_DECL\(MPID_STATE_\w+\)/
+        $call delete, $(l)
+        $cnt++
+        next
+    $elif $(l)=~/MPIR_FUNC_\w+_(ENTER|EXIT);/
+        $(l)=~s/MPIR_FUNC_\w+_(ENTER|EXIT)/MPIR_FUNC_$1/g
+        $cnt++
+

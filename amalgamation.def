@@ -1,0 +1,132 @@
+output_dir: ./mymake
+
+page: amalgamtion
+    chdir "/home/hzhou/work/pull_requests/mpich-main"
+    amalg_it("src/mpid/ch4/src/Makefile.mk", "src/mpid/ch4/src/ch4_src.c")
+    amalg_it("src/mpi/Makefile.mk", "src/mpi/mpi_impl.c")
+    amalg_it("src/mpid/ch4/netmod/ofi/Makefile.mk", "src/mpid/ch4/netmod/ofi/ofi.c")
+
+subcode: _autoload
+    my %spares
+    $spares{"src/mpid/ch4/src/mpid_ch4_net_array.c"} = 1
+    $spares{"src/mpid/ch4/netmod/ofi/func_table.c"} = 1
+    $spares{"src/mpi/errhan/errutil.c"} = 1
+
+fncode: filter_makefile($sources, $spares, $makefile, $level)
+    my @out_lines
+    my ($got_sources, $got_incmake)
+    $call get_file_lines, $makefile
+    $while $_ = shift @lines
+        $if /^mpi_core_sources\s*\+=\s*(\S+)/ and !$got_sources
+            $call push_source, $1
+            $while /\\$/
+                $_ = shift @lines
+                $if /^\s+(\S+)/
+                    $call push_source, $1
+            $if $level == 0
+                $call dump_sources
+        $elif /^include .*?\/(src\/.*\/Makefile.mk)/ and !$got_sources
+            push @out_lines, $_
+            filter_makefile($sources, $spares, $1, $level+1)
+            $got_incmake++
+        $else
+            $if /^\s*$/ or /^#/
+                # ignore
+            $elif $got_incmake and !$got_sources
+                $got_sources = 1
+                $if $level == 0
+                    $call dump_sources
+            push @out_lines, $_
+
+    &call open_W, $makefile
+        $foreach $l in @out_lines
+            print Out $l
+
+    subcode: push_source(a)
+        $if $(a) ne "\\"
+            $got_sources++
+            $if $spares{$(a)}
+                push @$spares, $(a)
+            $else
+                push @$sources, $(a)
+
+    subcode: dump_sources
+        my $first = shift @$spares
+        push @out_lines, "mpi_core_sources += $first \\\n"
+        $foreach $a in @$spares
+            push @out_lines, "                    $a \\\n"
+        $out_lines[-1] =~s/ \\//
+
+fncode: amalg_it($makefile, $output)
+    $call filter_makefile
+    my $n = @sources
+    $print "   $n sources" 
+    $call load_sources
+    $call dump_output
+
+    subcode: filter_makefile
+        my (@sources, @spares)
+        push @spares, $output
+        filter_makefile(\@sources, \@spares, $makefile, 0)
+
+    subcode: load_sources
+        my (%statics, %includes, @includes)
+        my @lines
+        $foreach $f in @sources
+            my $got_include
+            push @lines, "/* -- $f -- */\n\n"
+            &call open_r, $f
+                $if /^#include\s*(.*tsp.*\.h)/ -> $inc
+                    $if $inc =~/(\w+)_tsp_(\w+)_(algos|algos_prototypes|algos_undef).h/
+                        $inc = "\"coll/$1/$1_tsp_$2_$3.h\""
+                        push @lines, "#include $inc\n"
+                    $else
+                        push @lines, $_
+                $elif /^#include\s*(\S+)/ -> $t
+                    $call push_include, $t
+                    $got_include=1
+                $elif !$got_include
+                    # Skip
+                $elif /^\/\*/
+                    $while !/\*\//
+                        $_ = <In>
+                $else
+                    my $static_var
+                    $if /^static[^=\(]+\b(\w+)/
+                        $if $statics{$1} and $f ne $statics{$1}
+                            warn "duplicate static name [$1] -- $f & $statics{$1}\n"
+                        $else
+                            $statics{$1} = $f
+                    push @lines, $_
+
+        subcode: push_include(a)
+            my $a = filter_include($(a))
+            $if !$includes{$a}
+                $includes{$a}+=1
+                push @includes, $a
+
+    subcode: dump_output
+        &call open_W, $output
+            $foreach $inc in @includes
+                $print "#include $inc"
+            $print
+            $foreach $l in @lines
+                print Out $l
+
+fncode: filter_include($inc)
+    $if $inc =~ /^<(mpi\w+\.h)>/
+        $inc = "\"$1\""
+
+    $if $inc =~/\b(mpicomm)\.h/
+        $inc = "\"comm/$1.h\""
+    $elif $inc =~/\b(group)\.h/
+        $inc = "\"group/$1.h\""
+    $elif $inc =~/\b(primes)\.h/
+        $inc = "\"topo/$1.h\""
+    $elif $inc =~/\b(dataloop_internal|veccpy)\.h/
+        $inc = "\"datatype/typerep/dataloop/$1.h\""
+    $elif $inc =~ /\b(bcast|ibcast|iallgatherv)\.h/
+        $inc = "\"coll/$1/$1.h\""
+    $elif $inc =~/(\w+)_tsp_(\w+)_(algos|algos_prototypes|algos_undef).h/
+        $inc = "\"coll/$1/$1_tsp_$2_$3.h\""
+    return $inc

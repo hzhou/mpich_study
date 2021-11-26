@@ -1,0 +1,126 @@
+macros:
+    REPO: /home/hzhou/work/mpich-github
+
+page: t
+    module: perl
+
+    chdir "$(REPO)/src/mpi/coll"
+    my @files = glob("*/*.c")
+    my @coll_list
+    $foreach $f in @files
+        $if $f=~/(\w+)\/\1\.c/ -> $name
+            $if $name eq "allreduce_group"
+                next
+            push @coll_list, $name
+
+    $(if:0)
+        $foreach $i, $a in @coll_list
+            $print $i: $a
+
+    $(if:0)
+        $call populate_Makefile
+
+    $(if:1)
+        $call trim_Makefiles
+
+    $(if:0)
+        $call shift_coll_c
+
+subcode: populate_Makefile
+    &call filter, Makefile.mk
+        $if /^mpi_core_sources/
+            $call @insert_mpi_sources
+
+    subcode: insert_mpi_sources
+        push @lines, "mpi_sources += \\\n"
+        my $last_a = $coll_list[-1]
+        $foreach $a in @coll_list
+            $if $a ne $last_a
+                push @lines, "    src/mpi/coll/$a.c \\\n"
+            $else
+                push @lines, "    src/mpi/coll/$a.c\n"
+        push @lines, "\n"
+
+subcode: trim_Makefiles
+    $foreach $a in @coll_list
+        &call filter, $a/Makefile.mk
+            $if /^mpi_sources\s*\+=/
+                next
+            $elif /^\s+src\/mpi\/coll\/$a\/$a.c\s*$/
+                next
+            $elif /^mpi_core_sources\s*\+=/
+                push @lines, $_
+                push @lines, "    src/mpi/coll/$a/$a.c \\\n"
+                next
+
+subcode: shift_coll_c
+    $foreach $a in @coll_list
+        $call do_a
+
+    subcode: do_a
+        my (@lines_impl, @lines_mpi)
+        my ($stage, $if_cnt)
+        &call open_r, $a/$a.c
+            $if /^===.*BEGIN_MPI_T_CVAR_INFO_BLOCK/
+                push @lines_impl, "/*\n"
+                $stage = "cvar block"
+                push @lines_impl, $_
+                next
+            $elif /^#define MPI_(\w+)\s*PMPI_\1/
+                $stage = "mpir impl"
+                $if_cnt=1
+            $elif $stage eq "cvar block"
+                push @lines_impl, $_
+                $if /END_MPI_T_CVAR_INFO_BLOCK/
+                    undef $stage
+                    push @lines_impl, "*/\n"
+                next
+            $elif $stage eq "mpir impl"
+                $if /^#if/
+                    $if_cnt++
+                $elif /^#endif/
+                    $if_cnt--
+
+                $if $if_cnt > 0
+                    push @lines_impl, $_
+                    next
+                $else
+                    undef $stage
+
+            # ---- default ----
+            $if /^\*\// and $lines_mpi[-1]=~/^\/\*/
+                pop @lines_mpi
+            $else
+                push @lines_mpi, $_
+
+        $while $lines_impl[-1]=~/^\s*$/
+            pop @lines_impl
+
+        &call open_W, $a.c
+            $foreach @lines_mpi
+                $print $_-
+
+        &call open_W, $a/$a.c
+            $call dump_copyright
+            $foreach @lines_impl
+                $print $_-
+
+subcode: dump_copyright
+    $print "/*\n"
+    $print " * Copyright (C) by Argonne National Laboratory\n"
+    $print " *     See COPYRIGHT in top-level directory\n"
+    $print " */\n"
+    $print
+    $print "#include \"mpiimpl.h\"\n"
+    $print
+
+#---------------------------------------- 
+subcode: filter(file)
+    my @lines
+    &call open_r, $(file)
+        BLOCK
+        push @lines, $_
+
+    &call open_W, $(file)
+        $foreach @lines
+            $print $_-

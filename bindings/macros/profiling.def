@@ -1,0 +1,214 @@
+subcode: profiling_block
+    $print "\x2f* Begin MPI profiling block */"
+    &call if_def_USE_WEAK_SYMBOLS_NOTONLY_MPI_NAMES
+        $print "#if defined(HAVE_MULTIPLE_PRAGMA_WEAK)"
+        $call multiple_pragma_weak
+        $print "\n\n\n"
+        $print "#elif defined(HAVE_PRAGMA_WEAK)"
+        $print
+        $call just_pragma_weak
+        $print
+        $print "#elif defined(HAVE_PRAGMA_HP_SEC_DEF)"
+        $call hp_sec_def
+        $print
+        $print "#elif defined(HAVE_PRAGMA_CRI_DUP)"
+        $call cri_dup
+        $print
+        $print "#elif defined(HAVE_WEAK_ATTRIBUTE)"
+        $call weak_attribute
+        $print "#endif /* HAVE_PRAGMA_WEAK */"
+    $print "\x2f* End MPI profiling block */"
+    $print "\n\n"
+
+    $print "\x2f* These definitions are used only for generating the Fortran wrappers */"
+    &call if_def_USE_WEAK_SYMBOLS_ONLY_MPI_NAMES
+        $print "#if defined(HAVE_MULTIPLE_PRAGMA_WEAK)"
+        $call multiple_pragma_weak_only_mpi
+        $print "#elif defined(HAVE_WEAK_ATTRIBUTE)"
+        $call weak_attribute_only_mpi
+        $print "#endif"
+        $print
+    $print
+
+    $print "\x2f* Map the name to the correct form */"
+    $print "#ifndef MPICH_MPI_FROM_PMPI"
+    $call build_pmpi
+    $print
+    $print "#else"
+    $print
+    $call build_mpi
+    $print "\n\n"
+    $print "#endif \x2f* MPICH_MPI_FROM_PMPI */"
+
+    subcode: build_pmpi
+        # building PMPI_xxx, decl extern PMPI_xxx, define MPI_xxx to PMPI_xxx
+        $(set:comment_endif=1)
+        &call if_def_USE_WEAK_SYMBOLS
+            $print "#if defined(HAVE_MULTIPLE_PRAGMA_WEAK)"
+            $call multiple_pragma_weak_mpi_from_pmpi
+            $print "#elif defined(HAVE_WEAK_ATTRIBUTE)"
+            $call weak_attribute_mpi_from_pmpi
+            $print "#endif /* HAVE_MULTIPLE_PRAGMA_WEAK */"
+        $print
+
+        $(set:use_ifdef=1)
+        &call f77_name_block_2
+            $print "#define $func_ $(pname)"
+        $print
+
+        $print "#ifdef F77_USE_PMPI"
+        $print "\x2f* This defines the routine that we call, which must be the PMPI version"
+        $print "   since we're renaming the Fortran entry as the pmpi version.  The MPI name"
+        $print "   must be undefined first to prevent any conflicts with previous renamings. */"
+        $print "#undef $Func"
+        $print "#define $Func P$Func "
+        $print "#endif"
+    subcode: build_mpi
+        $(set:use_ifdef=1)
+        &call f77_name_block_2
+            $(if:name=$func_)
+                $print "\x2f* Else leave name alone */"
+            $(else)
+                $print "#define $func_ $(name)"
+
+    subcode: if_def_USE_WEAK_SYMBOLS_NOTONLY_MPI_NAMES
+        $print "#if defined(USE_WEAK_SYMBOLS) && !defined(USE_ONLY_MPI_NAMES) "
+        BLOCK
+        $print "#endif /* USE_WEAK_SYMBOLS */"
+    subcode: if_def_USE_WEAK_SYMBOLS_ONLY_MPI_NAMES
+        $print "#if defined(USE_WEAK_SYMBOLS) && defined(USE_ONLY_MPI_NAMES)"
+        BLOCK
+        $print "#endif"
+    subcode: if_def_USE_WEAK_SYMBOLS
+        $print "#if defined(USE_WEAK_SYMBOLS)"
+        BLOCK
+        $print "#endif /* USE_WEAK_SYMBOLS */"
+
+    #- NOTE: pragma_weak need declare the weak function (mpi_xxx)
+    macros:
+        weak_decl: extern FORT_DLL_SPEC void FORT_CALL $1( $arg_types, MPI_Fint * )
+
+    subcode: multiple_pragma_weak
+        $(for:a in $(func_list_2))
+            $print "$(weak_decl:$(a));"
+        $print
+        &call f77_name_block
+            $(for:a in $(func_list))
+                $print "#pragma weak $(a) = $(pname)"
+
+    subcode: multiple_pragma_weak_only_mpi
+        $(for:a in $(func_list_2))
+            $print "$(weak_decl:$(a));"
+        $print
+        &call f77_name_block
+            $(for:a in $(func_list))
+                $(if:a!=$(name))
+                    $print "#pragma weak $(a) = $(name)"
+    subcode: multiple_pragma_weak_mpi_from_pmpi
+        $print "\x2f* Define the weak versions of the PMPI routine*/"
+        &call f77_name_ndef_block_2
+            $print "$(weak_decl:$(pname));"
+            $(if:pname=p$func)
+                $print
+        $print
+        &call f77_name_block
+            $(for:a in $(pfunc_list))
+                $(if:a!=$(pname))
+                    $print "#pragma weak $(a) = $(pname)"
+        $print
+
+    subcode: just_pragma_weak
+        &call f77_name_block_2
+            $print "$(weak_decl:$(name));"
+            $print
+            $print "#pragma weak $(name) = $(pname)"
+    subcode: hp_sec_def
+        &call f77_name_block_2
+            $print "#pragma _HP_SECONDARY_DEF $(pname)  $(name)"
+    subcode: cri_dup
+        &call f77_name_block_2
+            $print "#pragma _CRI duplicate $(name) as $(pname)"
+
+    subcode: weak_attribute
+        &call f77_name_block
+            $(for:a in $(func_list))
+                $print "$(weak_decl:$(a)) __attribute__((weak,alias(\"$(pname)\")));"
+            $print
+
+    subcode: weak_attribute_only_mpi
+        &call f77_name_block
+            $(for:a in $(func_list))
+                $(if:a=$(name))
+                    $print "$(weak_decl:$(name));"
+                $(else)
+                    $print "$(weak_decl:$(a)) __attribute__((weak,alias(\"$(name)\")));"
+            $print
+
+    subcode: weak_attribute_mpi_from_pmpi
+        &call f77_name_block
+            $(for:a in $(pfunc_list))
+                $(if:a!=$(pname))
+                    $print "$(weak_decl:$(a)) __attribute__((weak,alias(\"$(pname)\")));"
+            $print
+
+#---------------------------------------- 
+# assume variables: $Func, $func, $FUNC, $func_, $func__
+macros:
+    func_list: $FUNC, $func__, $func_, $func
+    func_list_2: $FUNC, $func__, $func, $func_
+    pfunc_list: P$FUNC, p$func__, p$func_, p$func
+    pfunc_list_2: P$FUNC, p$func__, p$func, p$func_
+
+subcode: f77_name_block
+    $(if:use_ifdef)
+        $print "#ifdef F77_NAME_UPPER"
+    $(else)
+        $print "#if defined(F77_NAME_UPPER)"
+    $(mset:name=$FUNC, pname=P$FUNC)
+    BLOCK
+    $print "#elif defined(F77_NAME_LOWER_2USCORE)"
+    $(mset:name=$func__, pname=p$func__)
+    BLOCK
+    $print "#elif defined(F77_NAME_LOWER_USCORE)"
+    $(mset:name=$func_, pname=p$func_)
+    BLOCK
+    $print "#else"
+    $(mset:name=$func, pname=p$func)
+    BLOCK
+    $(if:comment_endif)
+        $print "#endif /* Test on name mapping */"
+    $(else)
+        $print "#endif"
+
+subcode: f77_name_block_2
+    $(if:use_ifdef)
+        $print "#ifdef F77_NAME_UPPER"
+    $(else)
+        $print "#if defined(F77_NAME_UPPER)"
+    $(mset:name=$FUNC, pname=P$FUNC)
+    BLOCK
+    $print "#elif defined(F77_NAME_LOWER_2USCORE)"
+    $(mset:name=$func__, pname=p$func__)
+    BLOCK
+    $print "#elif !defined(F77_NAME_LOWER_USCORE)"
+    $(mset:name=$func, pname=p$func)
+    BLOCK
+    $print "#else"
+    $(mset:name=$func_, pname=p$func_)
+    BLOCK
+    $(if:comment_endif)
+        $print "#endif /* Test on name mapping */"
+    $(else)
+        $print "#endif"
+
+subcode: f77_name_ndef_block_2
+    $(for:a, b in UPPER,LOWER_2USCORE,LOWER_USCORE,LOWER and FUNC, func__, func_, func)
+        $print "#ifndef F77_NAME_$(a)"
+        $(if:b=FUNC)
+            $(mset:name=$$(b), pname=P$$(b))
+        $(else)
+            $(mset:name=$$(b), pname=p$$(b))
+        BLOCK
+        $print "#endif"
+
+#---------------------------------------- 

@@ -1,0 +1,108 @@
+macros:
+    REPO: /home/hzhou/work/mpich-github
+    DIR: errhan
+
+page: t
+    module: perl
+
+    chdir "$(REPO)/src/mpi/$(DIR)"
+    my @files = glob("*.c")
+    my @coll_list
+    $foreach $f in @files
+        $if $f=~/(\w+).c/ -> $name
+            # $if $name =~ /(typeutil|type_blockindexed|type_create_pairtype|type_debug)/
+            # $if $name =~/(init_\w+|globals|initinfo|local_proc_attrs|mutex)/
+            $if $name =~/(errutil|dynerrutil)/
+                next
+            push @coll_list, $name
+
+    $(if:0)
+        $foreach $i, $a in @coll_list
+            $print $i: $a
+        exit
+
+    $(if:0)
+        $call populate_Makefile
+
+    $(if:0)
+        $call trim_Makefiles
+
+    $(if:1)
+        $call shift_coll_c, $(DIR)
+
+subcode: shift_coll_c(coll)
+    my (@lines_impl, @lines_mpi)
+    $foreach $i, $a in @coll_list
+        $print $i: $a
+        @lines_mpi = ()
+        my $old_impl_count = @lines_impl
+        $call load_a, $a.c
+        my $new_impl_count = @lines_impl
+        $if $new_impl_count > $old_impl_count
+            $call dump_out, $a.c, @lines_mpi
+    $call dump_out, $(coll)_impl.c, @lines_impl, 1
+
+    subcode: load_a(file)
+        my ($stage, $if_cnt)
+        &call open_r, $(file)
+            $if /^===.*BEGIN_MPI_T_CVAR_INFO_BLOCK/
+                push @lines_impl, "/*\n"
+                $stage = "cvar block"
+                push @lines_impl, $_
+                next
+            $elif /^#define MPIX?_(\w+)\s*PMPIX?_\1/
+                $stage = "mpir impl"
+                $if_cnt=1
+            $elif $stage eq "cvar block"
+                push @lines_impl, $_
+                $if /END_MPI_T_CVAR_INFO_BLOCK/
+                    undef $stage
+                    push @lines_impl, "*/\n"
+                next
+            $elif $stage eq "mpir impl"
+                $if /^#if/
+                    $if_cnt++
+                $elif /^#endif/
+                    $if_cnt--
+
+                $if $if_cnt > 0
+                    push @lines_impl, $_
+                    next
+                $else
+                    undef $stage
+
+            # ---- default ----
+            $if /^\*\// and $lines_mpi[-1]=~/^\/\*/
+                pop @lines_mpi
+            $else
+                push @lines_mpi, $_
+
+        $while @lines_impl && $lines_impl[-1]=~/^\s*$/
+            pop @lines_impl
+
+    subcode: dump_out(file, array, @copyright)
+        &call open_W, $(file)
+            $(if:copyright)
+                $call dump_copyright
+            $foreach $(array)
+                $print $_-
+
+subcode: dump_copyright
+    $print "/*\n"
+    $print " * Copyright (C) by Argonne National Laboratory\n"
+    $print " *     See COPYRIGHT in top-level directory\n"
+    $print " */\n"
+    $print
+    $print "#include \"mpiimpl.h\"\n"
+    $print
+
+#---------------------------------------- 
+subcode: filter(file)
+    my @lines
+    &call open_r, $(file)
+        BLOCK
+        push @lines, $_
+
+    &call open_W, $(file)
+        $foreach @lines
+            $print $_-

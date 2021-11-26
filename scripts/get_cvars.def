@@ -1,0 +1,44 @@
+page: t
+    module: perl
+
+    chdir "$ENV{HOME}/work/mpich-github/src/mpi/coll"
+    my @dirs = glob("*")
+    my %coll
+    $foreach $d in @dirs
+        my ($root, $blocking)
+        my $D=uc($d)
+        $if $d=~/^i(\w+)/
+            $root = $1
+            $blocking = "nonblocking"
+        $else
+            $root = $d
+            $blocking = "blocking"
+
+        $if -f "$d/$d.c"
+            my $key
+            &call open_r, "$d/$d.c"
+                $if /^\s*- name\s*:\s*MPIR_CVAR_$D\_(INTRA|INTER)_ALGORITHM/
+                    $key = lc("$root-$1-$blocking")
+                    $coll{$key} = []
+                $elif $key and /^\s+(\w+)\s+-\s+/ -> $v
+                    $if $v!~/^(auto|nb|sched_auto)$/
+                        push @{$coll{$key}}, $1
+                $elif $key and /^\s*$/
+                    undef $key
+
+    my @key_list = sort keys %coll
+    my $root
+    $foreach $key in @key_list
+        $if @{$coll{$key}}
+            $if $key=~/^(\w+)-(.+)/
+                $if $root ne $1
+                    $root = $1
+                    $print "$1:"
+                $print "    $2:"
+                $foreach $v in @{$coll{$key}}
+                    $print "        $v"
+
+                    
+
+
+

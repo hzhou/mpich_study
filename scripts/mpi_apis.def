@@ -1,0 +1,27 @@
+page: mpi_apis
+    module: perl
+
+    my $root="$ENV{HOME}/work/mpich-github"
+
+    $call load_apis
+    $foreach $func in @all_funcs
+        $if $func->{name} !~/^MPI_File/
+            next
+        $if is_poly($func)
+            $print $func->{name}
+
+subcode: load_apis
+    my @all_funcs
+    my $func
+    &call open_r, $root/src/binding/mpi_standard_api.txt
+        $if /^(MPI_\w+):/
+            $func = {name=>$1, params=>[]}
+            push @all_funcs, $func
+        $elif /^\s+(\w+):\s*(.*)/
+            push @{$func->{params}}, {name=>$1, t=>$2}
+
+fncode: is_poly($func)
+    $for $p in @{$func->{params}}
+        $if $p->{t} =~/^POLY/
+            return 1
+    return 0
