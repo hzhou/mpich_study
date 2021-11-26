@@ -1,44 +1,12 @@
-include: macros_mymake/args.def
-include: macros_mymake/defines.def
-include: macros_mymake/subdirs.def
-include: macros_mymake/mpich.def
-include: macros_mymake/bindings.def
-include: macros_mymake/hydra.def
+include: macros_common/mymake.def
+include: macros_common/mymake/libtool.def
 include: macros_mymake/libtool.def
-
-output_dir: ./mymake
 
 page: mymake_libtool
     $call load_opts
 
-    system "mkdir -p mymake/libtool"
-    chdir "mymake/libtool" or die "can't chdir mymake/libtool\n"
-
-    &call open_w, configure.ac
-        print Out "AC_INIT\n"
-        print Out "LT_INIT\n"
-        $(if:1)
-            print Out "AC_PROG_CXX\n"
-            print Out "AC_PROG_F77\n"
-            print Out "AC_PROG_FC\n"
-        print Out "LT_OUTPUT\n"
-
-    $print "Configure libtool ..."
-    system "libtoolize -iq && aclocal && autoconf > t.log"
-    $call @cache_configure
-    system "./configure --disable-static >> t.log"
+    $call mymake_libtool, CXX, F77, FC
 
     chdir $pwd
     $call patch_libtool, mymake/libtool/libtool
-
-subcode: cache_configure
-    $foreach $a in "stdc", "sys/types.h", "sys/stat.h", "stdlib.h", "string.h", "memory.h", "strings.h", "inttypes.h", "stdint.h", "unistd.h", "dlfcn.h"
-        my $cv = "ac_cv_header_$a"
-        $cv=~s/[\/.]/_/g
-        $ENV{$cv} = "yes"
-    
-    $(if:0)
-        $ENV{"ac_cv_prog_CC"} = $ENV{CC}
-        $foreach $a in "objdump", "ar", "strip", "ranlib", "gawk"
-            $ENV{"ac_cv_prog_".uc($a)} = $a
 

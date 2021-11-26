@@ -1,9 +1,3 @@
-subcode: _autoload
-    $use Cwd
-    my $pwd=getcwd()
-    my $mymake_dir = Cwd::abs_path($0)
-    $mymake_dir=~s/\/[^\/]+$//
-
 #- findout mymake directory
 subcode: set_mymake
     $if $0=~/^(\/.*)\//
@@ -149,18 +143,6 @@ subcode: save_last_ARGV
 
         $if -f "Makefile" and !$opts{noclean}
             system "make realclean"
-
-subcode: save_opts
-    $opts{config_args} = join(' ', @config_args)
-    &call open_w, mymake/opts
-        $foreach $k in sort keys %opts
-            print Out "$k: $opts{$k}\n"
-
-subcode: load_opts
-    $global %opts
-    &call open_r, mymake/opts
-        $if /^(\S+): (.*)/
-            $opts{$1} = $2
 
 #---------------------------------------- 
 subcode: do_cmd(@cmd)

@@ -1,13 +1,12 @@
-include: macros_mymake/makefile.def
+include: macros_common/mymake/makefile.def
 include: macros_mymake/hydra.def
 include: macros_mymake/gforker.def
 
-subcode: custom_make
+subcode: custom_make(what)
     # FIXME
     $if $opts{argobots}
         $I_list .= " -I$opts{argobots}/include"
     $call parse_Makefile, mymake/Makefile.orig
-    $objects{MODS}="-"
     $objects{MODDIR}="-"
     $objects{PREFIX}="-"
 
@@ -15,7 +14,10 @@ subcode: custom_make
     # $call collect_mpi_fc_modules
 
     $call custom_programs_libs
-    dump_makefile("mymake/Makefile.custom")
+    $(if:what=mpich)
+        dump_makefile("mymake/Makefile.custom", "mymake")
+    $(else)
+        dump_makefile("mymake/Makefile.custom", "../../../mymake")
 
     system "rm -f Makefile"
     system "ln -s mymake/Makefile.custom Makefile"
@@ -167,14 +169,17 @@ fncode: get_make_var($name)
         $t=~s/\$\((\w+)\)/get_make_var($1)/ge
         $t=~s/\s+/ /g
 
-        $t=~s/$opts{moddir}/\x24(MODS)/g
+        $t=~s/$opts{moddir}/\x24(MODDIR)/g
         return $t
     $elif $name=~/^am__v_\w+/
         return ""
     $else
         return ""
 
-fncode: get_make_objects($a)
+fncode: get_make_objects($p)
+    my $a = $p
+    $a=~s/[\.\/]/_/g
+
     my $tlist = get_list("${a}_OBJECTS")
     my @tlist = sort @$tlist
     $foreach $t in @tlist

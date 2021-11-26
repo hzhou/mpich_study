@@ -1,14 +1,12 @@
-include: macros_mymake/gforker.def
-
-fncode: dump_makefile($makefile)
+fncode: dump_makefile($makefile, $moddir)
     $global @CONFIGS
-    $global $I_list, $L_list # ref: dump_variable_custom
+    $global $I_list, $L_list # ref: dump_make_var_custom
     $global @extra_make_rules
     $global %dst_hash
     $global %special_targets
 
-    my $lt = get_make_var("LIBTOOL")
-    my $lt_opt
+    my ($lt, $lt_opt)
+    $lt = get_make_var("LIBTOOL")
     $if !$opts{V}
         $lt_opt = "--quiet"
 
@@ -21,8 +19,10 @@ fncode: dump_makefile($makefile)
         $print "all: @ltlibs @programs"
         $print
         my %rules_ADD
-        $call dump_rules, ltlibs
-        $call dump_rules, programs
+        $if @ltlibs
+            $call dump_rules, ltlibs
+        $if @programs
+            $call dump_rules, programs
 
         $call dump_extra
         $call dump_implicit
@@ -31,15 +31,8 @@ fncode: dump_makefile($makefile)
 
     subcode: mymake_MODDIR_PREFIX
         $print "PREFIX=$opts{prefix}"
-        $print "export MODDIR=$opts{moddir}"
-        my $pwd = getcwd()
-        $(if:makefile=mpich)
-            $print "MODS=mymake"
-        $(else)
-            $if $makefile eq "Makefile"
-                $print "MODS=mymake"
-            $else
-                $print "MODS=$opts{moddir}"
+        $if $moddir
+            $print "MODDIR=$moddir"
         $print
 
     subcode: mymake_common_VARS
@@ -64,24 +57,21 @@ fncode: dump_makefile($makefile)
 
         $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
         $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-        $print "LTCC = $(LT:compile) \x24(COMPILE)"
-        $print "LTLD = $(LT:link) \x24(LINK)"
+        $if $lt
+            $print "LTCC = $(LT:compile) \x24(COMPILE)"
+            $print "LTLD = $(LT:link) \x24(LINK)"
         $print
 
     subcode: dump_cxx
         my $cxx = get_make_var("CXX")
+        my $cxxld = get_make_var("CXXLD")
         my $flags = get_make_var("CXXFLAGS")
         my $am_flags = get_make_var("AM_CXXFLAGS")
         $print "CXXCOMPILE = $cxx \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) $flags $am_flags"
-
-        my $cxxld = get_make_var("CXXLD")
-        $if $cxxld
+        $print "CXXLINK = $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $if $lt
             $print "LTCXX = $(LT:compile) --tag=CXX \x24(CXXCOMPILE)"
             $print "CXXLD = $(LT:link) --tag=CXX $cxxld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-        $else
-            # mac os
-            $print "LTCXX = $(LT:compile) \x24(CXXCOMPILE)"
-            $print "CXXLD = $(LT:link) --tag=CC $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $print
 
     # FIXME: add -module src/binding/fortran/use_mpi
@@ -103,10 +93,11 @@ fncode: dump_makefile($makefile)
                 $else
                     $flags.=" -J$modpath"
             $print "$1COMPILE = $fc $flags"
-            $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
+            $if $lt
+                $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
 
-            my $ld = get_make_var("$1LD")
-            $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+                my $ld = get_make_var("$1LD")
+                $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
             $print
 
     # ----------------------
@@ -121,27 +112,28 @@ fncode: dump_makefile($makefile)
         $print "%.o: %.c"
         $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
         $print
-        $print "%.lo: %.c"
-        $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
-        $print
-        $if !$opts{disable_cxx}
-            $print "%.lo: %.cxx"
-            $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<
-            $print
-        $if !$opts{disable_fortran}
-            $print "%.lo: %.f"
-            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
-            $print
-            $print "%.lo: %.f90"
-            $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
-            $print
-        $foreach %special_targets
-            $print "%.$k.lo: %.c"
-            $call quiet_rule, LTCC, $v -c -o \$\@ \$<
-            $print
         $print "%.i: %.c"
         $call quiet_rule, CC -E, \x24(COMPILE) -E -o \$\@ \$<
         $print
+        $if $lt
+            $print "%.lo: %.c"
+            $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
+            $print
+            $if !$opts{disable_cxx}
+                $print "%.lo: %.cxx"
+                $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<
+                $print
+            $if !$opts{disable_fortran}
+                $print "%.lo: %.f"
+                $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+                $print
+                $print "%.lo: %.f90"
+                $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+                $print
+            $foreach %special_targets
+                $print "%.$k.lo: %.c"
+                $call quiet_rule, LTCC, $v -c -o \$\@ \$<
+                $print
 
     subcode: dump_clean
         $print "\x23 --------------------\n"
@@ -195,10 +187,9 @@ fncode: dump_makefile($makefile)
     subcode: dump_variable(key)
         my $t = get_make_var_unique("$(key)")
         $call @dump_make_var_custom
+        $(if:key=CPPFLAGS)
+            $t .= $I_list
         $print "$(key) = $t"
-
-        subcode: customizations
-            $call @dump_variable_custom
 
     subcode: dump_object(key, tlist)
         $(if:_pagename=mymake)
@@ -226,7 +217,9 @@ fncode: dump_makefile($makefile)
 
     subcode: dump_rules(which)
         $foreach $p in @$(which)
-            my $ld = "LTLD"
+            my $ld = "LINK"
+            $if $lt
+                $ld = "LTLD"
             $if $p=~/libmpifort.la/
                 $ld = "FCLD"
             $elif $p=~/libmpicxx.la/
@@ -263,9 +256,9 @@ fncode: dump_makefile($makefile)
         subcode: set_objects
             my $o= "${a}_OBJECTS"
             $(if:which=programs)
-                my $tlist = get_make_objects($a, 1)
+                my $tlist = get_make_objects($p, 1)
             $(else)
-                my $tlist = get_make_objects($a)
+                my $tlist = get_make_objects($p)
             $global %special_targets
             $if $special_targets{$a}
                 $foreach $t in @$tlist
@@ -344,7 +337,6 @@ subcode:: dump_make_var_custom
         $if $opts{"with-cuda"}
             my $p = $opts{"with-cuda"}
             $I_list .= " -I$p/include"
-        $t .= $I_list
 
 fncode: get_make_var_unique($name)
     my (@t, %cache)

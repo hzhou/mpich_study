@@ -1,13 +1,20 @@
 subcode: preproc_bindings
+    my $bin="\x24(PREFIX)/bin"
     $if !$opts{disable_cxx}
         $opts{enable_cxx}=1
         $call config_cxx
+        $dst_hash{"mymake/mpicxx"}=$bin
+        $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
     $else
         system "touch src/binding/cxx/mpicxx.h.in"
 
     $if !$opts{disable_fortran}
         $call config_fortran
+        $dst_hash{"mymake/mpifort"}=$bin
+        $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
+        $dst_hash{"LN_S-$bin/mpif77"}="$bin/mpifort"
     $else
+        system "touch src/binding/fortran/mpif_h/Makefile_wrappers.mk"
         $(for:mpif_h,use_mpi, use_mpi_f08)
             system "touch src/binding/fortran/$1/Makefile.mk"
         $(for:mpif.h, setbotf.h, setbot.c)
@@ -31,6 +38,10 @@ subcode: autogen_fortran
         $call buildiface, mpif_h
         $call buildiface, use_mpi
         $call buildiface, use_mpi_f08
+        $if -f "maint/gen_binding_f77.py"
+            system "$python maint/gen_binding_f77.py"
+        $if -f "maint/gen_binding_f90.py"
+            system "$python maint/gen_binding_f90.py"
         $if -f "maint/gen_binding_f08.py"
             system "$python maint/gen_binding_f08.py"
         $else

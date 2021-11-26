@@ -1,3 +1,5 @@
+include: macros_common/mymake.def
+
 include: macros_mymake/args.def
 include: macros_mymake/custom_make.def
 include: macros_mymake/subdirs.def

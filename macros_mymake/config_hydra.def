@@ -79,4 +79,4 @@ subcode: make_hydra
     $dst_hash{"LN_S-$bin/mpiexec"}="$bin/mpiexec.hydra"
     $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
 
-    dump_makefile("src/pm/hydra/Makefile")
+    dump_makefile("src/pm/hydra/Makefile", "../../../mymake")

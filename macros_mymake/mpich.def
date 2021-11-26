@@ -13,7 +13,7 @@ subcode: mpich_slow
         $call @post_mpich_configure
 
     $if $ret == 0
-        $call custom_make
+        $call custom_make, mpich
 
     $if $ret == 0
         # configure MPL
@@ -146,11 +146,7 @@ subcode: mpich_make_setup
 
     # install mpicc etc.
     my $bin="\x24(PREFIX)/bin"
-    $(for:p in mpicc,mpicxx,mpifort)
-            $dst_hash{"mymake/$(p)"}=$bin
-    $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
-    $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
-    $dst_hash{"LN_S-$bin/mpif77"}="$bin/mpifort"
+    $dst_hash{"mymake/mpicc"}=$bin
 
 
     subcode: need_mpich_preproc

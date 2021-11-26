@@ -1,3 +1,4 @@
+include: macros_common/mymake.def
 include: macros_mymake/args.def
 
 output_dir: ./mymake

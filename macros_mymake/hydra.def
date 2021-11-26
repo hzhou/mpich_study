@@ -31,7 +31,7 @@ subcode: prepare_hydra
     $call need_mpl
     $call need_hwloc
     $call @check_argobots
-    $call custom_make
+    $call custom_make, hydra
 
     subcode: check_argobots
         $if $opts{argobots}
