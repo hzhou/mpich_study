@@ -7,25 +7,19 @@ macros:
     Lmpl: $(Dmpl)/libmpl.la
     Hmpl: $(Impl)/mplconfig.h
 
-    embed_opa: src/openpa
-    Dopa: openpa
-    Iopa: $(Dopa)/src
-    Lopa: $(Dopa)/src/libopa.la
-    Hopa: $(Iopa)/opa_config.h
-
     embed_yaksa: modules/yaksa
     Dyaksa: yaksa
     Iyaksa: $(Dyaksa)/src/frontend/include
     Lyaksa: $(Dyaksa)/libyaksa.la
     Hyaksa: $(Iyaksa)/yaksa_config.h
 
-    embed_hwloc: src/hwloc
+    embed_hwloc: modules/hwloc
     Dhwloc: hwloc
     Ihwloc: $(Dhwloc)/include
     Lhwloc: $(Dhwloc)/hwloc/libhwloc_embedded.la
     Hhwloc: $(Ihwloc)/hwloc/autogen/config.h
 
-    embed_izem: src/izem
+    embed_izem: modules/izem
     Dizem: izem
     Iizem: $(Dizem)/src/include
     Lizem: $(Dizem)/src/libzm.la
@@ -37,7 +31,7 @@ macros:
     Ljsonc: $(Djsonc)/libjson-c.la
     Hjsonc: $(Ijsonc)/json.h
 
-    embed_ucx: src/mpid/ch4/netmod/ucx/ucx
+    embed_ucx: modules/ucx
     Ducx: ucx
     Iucx: $(Ducx)/src
     Lucp: $(Ducx)/src/ucp/libucp.la
@@ -47,7 +41,7 @@ macros:
     Lucx: $(Lucp)
     Hucx: $(Ducx)/config.h
 
-    embed_ofi: src/mpid/ch4/netmod/ofi/libfabric
+    embed_ofi: modules/libfabric
     Dofi: libfabric
     Iofi: $(Dofi)/include
     Lofi: $(Dofi)/src/libfabric.la
@@ -75,18 +69,6 @@ subcode: need_mpl
                 $configure.=" $t"
             $elif $t=~/--with(out)?-(mpl|thread-package|argobots|uti|cuda)/
                 $configure.=" $t"
-
-#---------------------------------------- 
-subcode: need_opa
-    $call copy_subdir_module, opa
-    $call add_subdir_inc_lib, opa
-    $call set_configure
-    $call add_subdir_make, opa
-
-    subcode: set_configure
-        my $configure = "./configure --disable-versioning --enable-embedded"
-        $if $opts{openpa_primitives}
-            $configure .= " --with-atomic-primitives=$opts{openpa_primitives}"
 
 #---------------------------------------- 
 subcode: need_romio

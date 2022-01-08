@@ -121,8 +121,6 @@ subcode: mpich_make_setup
         $call need_$1
     $if $opts{enable_izem}
         $call need_izem
-    $if -d "src/openpa"
-        $call need_opa
 
     $if !$opts{disable_romio}
         $call need_romio

@@ -58,8 +58,9 @@ subcode: autogen_fortran
                 system "perl buildiface $pwd/src/include/mpi.h.in"
             system "perl buildiface $pwd/src/mpi/romio/include/mpio.h.in"
         $(elif:dir=use_mpi)
-            system "perl buildiface >/dev/null"
-            system "perl ../mpif_h/buildiface -infile=cf90t.h -deffile=./cf90tdefs"
+            $if -f "buildiface"
+                system "perl buildiface >/dev/null"
+                system "perl ../mpif_h/buildiface -infile=cf90t.h -deffile=./cf90tdefs"
         $(else)
             system "perl buildiface >/dev/null"
         chdir $pwd

@@ -17,7 +17,8 @@ subcode: save_opts
             print Out "$k: $opts{$k}\n"
 
 subcode: load_opts
-    &call open_r, mymake/opts
-        $if /^(\S+): (.*)/
-            $opts{$1} = $2
+    $if -e "mymake/opts"
+        &call open_r, mymake/opts
+            $if /^(\S+): (.*)/
+                $opts{$1} = $2
 

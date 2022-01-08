@@ -292,7 +292,11 @@ subcode: patch_mpi_h
         $sizeof_hash{AINT} = $sizeof_hash{VOID_P}
         $sizeof_hash{OFFSET} = $sizeof_hash{VOID_P}
 
-        $if $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
+        $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
+            $confs{MPI_AINT} = "int"
+            $confs{MPI_AINT_FMT_DEC_SPEC}='%d'
+            $confs{MPI_AINT_FMT_HEX_SPEC}='%x'
+        $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
             $confs{MPI_AINT} = "long"
             $confs{MPI_AINT_FMT_DEC_SPEC}='%ld'
             $confs{MPI_AINT_FMT_HEX_SPEC}='%lx'
@@ -540,10 +544,19 @@ subcode: get_c_sizeof_mpich
         $config_defines{SIZEOF___FLOAT128}=0
         $config_defines{SIZEOF_WCHAR_T}=0
 
-        $config_defines{MAX_ALIGNMENT} = 16
+        $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
+            # 32-bit
+            $config_defines{MAX_ALIGNMENT} = 4
+        $else
+            # 64-bit
+            $config_defines{MAX_ALIGNMENT} = 16
+
         $config_defines{MPIR_Ufint} = "unsigned int"
         my $MPI_AINT
-        $if $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
+        $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
+            $MPI_AINT = "int"
+            $config_defines{MPIR_AINT_MAX} = 'INT_MAX'
+        $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
             $MPI_AINT = "long"
             $config_defines{MPIR_AINT_MAX} = 'LONG_MAX'
         $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG_LONG}
@@ -588,7 +601,7 @@ fncode: get_sizeof_bsend_status($MPI_AINT)
             $elif -f "src/include/mpii_bsend.h"
                 print Out "#include \"$pwd/src/include/mpii_bsend.h\"\n"
             print Out "int main() {\n"
-            print Out "    printf(\"MPII_BSEND_DATA_T: %lu\\n\", sizeof(MPII_Bsend_data_t));\n"
+            print Out "    printf(\"MPII_BSEND_DATA_T: %zu\\n\", sizeof(MPII_Bsend_data_t));\n"
             print Out "    return 0;\n"
             print Out "}\n"
 
