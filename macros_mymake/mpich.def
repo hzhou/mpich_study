@@ -16,14 +16,11 @@ subcode: mpich_slow
         $call custom_make, mpich
 
     $if $ret == 0
-        # configure MPL
         $call load_dump_CFLAGS
         $call patch_mpicc_etc
 
         $ENV{CFLAGS}=$opts{CFLAGS}
-        my $t="mymake/$(Hmpl)"
-        $if -d "src/openpa"
-            $t.=" mymake/$(Hopa)"
+        my $t="$(Hmpl)"
         $t=~s/$pwd\///g
 
         $ret = system "make $t"
@@ -33,7 +30,7 @@ subcode: mpich_slow
         $call @patch_sizeof_atomic
         $call patch_atomic_nolocal
         $if %config_defines
-            $call define_config_h, mymake/mpl/include/mplconfig.h
+            $call define_config_h, src/mpl/include/mplconfig.h
             $call define_config_h, src/include/mpichconf.h
 
     # ---------------------------
@@ -270,7 +267,7 @@ subcode: patch_sizeof_atomic
             $print "int main() { return sizeof(MPL_atomic_ptr_t); }"
 
         my $CC = get_make_var("CC")
-        system "$CC -Imymake/mpl/include mymake/t.c -o mymake/t"
+        system "$CC -Isrc/mpl/include mymake/t.c -o mymake/t"
         system "mymake/t"
         my $ret = $? >> 8;
 
@@ -279,7 +276,7 @@ subcode: patch_sizeof_atomic
 
 subcode: patch_atomic_nolocal
     my $lock_based_atomics
-    &call open_r, "mymake/mpl/include/mplconfig.h"
+    &call open_r, "src/mpl/include/mplconfig.h"
         $if /^#define MPL_USE_LOCK_BASED_PRIMITIVES/  
             $lock_based_atomics = 1
             last

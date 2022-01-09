@@ -1,8 +1,7 @@
 macros:
     subdir_list: mpl, opa, hwloc, izem, ucx, ofi, romio, jsonc
 
-    embed_mpl: src/mpl
-    Dmpl: mpl
+    Dmpl: src/mpl
     Impl: $(Dmpl)/include
     Lmpl: $(Dmpl)/libmpl.la
     Hmpl: $(Impl)/mplconfig.h
@@ -55,10 +54,14 @@ macros:
 
 #---------------------------------------- 
 subcode: need_mpl
-    $call copy_subdir_module, mpl 
-    $call add_subdir_inc_lib, mpl
+    $call need_mpl_, mpl
+
+subcode: need_mpl_(mpl)
+    $if !$opts{quick} && !-d "$(D$(mpl))/confdb"
+        $call do_cmd, cp -r confdb $(D$(mpl))/
+    $call add_subdir_inc_lib, $(mpl)
     $call set_configure
-    $call add_subdir_make, mpl
+    $call add_subdir_make, $(mpl)
 
     subcode: set_configure
         my $configure = "./configure --disable-versioning --enable-embedded"
@@ -243,6 +246,7 @@ subcode: add_subdir_inc_lib(name)
         $(else)
             push @CONFIGS, "$(H$(name))"
             $I_list .= " -I$(I$(name))"
+            $L_list .= " $(L$(name))"
 
 subcode: add_subdir_make(name)
     $(if:embed_$(name))

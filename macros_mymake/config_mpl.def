@@ -1,8 +1,8 @@
 subcode: config_init_mpl
     $config_prefix = "mpl"
     $config_in = "$mymake_dir/config_templates/mplconfig.h"
-    $config_out = "mymake/mpl/include/mplconfig.h"
-    symlink "../../libtool", "mymake/mpl/libtool"
+    $config_out = "src/mpl/include/mplconfig.h"
+    symlink "../../libtool", "src/mpl/libtool"
 
 subcode: config_mpl
     $call ac_init, MPL, 0.1, -, mpl, -
@@ -57,7 +57,7 @@ subcode: config_mpl
         my %confs
         $confs{MPL_TIMER_TYPE} = "struct timespec"
         $confs{MPL_TIMER_KIND} = "MPL_TIMER_KIND__CLOCK_GETTIME"
-        autoconf_file("mymake/mpl/include/mpl_timer.h", \%confs)
+        autoconf_file("src/mpl/include/mpl_timer.h", \%confs)
 
 #---------------------------------------- 
 subcode: make_mpl
@@ -73,9 +73,9 @@ subcode: make_mpl
         $make_vars{LDFLAGS} .= " -L$p/lib64"
         $make_vars{LIBS} .= " -lcudart -lcuda"
     # $conds{MPL_HAVE_ZE} = 1
-    load_automake("mymake/mpl/Makefile.am", \%conds)
+    load_automake("src/mpl/Makefile.am", \%conds)
     @programs=()
-    dump_makefile("mymake/mpl/Makefile")
+    dump_makefile("src/mpl/Makefile")
 
 #---------------------------------------- 
 #---------------------------------------- 
