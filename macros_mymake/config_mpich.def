@@ -694,7 +694,7 @@ subcode: make_mpich
         # $call add_rule_hydra, hydra2
 
     subcode: add_rule_hydra(name)
-        my $add="\x24(MODDIR)/$(Lmpl) \x24(MODDIR)/$(Lhwloc) src/pm/hydra/Makefile"
+        my $add="$(Lmpl) \x24(MODDIR)/$(Lhwloc) src/pm/hydra/Makefile"
         push @extra_make_rules, ".PHONY: $(name) $(name)-install"
         push @extra_make_rules, ""
         push @extra_make_rules, "src/pm/hydra/Makefile:"

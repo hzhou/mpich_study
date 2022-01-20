@@ -6,6 +6,11 @@ macros:
     Lmpl: $(Dmpl)/libmpl.la
     Hmpl: $(Impl)/mplconfig.h
 
+    Dmpl_hydra: ../../../src/mpl
+    Impl_hydra: $(Dmpl_hydra)/include
+    Lmpl_hydra: $(Dmpl_hydra)/libmpl.la
+    Hmpl_hydra: $(Impl_hydra)/mplconfig.h
+
     embed_yaksa: modules/yaksa
     Dyaksa: yaksa
     Iyaksa: $(Dyaksa)/src/frontend/include
@@ -53,15 +58,17 @@ macros:
     Hromio: $(Dromio)/adio/include/romioconf.h
 
 #---------------------------------------- 
-subcode: need_mpl
-    $call need_mpl_, mpl
-
-subcode: need_mpl_(mpl)
-    $if !$opts{quick} && !-d "$(D$(mpl))/confdb"
-        $call do_cmd, cp -r confdb $(D$(mpl))/
-    $call add_subdir_inc_lib, $(mpl)
-    $call set_configure
-    $call add_subdir_make, $(mpl)
+subcode: need_mpl(@hydra)
+    $(if:!hydra)
+        $if !$opts{quick} && !-d "$(Dmpl)/confdb"
+            $call do_cmd, cp -r confdb $(Dmpl)/
+        $call add_subdir_inc_lib, mpl
+        $call set_configure
+        $call add_subdir_make, mpl
+    $(else)
+        $call add_subdir_inc_lib, mpl_hydra
+        push @extra_make_rules, "$(Lmpl_hydra):"
+        push @extra_make_rules, "\t\x24(MAKE) -C ../../.. $(Lmpl)"
 
     subcode: set_configure
         my $configure = "./configure --disable-versioning --enable-embedded"

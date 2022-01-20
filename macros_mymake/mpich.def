@@ -210,9 +210,9 @@ subcode: mpich_configure
         &call modify, configure.ac
             $if $l=~/AC_CONFIG_SUBDIRS/
                 next
-            $elif $l=~/^\s*HWLOC_/
-                next
-            $elif $l=~/^\s*PAC_CONFIG_MPL/
+            $elif $l=~/^(\s*)AM_CONDITIONAL.*BUILD_ROMIO/
+                $l = $1. "AM_CONDITIONAL([BUILD_ROMIO], false)"
+            $elif $l=~/^\s*(PAC_CONFIG_MPL|HWLOC_)/
                 next
             $elif $l=~/^(\s*)PAC_CONFIG_HWLOC/
                 $l = "$1"."pac_have_hwloc=yes\n"

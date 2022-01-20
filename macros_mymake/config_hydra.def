@@ -56,7 +56,7 @@ subcode: config_hydra
         delete $headers_hash{SLURM_SLURM_H}
 
 subcode: make_hydra
-    $call need_mpl
+    $call need_mpl, hydra
     $call need_hwloc
     my %conds
     $conds{HYDRA_HAVE_HWLOC}=1

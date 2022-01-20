@@ -4,9 +4,6 @@ macros:
     Lmpl_hydra: $(Dmpl_hydra)/libmpl.la
     Hmpl_hydra: $(Impl_hydra)/mplconfig.h
 
-subcode: need_mpl_hydra
-    $call need_mpl_, mpl_hydra
-
 #---- mymake_hydra.pl -------------------- 
 subcode: prepare_hydra
     $(setmacro:makefile=hydra)
@@ -31,7 +28,7 @@ subcode: prepare_hydra
     $dst_hash{"LN_S-$bin/mpiexec"}="$bin/mpiexec.hydra"
     $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
 
-    $call need_mpl_hydra
+    $call need_mpl, hydra
     $call need_hwloc
     $call @check_argobots
     $call custom_make, hydra
