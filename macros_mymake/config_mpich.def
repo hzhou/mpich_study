@@ -87,7 +87,6 @@ subcode: config_mpich
             $temp{HAVE_CH4_SHM_EAGER_IQUEUE}=1
             $temp{ENABLE_LOCAL_SESSION_INIT}=1
 
-            $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_YAKSA'
             $if !$temp{MPIDI_CH4_DIRECT_NETMOD}
                 $if $opts{"with-cuda"}
                     $temp{MPIDI_CH4_SHM_ENABLE_GPU}=1
@@ -114,7 +113,6 @@ subcode: config_mpich
                 $temp{ENABLE_PVAR_MULTINIC}=0 
         $elif $opts{device}=~/ch3/
             $temp{CH3_RANK_BITS} = 16
-            $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_DATALOOP'
             $temp{PREFETCH_CELL}=1
             $temp{USE_FASTBOX}=1
             $if $opts{device}=~/ch3:sock/
@@ -125,6 +123,10 @@ subcode: config_mpich
         $if $opts{"with-datatype-engine"} eq "dataloop"
             $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_DATALOOP'
         $elif $opts{"with-datatype-engine"} eq "yaksa"
+            $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_YAKSA'
+        $elif $opts{device}=~/ch3/
+            $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_DATALOOP'
+        $else
             $temp{MPICH_DATATYPE_ENGINE} = 'MPICH_DATATYPE_ENGINE_YAKSA'
 
         $if $opts{device} =~ /ch4/

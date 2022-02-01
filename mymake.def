@@ -24,9 +24,9 @@ page: mymake
     $call @dump_args
 
     my $python = find_python3()
-    $call autogen, src/mpi/pt2pt/send.c, maint/gen_binding_c
-    $call autogen, src/mpid/ch4/netmod/include/netmod.h, maint/gen_ch4_api
-    $call autogen, src/mpi/coll/mpir_coll.c, maint/gen_coll
+    $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
+    $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
+    $call autogen, src/mpi/coll/mpir_coll.c, $python maint/gen_coll.py
     $if !$opts{disable_cxx}
         $call autogen_cxx
     $if !$opts{disable_fortran}
@@ -50,10 +50,8 @@ page: mymake
 
     subcode: autogen(check_file, script)
         $if !-f "$(check_file)"
-            $if -f "$(script).pl"
-                system "perl $(script).pl"
-            $elif -f "$(script).py"
-                system "$python $(script).py"
+            $print "[$(script)]"
+            system "$(script)"
 
     subcode: setup_mymake
         $if !-d "mymake"
@@ -94,8 +92,12 @@ include: macros_mymake/errmsgs.def
 page: mymake_errmsg
     module: perl
 
-    $call load_opts
-    $call defmsg_h
+    $if system("grep -q 'use strict' maint/extracterrmsgs") == 0
+        my @errmsgdirs = qw(src/mpi src/mpi_t src/nameserv src/util src/binding src/include src/mpid src/pmi)
+        system "maint/extracterrmsgs @errmsgdirs > src/mpi/errhan/defmsg.h"
+    $else
+        $call load_opts
+        $call defmsg_h
 
 page: mymake_cvars
     module: perl

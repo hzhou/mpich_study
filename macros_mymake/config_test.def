@@ -7,7 +7,8 @@ subcode: config_init_test
 subcode: config_test
     $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/
     $call set_config_defines
-    $call patch_runtests
+    $if -e "test/mpi/runtests.in"
+        $call patch_runtests
     $call patch_testlists
 
     subcode: set_config_defines
@@ -80,6 +81,8 @@ subcode: make_test
 
         @extra_make_rules=()
         $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
+        $call add_make_rule, util/libmtest_single.la, util, libmtest_single.la
+        $call add_make_rule, util/libdtypes.la, util, libdtypes.la
 
         $if $opts{"with-cuda"}
             my $p = $opts{"with-cuda"}
