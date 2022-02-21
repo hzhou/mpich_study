@@ -1,3 +1,0 @@
-fncode: MPIR_Gather_intra_binomial
-    &call gather_intra_frame
-        

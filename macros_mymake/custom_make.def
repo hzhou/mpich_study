@@ -183,6 +183,6 @@ fncode: get_make_objects($p)
     my $tlist = get_list("${a}_OBJECTS")
     my @tlist = sort @$tlist
     $foreach $t in @tlist
-        $t=~s/$a-//g
+        $t =~s/[^\/]+-//g
     return \@tlist
 

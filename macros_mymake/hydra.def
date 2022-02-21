@@ -53,6 +53,8 @@ subcode: hydra_config
                 $l ="ACLOCAL_AMFLAGS = -I confdb\n"
 
         my $hwloc_mk = "tools/topo/hwloc/Makefile.mk"
+        $if -f "lib/$hwloc_mk"
+            $hwloc_mk = "lib/$hwloc_mk"
         $if $do_hydra2
             $hwloc_mk = "libhydra/topo/hwloc/Makefile.mk"
         &call modify, $hwloc_mk

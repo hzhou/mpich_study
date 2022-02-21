@@ -1,2 +1,0 @@
-subcode: mpl_env2str(name, var)
-    MPL_env2str("$(name)", (const char **) &$(var))

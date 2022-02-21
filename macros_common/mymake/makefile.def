@@ -302,7 +302,7 @@ fncode: dump_makefile($makefile, $moddir)
                 $elif $t=~/^-L\S+/
                     $objs.=" $t"
                 $else
-                    $if $t_cppflags and $t=~/(\w+)\.o/
+                    $if $t_cppflags and $t=~/(.*\w+)\.o/
                         $call per_prog_rule
                     push @t, $t
 

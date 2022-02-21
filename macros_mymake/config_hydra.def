@@ -1,6 +1,9 @@
 subcode: config_init_hydra
     $config_in = "$mymake_dir/config_templates/hydra_config.h"
-    $config_out = "src/pm/hydra/include/hydra_config.h"
+    $if -d "src/pm/hydra/include"
+        $config_out = "src/pm/hydra/include/hydra_config.h"
+    $else
+        $config_out = "src/pm/hydra/hydra_config.h"
     symlink "../../../libtool", "src/pm/hydra/libtool"
 
 subcode: config_hydra
@@ -18,7 +21,10 @@ subcode: config_hydra
         $confs{hydra_rmk_array}      = ' "'. join('",  "', @rmks). '",  NULL'
         $confs{hydra_launcher_init_array} = ' HYDT_bsci_launcher_'. join('_init,  HYDT_bsci_launcher_', @launchers). '_init,  NULL'
         $confs{hydra_rmk_init_array} = ' HYDT_bsci_rmk_'. join('_init,  HYDT_bsci_rmk_', @rmks). '_init,  NULL'
-        autoconf_file("src/pm/hydra/tools/bootstrap/src/bsci_init.c", \%confs)
+        $if -f "src/pm/hydra/lib/tools/bootstrap/src/bsci_init.c.in"
+            autoconf_file("src/pm/hydra/lib/tools/bootstrap/src/bsci_init.c", \%confs)
+        $else
+            autoconf_file("src/pm/hydra/tools/bootstrap/src/bsci_init.c", \%confs)
 
         $(for:as, a in demuxes, launchers, rmks, topolibs and demux,launcher,rmk,topolib)
             $config_defines{HYDRA_AVAILABLE_$(as:uc)} = "\"@$(as)\""
