@@ -119,6 +119,9 @@ subcode: mpich_make_setup
     $if $opts{enable_izem}
         $call need_izem
 
+    $if -f "src/pmi/configure.ac"
+        $call need_pmi
+
     $if !$opts{disable_romio}
         $call need_romio
     $if $opts{device}=~/:ucx/ and (!$opts{"with-ucx"} or $opts{"with-ucx"} eq "embedded")

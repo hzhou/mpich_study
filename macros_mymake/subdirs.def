@@ -57,6 +57,11 @@ macros:
     LPromio:$(Dromio)/libpromio.la
     Hromio: $(Dromio)/adio/include/romioconf.h
 
+    Dpmi: src/pmi
+    Ipmi: $(Dpmi)/include
+    Lpmi: $(Dpmi)/libpmi.la
+    Hpmi: $(Dpmi)/include/pmi_config.h
+
 #---------------------------------------- 
 subcode: need_mpl(@hydra)
     $(if:!hydra)
@@ -79,6 +84,24 @@ subcode: need_mpl(@hydra)
                 $configure.=" $t"
             $elif $t=~/--with(out)?-(mpl|thread-package|argobots|uti|cuda)/
                 $configure.=" $t"
+
+#---------------------------------------- 
+subcode: need_pmi
+    system "rsync -r confdb/ $(Dpmi)/confdb/" 
+    system "cp maint/version.m4 $(Dpmi)/"
+    $call add_subdir_inc_lib, pmi
+    $call set_configure
+    $call add_subdir_make, pmi
+
+    subcode: set_configure
+        my @t_env 
+        push @t_env, "FROM_MPICH=yes"
+        push @t_env, "main_top_srcdir=$pwd"
+        push @t_env, "main_top_builddir=$pwd"
+        push @t_env, "CPPFLAGS='-I$opts{moddir}/$(Impl)'"
+        $if $opts{argobots}
+            $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
+        my $configure = "@t_env ./configure --enable-embedded"
 
 #---------------------------------------- 
 subcode: need_romio

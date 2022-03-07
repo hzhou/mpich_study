@@ -87,14 +87,17 @@ subcode: hydra_config
 
     subcode: patch_config_h
         my (@lines, $flag)
-        &call open_r, include/hydra_config.h
+        my $config_h = "include/hydra_config.h"
+        $if !-d "include"
+            $config_h = "hydra_config.h"
+        &call open_r, $config_h
             $if /#define HYDRA_DEFAULT_TOPOLIB NULL/
                 push @lines, "#define HYDRA_DEFAULT_TOPOLIB \"hwloc\"\n"
                 $flag = 1
             $else
                 push @lines, $_
         $if $flag
-            &call open_W, include/hydra_config.h
+            &call open_W, $config_h
                 $foreach $l in @lines
                     $print $l
 
