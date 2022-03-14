@@ -78,6 +78,31 @@ subcode: make_mpl
     dump_makefile("src/mpl/Makefile")
 
 #---------------------------------------- 
+subcode: config_init_pmi
+    $config_in = "$mymake_dir/config_templates/pmi_config.h"
+    $config_out = "src/pmi/include/pmi_config.h"
+    symlink "../../libtool", "src/pmi/libtool"
+
+subcode: config_pmi
+    $call ac_init, PMI, 1.2, -, pmi, -
+    $call set_config_defines
+
+    subcode: set_config_defines
+        $config_defines{HAVE_MPI_H} = 1
+        $config_defines{USE_PMI_PORT} = 1
+        $config_defines{HAVE_ERROR_CHECKING} = 1
+
+subcode: make_pmi
+    $call copy_subdir_module, mpl
+
+    my %conds
+    $conds{EMBEDDED_MODE} = 1
+    $autoconf_vars{mpl_includedir} = "-I../mpl/include"
+
+    load_automake("src/pmi/Makefile.am", \%conds)
+    @programs=()
+    dump_makefile("src/pmi/Makefile")
+
 #---------------------------------------- 
 subcode: config_init_opa
     $config_prefix = "opa"

@@ -75,7 +75,7 @@ subcode: custom_make(what)
                     $t.= $L_list
 
             subcode: filter_lib_mpl_etc
-                $t=~s/(\S+\/)?(mpl|openpa|izem|hwloc|yaksa|json-c|libfabric|ucx)\/\S+\.la\s*//g
+                $t=~s/(\S+\/)?(mpl|pmi|openpa|izem|hwloc|yaksa|json-c|libfabric|ucx)\/\S+\.la\s*//g
 
             subcode: filter_lib_ucx
                 $t=~s/\@ucxlib\@\s*//g

@@ -22,7 +22,7 @@ include: macros_mymake/config_test.def
 output_dir: ./mymake
 
 macros:
-    config_cases: mpich, mpl, opa, hydra, test, dtpools
+    config_cases: mpich, mpl, pmi, opa, hydra, test, dtpools
     # showcond: 1
     # showload: 1
 

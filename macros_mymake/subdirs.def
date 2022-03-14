@@ -1,5 +1,5 @@
 macros:
-    subdir_list: mpl, opa, hwloc, izem, ucx, ofi, romio, jsonc
+    subdir_list: mpl, pmi, opa, hwloc, izem, ucx, ofi, romio, jsonc
 
     Dmpl: src/mpl
     Impl: $(Dmpl)/include
@@ -239,9 +239,12 @@ subcode:: dump_make_var_custom
 
 subcode:: dump_make_var_custom
     $(if:key=CPPFLAGS or key=AM_CPPFLAGS)
-        $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa|libfabric)\/\S+\s*//g
-        $t=~s/-I\S+\/ucx\/src//g
-        $t=~s/-I\S+\/json-c//g
+        $if $makefile eq "Makefile"  # mpich
+            $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa|libfabric)\/\S+\s*//g
+            $t=~s/-I\S+\/ucx\/src//g
+            $t=~s/-I\S+\/json-c//g
+        $elif $makefile =~/hydra/
+            $t=~s/-I\S+\/(mpl)\/\S+\s*//g
 
 subcode: chdir_subdir(dir)
     chdir "$(dir)" or die "can't chdir $(dir)\n"
@@ -288,11 +291,11 @@ subcode: add_subdir_make(name)
         my $lib_la = "$(L$(name))"
         my $config_h = "$(H$(name))"
     $(if:quick)
-        $(if:name=mpl or name=opa)
+        $(if:name=mpl or name=pmi or name=opa)
             push @extra_make_rules, "$config_h:"
             push @extra_make_rules, "\t\x24(DO_config) $(name) && \x24(DO_makefile) $(name)"
             push @extra_make_rules, ""
-        $(if:name=mpl)
+        $(if:name=mpl or name=pmi)
             &call add_subdir_rule_block, $subdir, $lib_la, $config_h
                 push @t, "\x24(MAKE)"
         $(elif:name=opa)

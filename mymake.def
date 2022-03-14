@@ -24,9 +24,12 @@ page: mymake
     $call @dump_args
 
     my $python = find_python3()
-    $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
-    $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
-    $call autogen, src/mpi/coll/mpir_coll.c, $python maint/gen_coll.py
+    $if -f "maint/gen_binding_c.py"
+        $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
+    $if -f "maint/gen_ch4_api.py"
+        $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
+    $if -f "maint/gen_coll.py"
+        $call autogen, src/mpi/coll/mpir_coll.c, $python maint/gen_coll.py
     $if !$opts{disable_cxx}
         $call autogen_cxx
     $if !$opts{disable_fortran}
