@@ -3,10 +3,11 @@ subcode: preproc_bindings
     $if !$opts{disable_cxx}
         $opts{enable_cxx}=1
         $call config_cxx
-        $dst_hash{"mymake/mpicxx"}=$bin
-        $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
     $else
         system "touch src/binding/cxx/mpicxx.h.in"
+    # always install mpicxx
+    $dst_hash{"mymake/mpicxx"}=$bin
+    $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
 
     $if !$opts{disable_fortran}
         $call config_fortran

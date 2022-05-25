@@ -112,6 +112,12 @@ fncode: dump_makefile($makefile, $moddir)
         $print "%.o: %.c"
         $call quiet_rule, CC, \x24(COMPILE) -c -o \$\@ \$<
         $print
+        $print "%.o: %.f"
+        $call quiet_rule, FC, \x24(FCCOMPILE) -c -o \$\@ \$<
+        $print
+        $print "%.o: %.f90"
+        $call quiet_rule, FC, \x24(FCCOMPILE) -c -o \$\@ \$<
+        $print
         $print "%.i: %.c"
         $call quiet_rule, CC -E, \x24(COMPILE) -E -o \$\@ \$<
         $print
@@ -152,7 +158,16 @@ fncode: dump_makefile($makefile, $moddir)
                 $dst_hash{$t} = "\x24(PREFIX)/include"
 
         my (%dirs, @install_list, @install_deps, @lns_list)
-        $foreach $k in sort keys %dst_hash
+        my @dst_keys = sort keys %dst_hash
+        # libpmpi need be installed before libmpi
+        $if $dst_hash{'lib/libpmpi.la'}
+            $foreach $k in @dst_keys
+                $if $k eq "lib/libpmpi.la"
+                    $k = "lib/libmpi.la"
+                $elif $k eq "lib/libmpi.la"
+                    $k = "lib/libpmpi.la"
+
+        $foreach $k in @dst_keys
             my $v = $dst_hash{$k}
             $if $k=~/^LN_S-(.*)/
                 push @lns_list, "rm -f $1 && ln -s $v $1"
@@ -224,6 +239,8 @@ fncode: dump_makefile($makefile, $moddir)
                 $ld = "FCLD"
             $elif $p=~/libmpicxx.la/
                 $ld = "CXXLD"
+            $elif $opts{ld_default}
+                $ld = $opts{ld_default}
             my $cmd = "\x24($ld)"
             $if $opts{V}==0
                 $cmd = "\@echo $ld \$\@ && $cmd"

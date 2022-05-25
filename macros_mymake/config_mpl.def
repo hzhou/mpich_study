@@ -90,6 +90,7 @@ subcode: config_pmi
     subcode: set_config_defines
         $config_defines{HAVE_MPI_H} = 1
         $config_defines{USE_PMI_PORT} = 1
+        $config_defines{HAVE_THREADS} = 1
         $config_defines{HAVE_ERROR_CHECKING} = 1
 
 subcode: make_pmi
@@ -97,7 +98,7 @@ subcode: make_pmi
 
     my %conds
     $conds{EMBEDDED_MODE} = 1
-    $autoconf_vars{mpl_includedir} = "-I../mpl/include"
+    $autoconf_vars{mpl_includedir} = "-I../mpl/include -I../include"
 
     load_automake("src/pmi/Makefile.am", \%conds)
     @programs=()

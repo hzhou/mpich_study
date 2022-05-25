@@ -119,8 +119,10 @@ subcode: add_rule_hydra(name)
 
     subcode: set_config_args
         my $config_args = "--prefix=\x24(PREFIX)"
-        $if $opts{argobots}
+        $if $opts{"with-argobots"}
             $config_args .= " --with-argobots=$opts{argobots}"
+        $if $opts{"with-cuda"}
+            $config_args .= " --with-cuda=$opts{cuda}"
         $(if:name=hydra2)
             $config_args .= " --with-pm=hydra2"
 

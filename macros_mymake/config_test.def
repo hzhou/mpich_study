@@ -1,7 +1,10 @@
 subcode: config_init_test
     $config_in = "$mymake_dir/config_templates/mpitestconf.h"
     $config_out = "test/mpi/include/mpitestconf.h"
-    system "sed -e 's/\"gcc\"/\"mpicc\"/' libtool > test/mpi/libtool"
+    $if $ENV{CC}
+        system "sed -e 's/\"$ENV{CC}\"/\"mpicc\"/' libtool > test/mpi/libtool"
+    $else
+        system "sed -e 's/\"gcc\"/\"mpicc\"/' libtool > test/mpi/libtool"
     system "chmod a+x test/mpi/libtool"
 
 subcode: config_test
@@ -10,8 +13,11 @@ subcode: config_test
     $if -e "test/mpi/runtests.in"
         $call patch_runtests
     $call patch_testlists
+    $if !$opts{disable_fortran}
+        $call patch_f77_tests
 
     subcode: set_config_defines
+        $config_defines{F77_NAME_LOWER_USCORE} = 1
         # datatypes
         $(for:a in float,double,long_double)
             $config_defines{HAVE_$(a:uc)__COMPLEX} = 1
@@ -28,7 +34,7 @@ subcode: config_test
 
         $config_defines{SIZEOF_MPI_OFFSET} = $sizeof_hash{VOID_P}
         # getrusage
-        $config_defines{HAVE_GETRUSAGE} = 1
+        # $config_defines{HAVE_GETRUSAGE} = 1
 
         # mpi
         $config_defines{THREAD_PACKAGE_NAME} = "THREAD_PACKAGE_POSIX"
@@ -57,6 +63,11 @@ subcode: config_test
             $a=~s/\.in$//
             autoconf_file($a, \%confs)
 
+    subcode: patch_f77_tests
+        my %confs
+        $confs{F77_MPI_ADDRESS} = "INTEGER*8"
+        autoconf_file("test/mpi/f77/ext/add1size.h", \%confs)
+
 subcode: make_test
     my %conds
     $autoconf_vars{threadlib} = "-lpthread"
@@ -64,6 +75,9 @@ subcode: make_test
     push @all_am, glob("test/mpi/threads/*/Makefile.am")
     push @all_am, glob("test/mpi/errors/*/Makefile.am")
     push @all_am, glob("test/mpi/impls/mpich/comm/Makefile.am")
+    $if !$opts{disable_fortran}
+        $conds{HAS_F77} = 1
+        push @all_am, glob("test/mpi/f77/*/Makefile.am")
     # $foreach $dir in "attr", "comm", "datatype", "pt2pt", "coll", "rma", "threads/pt2pt"
     $foreach $a in @all_am
         my $dir
@@ -82,7 +96,12 @@ subcode: make_test
         @extra_make_rules=()
         $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
         $call add_make_rule, util/libmtest_single.la, util, libmtest_single.la
-        $call add_make_rule, util/libdtypes.la, util, libdtypes.la
+        $if $a =~ /threads/
+            $call add_make_rule, util/libmtest_thread.la, util, libmtest_thread.la
+        $if $a =~ /datatype/
+            $call add_make_rule, util/libdtypes.la, util, libdtypes.la
+        $if $a =~ /f77/
+            $call add_make_rule, util/libmtest_f77.la, util, libmtest_f77.la
 
         $if $opts{"with-cuda"}
             my $p = $opts{"with-cuda"}
@@ -93,8 +112,17 @@ subcode: make_test
 
         $make_vars{LIBTOOL} = "$top_srcdir/libtool"
         $make_vars{CC} = "mpicc"
+        $make_vars{CXX} = "mpicxx"
+        $make_vars{FC} = "mpifort -fcray-pointer"
         $make_vars{CCLD} = "mpicc"
-        dump_makefile("test/mpi/$dir/Makefile")
+        $make_vars{CXXLD} = "mpicxx"
+        $make_vars{FCLD} = "mpifort"
+        $if $dir=~/f77/
+            $opts{ld_default} = "FCLD"
+            dump_makefile("test/mpi/$dir/Makefile")
+            undef $opts{ld_default}
+        $else
+            dump_makefile("test/mpi/$dir/Makefile")
 
     subcode: add_make_rule(target, dir, sub_target, @dep)
         $(if:dep)

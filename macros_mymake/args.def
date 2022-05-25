@@ -23,7 +23,7 @@ subcode: parse_args
 
     my $uname = `uname`
     $opts{uname} = $uname
-    $if $uname=~/Darwin/
+    $if $uname=~/Darwin/ or $opts{"disable-weak-symbols"}
         $opts{do_pmpi} = 1
 
     subcode: set_moddir
@@ -57,7 +57,7 @@ subcode: parse_args
     subcode: set_prefix
         $if !$opts{prefix}
             $opts{prefix}="$pwd/_inst"
-            system "mkdir -p $opts{prefix}"
+        system "mkdir -p $opts{prefix}"
 
     subcode: opt_set(name)
         $global $$(name)

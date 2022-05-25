@@ -98,9 +98,12 @@ subcode: need_pmi
         push @t_env, "FROM_MPICH=yes"
         push @t_env, "main_top_srcdir=$pwd"
         push @t_env, "main_top_builddir=$pwd"
-        push @t_env, "CPPFLAGS='-I$opts{moddir}/$(Impl)'"
+        push @t_env, "CFLAGS='-I$pwd/$(Impl)'"
         $if $opts{argobots}
             $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
+        $if !$opts{disable_romio}
+            my $t_dir = "$pwd/$(Iromio)"
+            $t_env[-1] =~s/'$/ -I\/$t_dir'/
         my $configure = "@t_env ./configure --enable-embedded"
 
 #---------------------------------------- 
@@ -121,7 +124,7 @@ subcode: need_romio
         push @t_env, "FROM_MPICH=yes"
         push @t_env, "main_top_srcdir=$pwd"
         push @t_env, "main_top_builddir=$pwd"
-        push @t_env, "CPPFLAGS='-I$opts{moddir}/$(Impl)'"
+        push @t_env, "CPPFLAGS='-I$pwd/$(Impl)'"
         $if $opts{argobots}
             $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
         my $configure = "@t_env ./configure"
@@ -239,7 +242,7 @@ subcode:: dump_make_var_custom
 
 subcode:: dump_make_var_custom
     $(if:key=CPPFLAGS or key=AM_CPPFLAGS)
-        $if $makefile eq "Makefile"  # mpich
+        $if $makefile eq "Makefile" or $makefile eq "mymake/Makefile.custom"  # mpich
             $t=~s/-I\S+\/(mpl|openpa|romio|izem|hwloc|yaksa|libfabric)\/\S+\s*//g
             $t=~s/-I\S+\/ucx\/src//g
             $t=~s/-I\S+\/json-c//g

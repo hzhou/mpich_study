@@ -27,8 +27,6 @@ subcode: config_mpich
         $confs{SIZEOF_FC_REAL} = $sizeof_hash{REAL}
         $confs{SIZEOF_FC_DOUBLE_PRECISION} = $sizeof_hash{DOUBLE_PRECISION}
         $confs{SIZEOF_FC_CHARACTER} = $sizeof_hash{CHARACTER}
-        autoconf_file("$dir/mpi_sizeofs.f90", \%confs)
-        autoconf_file("$dir/mpi_base.f90", \%confs)
         my $dir="src/binding/fortran/use_mpi_f08"
         $call write_f08_types, $dir/mpi_f08_types.f90
         $call write_f08_c_interface_types, $dir/mpi_c_interface_types.f90
@@ -73,6 +71,8 @@ subcode: config_mpich
         # fortran
         $temp{TRUE} = 1
         $temp{FALSE} = 0
+        $temp{F77_NAME_LOWER_USCORE} = 1
+        $temp{HAVE_AINT_DIFFERENT_THAN_FINT} = 1
 
         $if $opts{device}=~/ch4/
             $if $opts{"without-ch4-shmmods"}
@@ -82,6 +82,7 @@ subcode: config_mpich
             $temp{MPIDI_BUILD_CH4_LOCALITY_INFO}=1
             $temp{MPIDI_CH4U_USE_PER_COMM_QUEUE}=1
             $temp{MPIDI_CH4_MAX_VCIS}=1
+            $temp{MPIDI_CH4_RESERVED_VCIS}=0
             $temp{MPIDI_CH4_USE_MT_DIRECT}=1
             $temp{MPIDI_CH4_VCI_METHOD}='MPICH_VCI__ZERO'
             $temp{HAVE_CH4_SHM_EAGER_IQUEUE}=1
@@ -472,13 +473,20 @@ subcode: patch_mpicc_etc
     my %confs
     $confs{BASH_SHELL} = "/bin/bash"
     $confs{LDFLAGS} = $ENV{LDFLAGS}
+    $if $opts{"with-cuda"}
+        my $p = $opts{"with-cuda"}
+        $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
     $confs{LIBS} = $ENV{LIBS}
     $confs{MPILIBNAME} = "mpi"
     $confs{LPMPILIBNAME} = ""
     $confs{MPICH_VERSION} = $version
     $confs{CC} = $opts{CC}
+    $confs{CXX} = $opts{CXX}
+    $confs{FC} = $opts{FC}
+    $confs{FCINC} = "-I"
     $confs{with_wrapper_dl_type} = "runpath"
     $confs{INTERLIB_DEPS} = "yes"
+    $confs{MPIFCLIBNAME} = "mpifort"
 
     $(for:C,CPP,LD)
         $confs{WRAPPER_$1FLAGS}=""
@@ -534,6 +542,7 @@ subcode: patch_setbot_c
     $confs{CMB_1INT_ALIGNMENT}='__attribute__((aligned(16)))'
     $confs{CMB_STATUS_ALIGNMENT}='__attribute__((aligned(32)))'
     autoconf_file("src/binding/fortran/mpif_h/setbot.c", \%confs)
+    autoconf_file("src/binding/fortran/mpif_h/setbotf.f", \%confs)
 
 #---------------------------------------- 
 subcode: get_c_sizeof_mpich
@@ -610,6 +619,9 @@ fncode: get_sizeof_bsend_status($MPI_AINT)
 #---------------------------------------- 
 subcode: make_mpich
     $make_vars{DEFAULT_INCLUDES} = ("-I. -I./src/include")  # path to config.h
+    $if $opts{"with-cuda"}
+        my $p = $opts{"with-cuda"}
+        $make_vars{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
 
     $call set_mymake_DO
     $call add_rule_pm
