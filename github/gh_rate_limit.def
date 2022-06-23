@@ -1,13 +1,10 @@
+run: gh_repos
+
 page: gh_rate_limit
     module: perl
 
 
-    my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
-    my $curl = "curl -H \"Authorization: token $gh_token\""
-    my $url = "https://api.github.com/rate_limit"
-
-    my $t = `$curl --silent $url`
-    # $print $t
+    $call gh_api_get, rate_limit
 
     my ($limit, $remaining, $reset)
     #  "limit": 5000, "remaining": 4999, "reset": 1586209037
@@ -21,3 +18,21 @@ page: gh_rate_limit
     $print
     $print Github Rate Limit: $remaining / $limit, reset in $reset seconds 
 
+page: gh_repos
+    $call gh_api_get, users/hzhou/repos?per_page=100
+    # $print $t
+
+    my ($i, $last_line)
+    $while $t=~/^\s*"name": "(\w+)"/mg
+        $if $1 ne "Other"
+            $i++
+            $print $i:\t$1
+
+
+subcode: gh_api_get(cmd)
+    # my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
+    my $gh_token = "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"
+    my $curl = "curl -H \"Authorization: token $gh_token\""
+    my $url = "https://api.github.com/$(cmd)"
+
+    my $t = `$curl --silent $url`

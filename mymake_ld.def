@@ -1,0 +1,59 @@
+output_dir: ./mymake
+
+page: mymake_ld
+    my (@args, %info)
+    $call parse_args
+
+    $if $info{libname} !~ /libmpi/
+        my $cmd = "./libtool --mode=link --quiet"
+        $cmd .= " $info{CC}"
+        $if $info{libname}
+            $cmd .= " -o $info{libname}.la"
+        $if $info{rpath}
+            $cmd .= " -rpath $info{rpath}"
+        $if $info{so_version}
+            $cmd .= " -version-info $info{so_version}"
+        $cmd .= " " . join(' ', @args)
+        system $cmd
+    $else
+        my $cmd = "$info{CC}"
+        $if $info{libname}=~/(.*)\/(\w+)/
+            $cmd .= " -shared"
+            $cmd .= " -o $1/.libs/$2.so.$info{so_version}"
+        $foreach $a in @args
+            $if $a=~/(.*)\/(\S+)\.lo$/
+                $cmd .= " $1/.libs/$2.o"
+            $elif $a=~/(.*)\/(\S+)\.la$/
+                $cmd .= " $1/.libs/$2.a"
+            $else
+                $cmd .= " $a"
+        $if $info{libname}=~/(.*)\/(\w+)/
+            $cmd .= " -Wl,-soname -Wl,$2.so.$info{so_name}"
+        system $cmd
+
+subcode: parse_args
+    my $opt
+    $foreach $a in @ARGV
+        $if $opt
+            $opt .= " $a"
+        $else
+            $opt = $a
+
+        $if $opt=~/^-(o|rpath|version-info)$/
+            next
+        $elif $opt=~/^gcc/
+            $info{CC}=$opt
+        $elif $opt=~/^-o (.*)\.la$/
+            $info{libname} = $1
+        $elif $opt=~/^-rpath (.*)$/
+            $info{rpath} = $1
+        $elif $opt=~/^-version-info (\d+):(\d+):(\d+)$/
+            my $major = $1 - $3
+            my $minor = $3
+            my $revision = $2
+            $info{so_version} = "$major.$minor.$revision"
+            $info{so_name} = "$major"
+        $else
+            push @args, $opt
+
+        undef $opt

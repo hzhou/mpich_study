@@ -109,22 +109,29 @@ page: mymake_cvars
     my $pwd = getcwd()
 
     $if !-f "$pwd/maint/extractcvars.in"
-        die "File not found: $pwd/maint/extractcvars.in\n"
+        $if !-f "$pwd/maint/extractcvars"
+            die "File not found: $pwd/maint/extractcvars.in\n"
 
-    my $dirs
-    &call open_r, maint/cvardirs.in
-        chomp
-        s/\@abs_srcdir\@/$pwd\/maint/g
-        $dirs = $_
-        last
-
-    &call open_W, mymake/extractcvars.pl
-        &call open_r, maint/extractcvars.in
+    $if -f "$pwd/maint/extractcvars.in"
+        my $dirs
+        &call open_r, maint/cvardirs.in
+            chomp
             s/\@abs_srcdir\@/$pwd\/maint/g
-            $print $_-
+            $dirs = $_
+            last
 
-    $print "    extractcvars..."
-    system "perl mymake/extractcvars.pl --dirs=\"$dirs\""
+        &call open_W, mymake/extractcvars.pl
+            &call open_r, maint/extractcvars.in
+                s/\@abs_srcdir\@/$pwd\/maint/g
+                $print $_-
+
+        $print "    extractcvars..."
+        system "perl mymake/extractcvars.pl --dirs=\"$dirs\""
+    $else
+        system "perl maint/extractcvars"
+
+    $if !-f "src/include/mpir_cvars.h"
+        die "$0 failed!\n"
 
 include: macros_mymake/logstates.def
 page: mymake_logs

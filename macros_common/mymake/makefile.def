@@ -59,7 +59,8 @@ fncode: dump_makefile($makefile, $moddir)
         $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $if $lt
             $print "LTCC = $(LT:compile) \x24(COMPILE)"
-            $print "LTLD = $(LT:link) \x24(LINK)"
+            # $print "LTLD = $(LT:link) \x24(LINK)"
+            $print "LTLD = perl $opts{mymake}_ld.pl \x24(LINK)"
         $print
 
     subcode: dump_cxx
