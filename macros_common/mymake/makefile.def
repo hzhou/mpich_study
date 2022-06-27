@@ -59,8 +59,10 @@ fncode: dump_makefile($makefile, $moddir)
         $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $if $lt
             $print "LTCC = $(LT:compile) \x24(COMPILE)"
-            # $print "LTLD = $(LT:link) \x24(LINK)"
-            $print "LTLD = perl $opts{mymake}_ld.pl \x24(LINK)"
+            $if !$opts{quick}
+                $print "LTLD = $(LT:link) \x24(LINK)"
+            $else
+                $print "LTLD = perl $opts{mymake}_ld.pl \x24(LINK)"
         $print
 
     subcode: dump_cxx
@@ -178,10 +180,16 @@ fncode: dump_makefile($makefile, $moddir)
                 $if !$dirs{$v}
                     $dirs{$v} = 1
                 $if $v=~/\/lib$/
-                    push @install_list, "$(LT:install) install $k $v"
+                    $if !$opts{quick}
+                        push @install_list, "$(LT:install) install $k $v"
+                    $else
+                        push @install_list, "perl $opts{mymake}_install.pl $k $v"
                     push @install_deps, $k
                 $elif $v=~/\/bin$/
-                    push @install_list, "$(LT:install) install $k $v"
+                    $if !$opts{quick}
+                        push @install_list, "$(LT:install) install $k $v"
+                    $else
+                        push @install_list, "perl $opts{mymake}_install.pl $k $v"
                     push @install_deps, $k
                 $elif $v=~/\/include$/
                     push @install_list, "cp $k $v"
@@ -205,6 +213,9 @@ fncode: dump_makefile($makefile, $moddir)
         $call @dump_make_var_custom
         $(if:key=CPPFLAGS)
             $t .= $I_list
+        $(if:key=LDFLAGS)
+            $if $opts{"with-cuda"}
+                $t .= " -L".$opts{"with-cuda"}."/lib64"
         $print "$(key) = $t"
 
     subcode: dump_object(key, tlist)
