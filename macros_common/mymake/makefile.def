@@ -62,7 +62,7 @@ fncode: dump_makefile($makefile, $moddir)
             $if !$opts{quick}
                 $print "LTLD = $(LT:link) \x24(LINK)"
             $else
-                $print "LTLD = perl $opts{mymake}_ld.pl \x24(LINK)"
+                $print "LTLD = perl $opts{mymake}_ld.pl \"lt=$lt\" \x24(LINK)"
         $print
 
     subcode: dump_cxx
@@ -128,6 +128,10 @@ fncode: dump_makefile($makefile, $moddir)
             $print "%.lo: %.c"
             $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
             $print
+            $if $opts{"with-cuda"}
+                $print "%.lo: %.cu"
+                $call quiet_rule, NVCC, confdb/cudalt.sh \$\@ nvcc -c \$<
+                $print
             $if !$opts{disable_cxx}
                 $print "%.lo: %.cxx"
                 $call quiet_rule, LTCXX, \x24(LTCXX) -c -o \$\@ \$<

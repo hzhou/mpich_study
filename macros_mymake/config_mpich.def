@@ -220,7 +220,7 @@ subcode: config_mpich
             $(for:SCHED,THREAD,SELF)
                 $make_conds{BUILD_MPID_COMMON_$1} = 1
             $if $opts{device}=~/ch4/
-                $(for:SHM,BC,GENQ)
+                $(for:SHM,BC,GENQ,STREAM_WORKQ)
                     $make_conds{BUILD_MPID_COMMON_$1} = 1
             $elif $opts{device}=~/ch3:sock/
                 # NOOP
