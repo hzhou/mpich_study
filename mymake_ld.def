@@ -38,6 +38,7 @@ page: mymake_ld
                 $cmd .= " -Wl,--whole-archive"
                 $cmd .= " $1/.libs/$2.a"
                 $cmd .= " -Wl,--no-whole-archive"
+                $call load_la_dependency_libs
             $else
                 $cmd .= " $a"
 
@@ -63,6 +64,10 @@ page: mymake_ld
         subcode: dump_links
             system "ln -sf $name1 $libdir/.libs/$name2"
             system "ln -sf $name1 $libdir/.libs/$name3"
+        subcode: load_la_dependency_libs
+            &call open_r, $a
+                $if /^dependency_libs='(.*)'/
+                    $cmd .= $1
 
     subcode: parse_args
         my $opt

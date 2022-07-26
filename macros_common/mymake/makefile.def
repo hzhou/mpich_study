@@ -130,7 +130,7 @@ fncode: dump_makefile($makefile, $moddir)
             $print
             $if $opts{"with-cuda"}
                 $print "%.lo: %.cu"
-                $call quiet_rule, NVCC, confdb/cudalt.sh \$\@ nvcc -c \$<
+                $call quiet_rule, NVCC, confdb/cudalt.sh \$\@ nvcc -c \x24(AM_CPPFLAGS) \$<
                 $print
             $if !$opts{disable_cxx}
                 $print "%.lo: %.cxx"

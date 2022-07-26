@@ -120,16 +120,15 @@ subcode: mpich_make_setup
         $call need_izem
 
     $if -f "src/pmi/configure.ac"
-        $if $opts{"with-pmi"} !~ /slurm|cray/ and $opts{"with-pmilib"} !~/slurm|cray/
-            $call need_pmi
+        $call need_pmi
 
     $if !$opts{disable_romio}
         $call need_romio
-    $if $opts{device}=~/:ucx/ and (!$opts{"with-ucx"} or $opts{"with-ucx"} eq "embedded")
+    $if $opts{device}=~/:ucx/
         $call need_ucx
-    $elif $opts{device}=~/ch4:ofi/ and (!$opts{"with-libfabric"} or $opts{"with-libfabric"} eq "embedded")
+    $elif $opts{device}=~/ch4:ofi/
         $call need_ofi
-    $elif $opts{device}=~/ch3.*:ofi/ and (!$opts{"with-ofi"} or $opts{"with-ofi"} eq "embedded")
+    $elif $opts{device}=~/ch3.*:ofi/
         $call need_ofi
 
     $call add_rule_cpi

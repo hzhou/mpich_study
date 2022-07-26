@@ -87,11 +87,12 @@ subcode: need_mpl(@hydra)
 
 #---------------------------------------- 
 subcode: need_pmi
-    system "rsync -r confdb/ $(Dpmi)/confdb/" 
-    system "cp maint/version.m4 $(Dpmi)/"
-    $call add_subdir_inc_lib, pmi
-    $call set_configure
-    $call add_subdir_make, pmi
+    $if $opts{"with-pmi"} !~ /slurm|cray/ and $opts{"with-pmilib"} !~/slurm|cray/
+        system "rsync -r confdb/ $(Dpmi)/confdb/" 
+        system "cp maint/version.m4 $(Dpmi)/"
+        $call add_subdir_inc_lib, pmi
+        $call set_configure
+        $call add_subdir_make, pmi
 
     subcode: set_configure
         my @t_env 
@@ -166,15 +167,23 @@ subcode: need_jsonc
 
 #---------------------------------------- 
 subcode: need_ucx
-    my $ucxdir="$opts{moddir}/ucx"
-    $if -e "$ucxdir/need_sed"
-        $call patch_ucx_need_sed
+    $if !$opts{"with-ucx"} or $opts{"with-ucx"} eq "embedded")
+        my $ucxdir="$opts{moddir}/ucx"
+        $if -e "$ucxdir/need_sed"
+            $call patch_ucx_need_sed
 
-    # system "mkdir -p $opts{moddir}/$(Ducx)/config/{m4,aux}"
-    $if !$opts{quick}
-        # $call patch_configure_ucx
+        # system "mkdir -p $opts{moddir}/$(Ducx)/config/{m4,aux}"
+        $if !$opts{quick}
+            # $call patch_configure_ucx
 
-    $call @need_ucx_embedded
+        $call @need_ucx_embedded
+    $else
+        my $L=$opts{"with-ucx"}
+        $I_list .= " -I$L/include"
+        $if -e "$L/lib64/libucp.so"
+            $L_list .= " -L$L/lib64 -lucp -luct -lucm -lucs"
+        $else
+            $print "libfabric.so NOT FOUND in $L"
 
     subcode: need_ucx_embedded
         $call patch_ucx_for_pgi
@@ -222,7 +231,15 @@ subcode: need_ucx
 
 #---------------------------------------- 
 subcode: need_ofi
-    $call @need_ofi_embedded
+    $if !$opts{"with-libfabric"} || $opts{"with-libfabric"} eq "embedded"
+        $call @need_ofi_embedded
+    $else
+        my $L=$opts{"with-libfabric"}
+        $I_list .= " -I$L/include"
+        $if -e "$L/lib64/libfabric.so"
+            $L_list .= " -L$L/lib64 -lfabric"
+        $else
+            $print "libfabric.so NOT FOUND in $L"
 
     subcode: need_ofi_embedded
         $call add_subdir_inc_lib, ofi

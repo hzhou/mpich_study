@@ -3,6 +3,7 @@ subcode: config_init_mpl
     $config_in = "$mymake_dir/config_templates/mplconfig.h"
     $config_out = "src/mpl/include/mplconfig.h"
     symlink "../../libtool", "src/mpl/libtool"
+    symlink "../../confdb", "src/mpl/confdb"
 
 subcode: config_mpl
     $call ac_init, MPL, 0.1, -, mpl, -
