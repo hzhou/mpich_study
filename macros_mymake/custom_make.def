@@ -48,6 +48,7 @@ subcode: custom_make(what)
         $(for:which in ltlibs, programs)
             $foreach $p in @$(which)
                 my $a = $p
+                $a=~s/\.exe$//
                 $a=~s/[\.\/]/_/g
                 $(if:which=programs)
                     my $add = $a."_LDADD"
@@ -178,6 +179,7 @@ fncode: get_make_var($name)
 
 fncode: get_make_objects($p)
     my $a = $p
+    $a=~s/\.exe$//
     $a=~s/[\.\/]/_/g
 
     my $tlist = get_list("${a}_OBJECTS")

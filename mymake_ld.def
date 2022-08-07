@@ -34,6 +34,8 @@ page: mymake_ld
         $foreach $a in @args
             $if $a=~/(.*)\/(\S+)\.lo$/
                 $cmd .= " $1/.libs/$2.o"
+            $elif $a=~/libucp.la/
+                $cmd .= " -lucp"
             $elif $a=~/(.*)\/(\S+)\.la$/
                 $cmd .= " -Wl,--whole-archive"
                 $cmd .= " $1/.libs/$2.a"

@@ -98,8 +98,6 @@ subcode: mpich_slow
             $call add_rule_remshell
         $else
             $call add_rule_hydra, hydra
-            $if $opts{pm} eq "hydra2"
-                $call add_rule_hydra, hydra2
 
 #---------------------------------------- 
 subcode: set_make_rules_DO
