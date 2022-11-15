@@ -6,25 +6,26 @@ page: mymake_ld
     my $lt = "./libtool"
     $call parse_args
 
-    $if $info{libname} !~ /libmpi/
-        my $cmd = "$lt --mode=link --quiet"
+    $if $info{output} =~ /libmpi/
+        $call ld_libmpi
+    $else
+        my $cmd = "$lt --mode=link --quiet --tag=CC"
         $cmd .= " $info{CC}"
-        $if $info{libname}
-            $cmd .= " -o $info{libname}.la"
+        $if $info{output}
+            $cmd .= " -o $info{output}"
         $if $info{rpath}
             $cmd .= " -rpath $info{rpath}"
         $if $info{so_version}
             $cmd .= " -version-info $info{so_version}"
         $cmd .= " " . join(' ', @args)
+        $print $cmd
         system $cmd
-    $else
-        $call ld_libmpi
 
     subcode: ld_libmpi
         $call load_opts
         my $cmd = "$info{CC}"
         my ($libdir, $name1, $name2, $name3)
-        $if $info{libname}=~/(.*)\/(\w+)/
+        $if $info{output}=~/(.*)\/(\w+)/
             $libdir = $1
             $name1 = "$2.so.$info{so_version}"
             $name2 = "$2.so.$info{so_name}"
@@ -57,7 +58,7 @@ page: mymake_ld
         system $cmd
         $call dump_links
 
-        &call open_W, $info{libname}.la
+        &call open_W, $info{output}
             $call dump_la
 
         subcode: make_libdir
@@ -83,10 +84,10 @@ page: mymake_ld
                 $lt = $1
             $elif $opt=~/^-(o|rpath|version-info)$/
                 next
-            $elif $opt=~/^(gcc|mpicc)/
+            $elif $opt=~/^(gcc|mpicc|clang)/
                 $info{CC}=$opt
-            $elif $opt=~/^-o (.*)\.la$/
-                $info{libname} = $1
+            $elif $opt=~/^-o (.*)$/
+                $info{output} = $1
             $elif $opt=~/^-rpath (.*)$/
                 $info{rpath} = $1
             $elif $opt=~/^-version-info (\d+):(\d+):(\d+)$/

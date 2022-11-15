@@ -17,7 +17,8 @@ subcode: prepare_hydra
     $dst_hash{"LN_S-$bin/mpirun"}="$bin/mpiexec.hydra"
 
     $call need_mpl, hydra
-    $call need_pmi, hydra
+    $if -f "$srcdir/src/pmi/configure.ac"
+        $call need_pmi, hydra
     $call need_hwloc
     $call @check_argobots
     $call custom_make, hydra

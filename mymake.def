@@ -30,6 +30,10 @@ page: mymake
         $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
     $if -f "maint/gen_coll.py"
         $call autogen, src/mpi/coll/mpir_coll.c, $python maint/gen_coll.py
+    $if -f "src/pmi/maint/gen_pmi_msg.py"
+        chdir "src/pmi"
+        $call autogen, src/pmi_msg.h, $python maint/gen_pmi_msg.py
+        chdir "../.."
     $if !$opts{disable_cxx}
         $call autogen_cxx
     $if !$opts{disable_fortran}
@@ -183,6 +187,7 @@ page: mymake_clean
     push @realclean_list, "src/pm/hydra/Makefile"
     $if -f "src/pmi/configure.ac"
         push @realclean_list, "src/pmi/include/pmi_config.h"
+    push @realclean_list, "src/pmi/src/pmi_msg.*"
 
     push @realclean_list, "configure"
     push @realclean_list, "mymake/t-*"

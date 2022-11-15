@@ -28,12 +28,18 @@ subcode: init_config_defines
         "runtime" => "RUNTIME",
 
     &call init_opt_vals, enable-ch4-vci-method, MPIDI_CH4_VCI_METHOD
-        "default" => "MPICH_VCI__ZERO",
+        "default" => "MPICH_VCI__COMM",
         "zero" =>    "MPICH_VCI__ZERO",
         "communicator" => "MPICH_VCI__COMM",
         "tag" => "MPICH_VCI__TAG",
         "implicit" => "MPICH_VCI__IMPLICIT",
         "explicit" => "MPICH_VCI__EXPLICIT",
+
+    &call init_opt_vals, with-pmi, USE_{PMI1_API,PMI2_API,PMIX_API}
+        "default" => "PMI1_API",
+        "pmi1"    => "PMI1_API",
+        "pmi2"    => "PMI2_API",
+        "pmix"    => "PMIX_API",
 
     subcode: init_opt(opt, name)
         $hash_defines{"$(opt)"} = "$(name)"
@@ -133,9 +139,9 @@ subcode: filter_config_defines
             $config_defines{HAVE_MM256_STREAM_SI256} = 1
     # ------------------------------------------------------------
     $elif $a=~/--enable-strict/
-        $(set:F=-Wall, -Wextra, -Wmissing-prototypes, -DGCC_WALL, -Wshadow, -Wmissing-declarations, -Wundef, -Wpointer-arith, -Wbad-function-cast, -Wwrite-strings, -Wnested-externs, -Winvalid-pch, -Wvariadic-macros, -Wtype-limits, -Werror-implicit-function-declaration, -Wstack-usage=262144)
+        $(set:F=-Wall, -Wextra, -Wstrict-prototypes, -Wmissing-prototypes, -DGCC_WALL, -Wno-unused-parameter, -Wshadow, -Wmissing-declarations, -Wundef, -Wpointer-arith, -Wbad-function-cast, -Wwrite-strings, -Wno-sign-compare, -Wnested-externs, -Winvalid-pch, -Wvariadic-macros, -Wtype-limits, -Werror-implicit-function-declaration, -Wstack-usage=262144, -fno-var-tracking)
         # $(set:F.=, -Wstrict-prototypes, -Wold-style-definition)
-        $(set:F.=, -Wno-missing-field-initializers, -Wno-unused-parameter, -Wno-long-long, -Wno-endif-labels, -Wno-sign-compare, -Wno-multichar, -Wno-deprecated-declarations, -Wno-pointer-sign)
+        # $(set:F.=, -Wno-missing-field-initializers, -Wno-unused-parameter, -Wno-long-long, -Wno-endif-labels, -Wno-sign-compare, -Wno-multichar, -Wno-deprecated-declarations, -Wno-pointer-sign)
         $(for:$(F))
             $config_cflags{"$1"} = 1
 

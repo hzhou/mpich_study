@@ -20,10 +20,11 @@ subcode: mpich_slow
         $call patch_mpicc_etc
 
         $ENV{CFLAGS}=$opts{CFLAGS}
-        my $t="$(Hmpl)"
-        $t=~s/$pwd\///g
+        $(for:Hmpl, Hpmi)
+            my $t="$($1)"
+            $t=~s/$pwd\///g
 
-        $ret = system "make $t"
+            $ret = system "make $t"
 
     $if $ret == 0
         # post filtering config_defines

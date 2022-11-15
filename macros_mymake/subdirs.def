@@ -105,7 +105,7 @@ subcode: need_pmi(@hydra)
         push @t_env, "FROM_MPICH=yes"
         push @t_env, "main_top_srcdir=$pwd"
         push @t_env, "main_top_builddir=$pwd"
-        push @t_env, "CFLAGS='-I$pwd/$(Impl)'"
+        push @t_env, "CPPFLAGS='-I$pwd/$(Impl)'"
         $if $opts{argobots}
             $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
         $if !$opts{disable_romio}
@@ -316,6 +316,11 @@ subcode: add_subdir_make(name)
         my $subdir="$(D$(name))"
         my $lib_la = "$(L$(name))"
         my $config_h = "$(H$(name))"
+    my $lib_dep = $config_h
+    $(if:name=pmi)
+        $if !$opts{disable_romio}
+            $lib_dep .= " $(Hromio)"
+
     $(if:quick)
         $(if:name=mpl or name=pmi or name=opa)
             push @extra_make_rules, "$config_h:"
@@ -325,7 +330,7 @@ subcode: add_subdir_make(name)
             &call add_subdir_rule_block, $subdir, $lib_la, $config_h
                 push @t, "\x24(MAKE)"
         $(elif:name=opa)
-            &call add_subdir_rule_block, $subdir/src, $lib_la, $config_h
+            &call add_subdir_rule_block, $subdir/src, $lib_la, $lib_dep
                 push @t, "\x24(MAKE)"
     $(else)
         &call add_subdir_rule_block, $subdir, $config_h
@@ -336,6 +341,7 @@ subcode: add_subdir_make(name)
                 push @t, "autoreconf -ivf"
             push @t, "$configure"
             push @t, "cp $pwd/libtool ."
-        &call add_subdir_rule_block, $subdir, $lib_la, $config_h
+        my $dep = "$config_h"
+        &call add_subdir_rule_block, $subdir, $lib_la, $lib_dep
             push @t, "\x24(MAKE)"
 

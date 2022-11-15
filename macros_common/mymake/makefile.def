@@ -58,9 +58,9 @@ fncode: dump_makefile($makefile, $moddir)
         $print "COMPILE = $cc \x24(DEFS) \x24(DEFAULT_INCLUDES) \x24(INCLUDES) \x24(AM_CPPFLAGS) \x24(CPPFLAGS) \x24(AM_CFLAGS) \x24(CFLAGS)"
         $print "LINK = $ccld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
         $if $lt
-            $print "LTCC = $(LT:compile) \x24(COMPILE)"
-            $if !$opts{quick} or $opts{"no-mymake-ld"}
-                $print "LTLD = $(LT:link) \x24(LINK)"
+            $print "LTCC = $(LT:compile) --tag=CC \x24(COMPILE)"
+            $if !$opts{quick} or !$ENV{"USE_MYMAKE_LD"} or $ENV{CC}
+                $print "LTLD = $(LT:link) --tag=CC \x24(LINK)"
             $else
                 $print "LTLD = perl $opts{mymake}_ld.pl \"lt=$lt\" \x24(LINK)"
         $print

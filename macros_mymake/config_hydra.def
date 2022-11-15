@@ -63,7 +63,8 @@ subcode: config_hydra
 
 subcode: make_hydra
     $call need_mpl, hydra
-    $call need_pmi, hydra
+    $if -f "src/pmi/configure.ac"
+        $call need_pmi, hydra
     $call need_hwloc
     my %conds
     $conds{HYDRA_HAVE_HWLOC}=1
