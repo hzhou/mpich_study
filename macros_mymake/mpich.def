@@ -140,12 +140,21 @@ subcode: mpich_make_setup
 
     $if $opts{do_pmpi}
         $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
+    $if $opts{"enable-mpi-abi"}
+        my $CC = "\x24(LTCC) -DBUILD_MPI_ABI -Isrc/binding/abi"
+        $if !$opts{do_pmpi}
+            $special_targets{lib_libmpi_abi_la}=$CC
+        $else
+            $special_targets{lib_libpmpi_abi_la}=$CC
+            $special_targets{lib_libmpi_abi_la}="$CC -DMPICH_MPI_FROM_PMPI"
 
     # install mpicc etc.
     my $bin="\x24(PREFIX)/bin"
     $dst_hash{"mymake/mpicc"}=$bin
     $dst_hash{"mymake/mpifort"}=$bin
     $dst_hash{"mymake/mpicxx"}=$bin
+    $if $opts{"enable-mpi-abi"}
+        $dst_hash{"mymake/mpicc_abi"} = $bin
 
 
     subcode: need_mpich_preproc

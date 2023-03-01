@@ -74,7 +74,8 @@ subcode: make_test
     my @all_am = glob("test/mpi/*/Makefile.am")
     push @all_am, glob("test/mpi/threads/*/Makefile.am")
     push @all_am, glob("test/mpi/errors/*/Makefile.am")
-    push @all_am, glob("test/mpi/impls/mpich/comm/Makefile.am")
+    push @all_am, glob("test/mpi/impls/mpich/*/Makefile.am")
+    push @all_am, glob("test/mpi/impls/mpich/*/*/Makefile.am")
     $if !$opts{disable_fortran}
         $conds{HAS_F77} = 1
         push @all_am, glob("test/mpi/f77/*/Makefile.am")

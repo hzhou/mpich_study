@@ -71,6 +71,9 @@ subcode: custom_make(what)
             $(if:makefile=mpich and which=ltlibs)
                 $if ($add=~/libmpi_la_/ && $opts{have_weak}) or ($add=~/libpmpi_la_/)
                     $t.= $L_list
+                $elif ($add=~/libmpi_abi_la_/ && $opts{have_weak}) or ($add=~/libpmpi_abi_la_/)
+                    $t.= $L_list
+                    $t =~s/libromio.la/libromio_abi.la/
             $(elif:makefile=hydra and which=ltlibs)
                 $if $add=~/libhydra.*_la/
                     $t.= $L_list

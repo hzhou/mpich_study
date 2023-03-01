@@ -117,6 +117,7 @@ subcode: need_pmi(@hydra)
 subcode: need_romio
     system "rsync -r confdb/ $(Dromio)/confdb/" 
     system "cp maint/version.m4 $(Dromio)/"
+    system "ln -sf ../mpi/romio/include/mpio.h src/include/mpio.h"
     # # mpl
     # &call modify, configure.ac
     $call add_subdir_inc_lib, romio
@@ -135,6 +136,8 @@ subcode: need_romio
         $if $opts{argobots}
             $t_env[-1] =~s/'$/ -I$opts{argobots}\/include'/
         my $configure = "@t_env ./configure"
+        $if $opts{"enable-mpi-abi"}
+            $configure .= " --enable-mpi-abi"
 
 # NOTE: romio is in its original path
 subcode: filter_lib_romio
@@ -344,4 +347,8 @@ subcode: add_subdir_make(name)
         my $dep = "$config_h"
         &call add_subdir_rule_block, $subdir, $lib_la, $lib_dep
             push @t, "\x24(MAKE)"
+        $(if:name=romio)
+            $if $opts{"enable-mpi-abi"}
+                &call add_subdir_rule_block, $subdir, src/mpi/romio/libromio_abi.la, $lib_dep
+                    push @t, "\x24(MAKE) libromio_abi.la"
 

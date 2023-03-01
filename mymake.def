@@ -26,6 +26,8 @@ page: mymake
     my $python = find_python3()
     $if -f "maint/gen_binding_c.py"
         $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
+    $if -f "src/binding/abi/gen_abi.py"
+        $call run_script, cd src/binding/abi && $python gen_abi.py
     $if -f "maint/gen_ch4_api.py"
         $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
     $if -f "maint/gen_coll.py"
@@ -55,10 +57,13 @@ page: mymake
     $else
         $call mpich_slow
 
+    subcode: run_script(script)
+        $print "[$(script)]"
+        system("$(script)")== 0 or die "Failed $(script)\n"
+
     subcode: autogen(check_file, script)
         $if !-f "$(check_file)"
-            $print "[$(script)]"
-            system "$(script)"
+            $call run_script, $(script)
 
     subcode: setup_mymake
         $if !-d "mymake"
