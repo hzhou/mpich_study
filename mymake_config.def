@@ -255,7 +255,6 @@ subcode: get_c_sizeof
     $global %sizeof_hash
     my @header_list=("stdio.h")
     my @type_list=("void *", "char", "short", "int", "long", "long long", "size_t", "off_t", "float", "double", "long double")
-    push @type_list, "__float128"
     $if $config eq "mpich"
         $call additional_types
     get_sizeof(\@type_list, \@header_list)

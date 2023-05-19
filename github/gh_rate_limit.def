@@ -1,3 +1,4 @@
+include: gh_api.def
 run: gh_repos
 
 page: gh_rate_limit
@@ -29,10 +30,3 @@ page: gh_repos
             $print $i:\t$1
 
 
-subcode: gh_api_get(cmd)
-    # my $gh_token= "c8b0114b02e8c313e17e6c9317077839394cd1c9"
-    my $gh_token = "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"
-    my $curl = "curl -H \"Authorization: token $gh_token\""
-    my $url = "https://api.github.com/$(cmd)"
-
-    my $t = `$curl --silent $url`
