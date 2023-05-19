@@ -259,7 +259,9 @@ subcode: get_c_sizeof
         $call additional_types
     get_sizeof(\@type_list, \@header_list)
 
-    $call @get_c_sizeof_mpich
+    $if $config eq "mpich"
+        $call get_c_sizeof_mpich
+
     # -- mpich ---------------------
     subcode: additional_types
         $(for:short, int, long, float, double, long double)
@@ -361,8 +363,11 @@ subcode: get_c_features
     # (more) system-specific
     $if $opts{uname}=~/Linux/i
         $config_defines{USE_SYM_HEAP} = 1
-    $if $opts{uname}=~/Linux/i
         $config_defines{STRERROR_R_CHAR_P} = 1
+    $if $opts{uname}=~/Darwin/i
+        $(for:a in WEAK_ATTRIBUTE,PRAGMA_WEAK,MULTIPLE_PRAGMA_WEAK)
+            $config_defines{HAVE_$(a)} = undef
+        $config_defines{USE_WEAK_SYMBOLS} = undef
 
 #---------------------------------------- 
 fncode: get_config_name($type)
