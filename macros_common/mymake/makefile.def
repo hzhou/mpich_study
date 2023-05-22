@@ -373,18 +373,22 @@ subcode:: dump_make_var_custom
             $I_list .= " -I$p/include"
 
 fncode: get_make_var_unique($name)
-    my (@t, %cache)
-    $foreach $k in split /\s+/, get_make_var($name)
-        $if !$cache{$k}
-            $cache{$k} = 1
-            push @t, $k
-    return join(' ', @t)
+    my $tlist = get_make_var_list($name)
+    return join(' ', @$tlist)
 
 fncode: get_make_var_list($name)
     my (@tlist, %cache)
+    my $longopt
     $foreach $k in split /\s+/, get_make_var($name)
         $if !$k
             next
+        $if $k =~ /^-framework$/
+            $longopt = $k
+            next
+        $if $longopt
+            $k = "$longopt $k"
+            undef $longopt
+
         $if !$cache{$k}
             $cache{$k} = 1
             push @tlist, $k

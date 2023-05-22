@@ -126,11 +126,13 @@ page: mymake_makefile
 #---------------------------------------- 
 subcode: dump_make_opts
     &call open_W, mymake/make_opts.mpich
-        $(for:a in CC,CXX,F77,FC,cc_version)
+        $(for:a in CC,CXX,F77,FC,cc_version,cc_weak)
             $print $(a): $opts{$(a)}
         my $cflags = "-g -O2"
         my $ldflags = ""
         $(for:a in cflags, ldflags)
+            $if $opts{$(a)}
+                $$(a) = $opts{$(a)}
             $call modify_$(a), $$(a)
             $print $(a): $$(a)
 
@@ -222,7 +224,7 @@ subcode: dump_config_h
 
 #---------------------------------------- 
 subcode: set_cc
-    $(for:CC,CXX,F77,FC and gcc,gcc,gfortran,gfortran)
+    $(for:CC,CXX,F77,FC and gcc,g++,gfortran,gfortran)
         $if $ENV{$1}
             $opts{$1} = $ENV{$1}
         $else
@@ -368,6 +370,8 @@ subcode: get_c_features
         $(for:a in WEAK_ATTRIBUTE,PRAGMA_WEAK,MULTIPLE_PRAGMA_WEAK)
             $config_defines{HAVE_$(a)} = undef
         $config_defines{USE_WEAK_SYMBOLS} = undef
+        $opts{cc_weak} = "no"
+        $opts{cflags} = "-O2 -fno-common -g"
 
 #---------------------------------------- 
 fncode: get_config_name($type)

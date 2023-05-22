@@ -167,7 +167,11 @@ subcode: config_mpich
                 $print $k: $make_conds{$k}
 
         subcode: set_conds_off
-            $make_conds{BUILD_PROFILING_LIB} = 0
+            # cc_weak ref. mymake_config.def
+            $if $opts{cc_weak} eq "no"
+                $make_conds{BUILD_PROFILING_LIB} = 1
+            $else
+                $make_conds{BUILD_PROFILING_LIB} = 0
             $make_conds{BUILD_COVERAGE} = 0
             $make_conds{MAINTAINER_MODE} = 0
             $make_conds{BUILD_BASH_SCRIPTS} = 0
@@ -484,6 +488,7 @@ subcode: patch_mpicc_etc
         $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
     $confs{LIBS} = $ENV{LIBS}
     $confs{MPILIBNAME} = "mpi"
+    $confs{PMPILIBNAME} = "pmpi"
     $confs{MPIABILIBNAME} = "mpi_abi"
     $confs{LPMPILIBNAME} = ""
     $confs{MPICH_VERSION} = $version
@@ -636,11 +641,13 @@ subcode: make_mpich
     $call mpich_make_setup
 
     $autoconf_vars{MPILIBNAME} = "mpi"
+    $autoconf_vars{PMPILIBNAME} = "pmpi"
     $autoconf_vars{MPIABILIBNAME} = "mpi_abi"
     $autoconf_vars{MPIFCLIBNAME} = "mpifort"
     $autoconf_vars{MPICXXLIBNAME} = "mpicxx"
 
-    $autoconf_vars{VISIBILITY_CFLAGS} = "-fvisibility=hidden"
+    $if $opts{cc_weak} ne "no"
+        $autoconf_vars{VISIBILITY_CFLAGS} = "-fvisibility=hidden"
 
     $if !$opts{"disable-ch4-netmod-inline"}
         $if $opts{device} =~/ch4:ofi/

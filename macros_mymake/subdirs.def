@@ -155,6 +155,8 @@ subcode: need_hwloc
     $call add_subdir_inc_lib, hwloc
     $call set_configure
     $call add_subdir_make, hwloc
+    $if $opts{uname}=~/Darwin/
+        add_make_vars("LDFLAGS", "-framework Foundation -framework IOKit")
 
     subcode: set_configure
         my $configure = "./configure --enable-embedded-mode --enable-visibility"

@@ -1,3 +1,10 @@
+fncode: add_make_vars($key, $val)
+    $global %make_vars
+    $if !$make_vars{$key}
+        $make_vars{$key} = $val
+    $else
+        $make_vars{$key} .= " $val"
+
 # ---- automake ----
 fncode: load_automake($file, $cond_hash)
     $global %make_vars, %autoconf_vars
@@ -36,9 +43,9 @@ fncode: load_automake($file, $cond_hash)
                 load_automake($1, $cond_hash)
             $elif /^(\w+)_LTLIBRARIES\s*\+?=\s*(.*)/ -> $dir, $t
                 $foreach $a in split /\s+/, $t
-                    push @ltlibs, $t
+                    push @ltlibs, $a
                     $if $dir ne "noinst"
-                        $dst_hash{$t} = "\x24(PREFIX)/$dir"
+                        $dst_hash{$a} = "\x24(PREFIX)/$dir"
             $elif /^(\w+)_PROGRAMS\s*\+?=\s*(.*)/ -> $dir, $t
                 $foreach $a in split /\s+/, $t
                     push @programs, $a
@@ -95,7 +102,7 @@ fncode: get_make_objects($p, $is_program)
         $t = "$p.c"
     my @tlist
     $foreach $a in  split /\s+/, $t
-        $if $a=~/(.*)\.(c|f|f90|cu)$/
+        $if $a=~/(.*)\.(c|f|f90|cu|cxx)$/
             $if $is_program
                 push @tlist, "$1.o"
             $else
