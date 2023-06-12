@@ -1,5 +1,8 @@
+include: gh_api.def
+
 page: get_mpich_pr
     module: perl
+    arg: 6454
 
     $global $group = "pmodels"
     $global $repo = "mpich"
@@ -15,11 +18,12 @@ page: get_mpich_pr
         die "Usage: $0 [PR #]"
 
     my ($author, $branch)
-    &call open_r, "curl -s https://api.github.com/repos/$group/$repo/pulls/$pr |"
-        $if /^\s*"label":\s*"(\w+):(\S+)",/
+    $call gh_api_get, repos/$group/$repo/pulls/$pr
+    $if $t=~/^\s*"label":\s*"(\w+):(\S+)",/m
             $if $1 ne $group
                 ($author, $branch) = ($1, $2)
     $if !$author
+        $print [$t]
         die "Failed to get remote PR branch\n"
 
     my $github_url = "https://github.com/$group/$repo"
@@ -32,12 +36,10 @@ page: get_mpich_pr
         $elif -d $(B)
             $github_url = $(B)
 
-    my $dir = "$repo$pr"
+    my $dir = "$repo-$pr"
     system "git clone $github_url -b $main $dir"
     chdir "$dir"
 
     system "git remote add gh-$author https://github.com/$author/$repo"
     system "git fetch gh-$author"
     system "git checkout -b $branch gh-$author/$branch"
-
-

@@ -323,6 +323,7 @@ subcode: add_subdir_make(name)
     $(if:name=pmi)
         $if !$opts{disable_romio}
             $lib_dep .= " $(Hromio)"
+        $lib_dep .= " $(Hmpl)"
 
     $(if:quick)
         $(if:name=mpl or name=pmi or name=opa)

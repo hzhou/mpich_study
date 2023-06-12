@@ -187,6 +187,7 @@ subcode: mpich_make_setup
 #---------------------------------------- 
 subcode: mpich_configure
     $call @hack_MPI_OFFSET
+    $ENV{COMPILER_TLS} = 1
     $if !-f "subsys_include.m4"
         $call stage, maint/gen_subcfg_m4
         system "perl maint/gen_subcfg_m4"
@@ -200,9 +201,6 @@ subcode: mpich_configure
         $call stage, Configure MPICH
         system "rm -f Makefile"
         my $t = join ' ', @config_args
-        $(if:0)
-            $if $opts{device}=~/ofi/ and $t!~/with-libfabric/
-                $t.= " --with-libfabric=embedded"
         $if !$ret
             $ret = system "./configure --with-pm=no $t" # we'll configure/build hydra separately
         $if !$ret

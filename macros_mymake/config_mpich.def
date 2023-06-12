@@ -63,7 +63,7 @@ subcode: config_mpich
         $if $opts{"disable-error-checking"}
             NOOP
         $else
-            $temp{HAVE_ERROR_CHECKING}='MPID_ERROR_LEVEL_ALL'
+            $temp{HAVE_ERROR_CHECKING}='MPID_ERROR_LEVEL_RUNTIME'
         $temp{MPICH_ERROR_MSG_LEVEL} = 'MPICH_ERROR_MSG__ALL'
         $temp{MPICH_IS_THREADED} = 1
         $temp{MPICH_THREAD_LEVEL} = 'MPI_THREAD_MULTIPLE'
@@ -83,8 +83,8 @@ subcode: config_mpich
                 $temp{MPIDI_ENABLE_AM_ONLY} = 1
             $temp{MPIDI_BUILD_CH4_LOCALITY_INFO}=1
             $temp{MPIDI_CH4U_USE_PER_COMM_QUEUE}=1
-            $temp{MPIDI_CH4_MAX_VCIS}=1
-            $temp{MPIDI_CH4_RESERVED_VCIS}=0
+            $temp{MPIDI_CH4_MAX_VCIS}=64
+            # $temp{MPIDI_CH4_RESERVED_VCIS}=0
             $temp{MPIDI_CH4_USE_MT_DIRECT}=1
             $temp{MPIDI_CH4_VCI_METHOD}='MPICH_VCI__COMM'
             $temp{HAVE_CH4_SHM_EAGER_IQUEUE}=1
@@ -109,6 +109,7 @@ subcode: config_mpich
             $elif $opts{device}=~/ch4:ofi/
                 $temp{HAVE_CH4_NETMOD_OFI}=1
                 $temp{MPIDI_OFI_VNI_USE_DOMAIN}=1
+                $temp{HAVE_LIBFABRIC_NIC}=1
                 $if $opts{device}=~/ch4:ofi:(\w+)/ ->$set
                     $set = uc($set)
                     $temp{"MPIDI_CH4_OFI_USE_SET_$set"}=1
