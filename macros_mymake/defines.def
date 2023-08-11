@@ -8,6 +8,7 @@ subcode: init_config_defines
     $call init_opt, with-ch4-rank-bits,   CH4_RANK_BITS
     $call init_opt, enable-nolocal,       ENABLE_NO_LOCAL
     $call init_opt, enable-izem-queue,    ENABLE_IZEM_QUEUE
+    $call init_opt, enable-mpit-events,   HAVE_MPIT_EVENTS
 
     $call init_opt_both, enable, ofi-domain, MPIDI_OFI_VNI_USE_DOMAIN, 1, undef
 

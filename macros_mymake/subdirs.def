@@ -55,6 +55,7 @@ macros:
     Dpmi: src/pmi
     Ipmi: $(Dpmi)/include
     Lpmi: $(Dpmi)/libpmi.la
+    Lpmiutil: $(Dpmi)/libpmiutil.la
     Hpmi: $(Dpmi)/include/pmi_config.h
 
 #---------------------------------------- 
@@ -96,6 +97,7 @@ subcode: need_pmi(@hydra)
             $call add_subdir_make, pmi
     $(else)
         $I_list .= " -I../../../$(Dpmi)/src"
+        # TODO: use libpmiutil.la
         $L_list .= " ../../../$(Lpmi)"
         push @extra_make_rules, "../../../$(Lpmi):"
         push @extra_make_rules, "\t\x24(MAKE) -C ../../.. $(Lpmi)"
