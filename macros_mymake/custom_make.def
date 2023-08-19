@@ -166,19 +166,21 @@ fncode: get_list($key)
 fncode: get_make_var($name)
     my $t = $objects{$name}
     $if $t eq "-"
-        return "\x24($name)"
-    $if defined $t
+        $t = "\x24($name)"
+    $elif defined $t
         $if ref($t) eq "ARRAY"
             $t = join(' ', @$t)
         $t=~s/\$\((\w+)\)/get_make_var($1)/ge
         $t=~s/\s+/ /g
 
         $t=~s/$opts{moddir}/\x24(MODDIR)/g
-        return $t
     $elif $name=~/^am__v_\w+/
-        return ""
+        $t = ""
     $else
-        return ""
+        $t = ""
+    $if $custom_make_vars{$name}
+        $t .= $custom_make_vars{$name}
+    return $t;
 
 fncode: get_make_objects($p)
     my $a = $p
@@ -190,4 +192,8 @@ fncode: get_make_objects($p)
     $foreach $t in @tlist
         $t =~s/[^\/]+-//g
     return \@tlist
+
+fncode: add_make_vars($key, $val)
+    $global %custom_make_vars
+    $custom_make_vars{$key} .= " $val"
 

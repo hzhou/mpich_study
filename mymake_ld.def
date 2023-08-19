@@ -110,6 +110,8 @@ page: mymake_install
             &call open_r, $obj
                 $if /library_names='(\S+) (\S+) (\S+)'/
                     ($name1, $name2, $name3) = ($1, $2, $3)
+                $elif /library_names='(\S+) (\S+)'/
+                    ($name1, $name2) = ($1, $2)
 
             system "cp $obj $dst"
             $(if:0)
@@ -118,7 +120,8 @@ page: mymake_install
                 my $cwd = getcwd()
                 system "ln -sf $cwd/$dir/.libs/$name1 $dst"
             system "ln -sf $name1 $dst/$name2"
-            system "ln -sf $name1 $dst/$name3"
+            $if $name3
+                system "ln -sf $name1 $dst/$name3"
         $else
             system "$(LT_install) $obj $dst"
     $elif $dst=~/\/bin$/

@@ -490,7 +490,10 @@ subcode: patch_mpicc_etc
     $confs{MPILIBNAME} = "mpi"
     $confs{PMPILIBNAME} = "pmpi"
     $confs{MPIABILIBNAME} = "mpi_abi"
-    $confs{LPMPILIBNAME} = ""
+    $if $opts{cc_weak} eq "no"
+        $confs{LPMPILIBNAME} = "-lpmpi"
+    $else
+        $confs{LPMPILIBNAME} = ""
     $confs{MPICH_VERSION} = $version
     $confs{CC} = $opts{CC}
     $confs{CXX} = $opts{CXX}
@@ -533,20 +536,21 @@ subcode: patch_mpicc_etc
 
     subcode: load_shlib_conf
         my $tag="cc"
-        $call load_new_dtags
         &call open_r, libtool
             $if /^wl=/
                 $confs{"${tag}_shlib_conf"} .= $_
             $if /^hardcode_libdir_flag_spec=/
                 $confs{"${tag}_shlib_conf"} .= $_
-                $confs{"${tag}_shlib_conf"} .= $dtags
+                $call load_new_dtags, $confs{"${tag}_shlib_conf"}
             $elif /# ### BEGIN LIBTOOL TAG CONFIG: (\w+)/
                 $tag = lc($1)
 
-    subcode: load_new_dtags
-        # TODO: check $LD --help
-        my $dtags="enable_dtags_flag=\"\\\$wl--enable-new-dtags\"\n"
-        $dtags  .="disable_dtags_flag=\"\\\$wl--disble-new-dtags\"\n"
+    subcode: load_new_dtags(a)
+        $if $opts{uname}=~/Linux/i
+            # TODO: check $LD --help
+            my $dtags="enable_dtags_flag=\"\\\$wl--enable-new-dtags\"\n"
+            $dtags  .="disable_dtags_flag=\"\\\$wl--disble-new-dtags\"\n"
+            $(a) .= $dtags
 
 subcode: patch_setbot_c
     my %confs

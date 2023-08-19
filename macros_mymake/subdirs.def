@@ -172,9 +172,10 @@ subcode: need_jsonc
     $(set:json_gen=maint/tuning/coll/json_gen.sh)
     $if -f "$(json_gen)"
         system "bash $(json_gen)"
-        $call add_subdir_inc_lib, jsonc
-        my $configure = "./configure"
-        $call add_subdir_make, jsonc
+        $if -d "mymake/$(Djsonc)"
+            $call add_subdir_inc_lib, jsonc
+            my $configure = "./configure"
+            $call add_subdir_make, jsonc
 
 #---------------------------------------- 
 subcode: need_ucx
@@ -332,11 +333,11 @@ subcode: add_subdir_make(name)
             push @extra_make_rules, "$config_h:"
             push @extra_make_rules, "\t\x24(DO_config) $(name) && \x24(DO_makefile) $(name)"
             push @extra_make_rules, ""
-        $(if:name=mpl or name=pmi)
-            &call add_subdir_rule_block, $subdir, $lib_la, $config_h
-                push @t, "\x24(MAKE)"
-        $(elif:name=opa)
+        $(if:name=opa)
             &call add_subdir_rule_block, $subdir/src, $lib_la, $lib_dep
+                push @t, "\x24(MAKE)"
+        $(else)
+            &call add_subdir_rule_block, $subdir, $lib_la, $lib_dep
                 push @t, "\x24(MAKE)"
     $(else)
         &call add_subdir_rule_block, $subdir, $config_h
