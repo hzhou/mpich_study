@@ -9,7 +9,7 @@ subcode: PrepareEnv
         export HOSTS=$PMRS/hosts.$HOSTS # eg hosts.centos64
     fi
 
-    export UCX_NET_DEVICES=mlx5_0:1
+    # export UCX_NET_DEVICES=mlx5_0:1
     
 subcode: SetCompiler
     # gcc-8, osx-gcc ...

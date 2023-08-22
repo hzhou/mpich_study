@@ -104,7 +104,6 @@ subcode: config_mpich
                     $make_conds{BUILD_SHM_IPC_XPMEM} = 1
 
             $if $opts{device}=~/ch4:ucx/
-                $temp{MPIDI_CH4_DIRECT_NETMOD}=1
                 $temp{HAVE_CH4_NETMOD_UCX}=1
                 $temp{HAVE_LIBUCP} = 1
                 $temp{HAVE_UCP_PUT_NB}=1
@@ -206,7 +205,7 @@ subcode: config_mpich
                     $make_conds{BUILD_CH4_NETMOD_UCX} = 1
                     $if 0
                         $make_conds{BUILD_HCOLL} = 1
-                $if $opts{"without-ch4-shmmods"} or $opts{device}=~/ch4:ucx/
+                $if $opts{"without-ch4-shmmods"}
                     $call @check_enable_shm
 
                 $if $opts{enable_shm}
