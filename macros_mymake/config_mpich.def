@@ -170,7 +170,11 @@ subcode: config_mpich
                 $print $k: $make_conds{$k}
 
         subcode: set_conds_off
-            $make_conds{BUILD_PROFILING_LIB} = 0
+            # cc_weak ref. mymake_config.def
+            $if $opts{cc_weak} eq "no"
+                $make_conds{BUILD_PROFILING_LIB} = 1
+            $else
+                $make_conds{BUILD_PROFILING_LIB} = 0
             $make_conds{BUILD_COVERAGE} = 0
             $make_conds{MAINTAINER_MODE} = 0
             $make_conds{BUILD_BASH_SCRIPTS} = 0
@@ -487,8 +491,12 @@ subcode: patch_mpicc_etc
         $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
     $confs{LIBS} = $ENV{LIBS}
     $confs{MPILIBNAME} = "mpi"
+    $confs{PMPILIBNAME} = "pmpi"
     $confs{MPIABILIBNAME} = "mpi_abi"
-    $confs{LPMPILIBNAME} = ""
+    $if $opts{cc_weak} eq "no"
+        $confs{LPMPILIBNAME} = "-lpmpi"
+    $else
+        $confs{LPMPILIBNAME} = ""
     $confs{MPICH_VERSION} = $version
     $confs{CC} = $opts{CC}
     $confs{CXX} = $opts{CXX}
@@ -531,20 +539,21 @@ subcode: patch_mpicc_etc
 
     subcode: load_shlib_conf
         my $tag="cc"
-        $call load_new_dtags
         &call open_r, libtool
             $if /^wl=/
                 $confs{"${tag}_shlib_conf"} .= $_
             $if /^hardcode_libdir_flag_spec=/
                 $confs{"${tag}_shlib_conf"} .= $_
-                $confs{"${tag}_shlib_conf"} .= $dtags
+                $call load_new_dtags, $confs{"${tag}_shlib_conf"}
             $elif /# ### BEGIN LIBTOOL TAG CONFIG: (\w+)/
                 $tag = lc($1)
 
-    subcode: load_new_dtags
-        # TODO: check $LD --help
-        my $dtags="enable_dtags_flag=\"\\\$wl--enable-new-dtags\"\n"
-        $dtags  .="disable_dtags_flag=\"\\\$wl--disble-new-dtags\"\n"
+    subcode: load_new_dtags(a)
+        $if $opts{uname}=~/Linux/i
+            # TODO: check $LD --help
+            my $dtags="enable_dtags_flag=\"\\\$wl--enable-new-dtags\"\n"
+            $dtags  .="disable_dtags_flag=\"\\\$wl--disble-new-dtags\"\n"
+            $(a) .= $dtags
 
 subcode: patch_setbot_c
     my %confs
@@ -556,46 +565,45 @@ subcode: patch_setbot_c
 
 #---------------------------------------- 
 subcode: get_c_sizeof_mpich
-    $if $config eq "mpich"
-        get_sizeof(["_Bool"], ["stdio.h"]);
-        get_sizeof(["__float128"], ["stdio.h"]);
-        get_sizeof(["_Float16"], ["stdio.h"]);
-        get_sizeof(["wchar_t"], ["stdio.h", "stddef.h"]);
-        $config_defines{SIZEOF__FLOAT16}=0
-        $config_defines{SIZEOF___FLOAT128}=0
-        $config_defines{SIZEOF_WCHAR_T}=0
+    get_sizeof(["_Bool"], ["stdio.h"]);
+    get_sizeof(["__float128"], ["stdio.h"]);
+    get_sizeof(["_Float16"], ["stdio.h"]);
+    get_sizeof(["wchar_t"], ["stdio.h", "stddef.h"]);
+    $config_defines{SIZEOF__FLOAT16}=0
+    $config_defines{SIZEOF___FLOAT128}=0
+    $config_defines{SIZEOF_WCHAR_T}=0
 
-        $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
-            # 32-bit
-            $config_defines{MAX_ALIGNMENT} = 4
-        $else
-            # 64-bit
-            $config_defines{MAX_ALIGNMENT} = 16
+    $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
+        # 32-bit
+        $config_defines{MAX_ALIGNMENT} = 4
+    $else
+        # 64-bit
+        $config_defines{MAX_ALIGNMENT} = 16
 
-        $config_defines{MPIR_Ufint} = "unsigned int"
-        my $MPI_AINT
-        $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
-            $MPI_AINT = "int"
-            $config_defines{MPIR_AINT_MAX} = 'INT_MAX'
-        $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
-            $MPI_AINT = "long"
-            $config_defines{MPIR_AINT_MAX} = 'LONG_MAX'
-        $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG_LONG}
-            $MPI_AINT = "long long"
-            $config_defines{MPIR_AINT_MAX} = 'LONG_LONG_MAX'
+    $config_defines{MPIR_Ufint} = "unsigned int"
+    my $MPI_AINT
+    $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
+        $MPI_AINT = "int"
+        $config_defines{MPIR_AINT_MAX} = 'INT_MAX'
+    $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG}
+        $MPI_AINT = "long"
+        $config_defines{MPIR_AINT_MAX} = 'LONG_MAX'
+    $elif $sizeof_hash{VOID_P}==$sizeof_hash{LONG_LONG}
+        $MPI_AINT = "long long"
+        $config_defines{MPIR_AINT_MAX} = 'LONG_LONG_MAX'
 
-        $if $sizeof_hash{LONG} == $sizeof_hash{LONG_LONG}
-            $config_defines{MPIR_COUNT_MAX} = 'LONG_MAX'
-            $config_defines{MPIR_OFFSET_MAX} = 'LONG_MAX'
-            $config_defines{MPIR_Ucount} = "unsigned long"
-        $else
-            $config_defines{MPIR_COUNT_MAX} = 'LONG_LONG_MAX'
-            $config_defines{MPIR_OFFSET_MAX} = 'LONG_LONG_MAX'
-            $config_defines{MPIR_Ucount} = "unsigned long long"
-        # $config_defines{HAVE_LONG_LONG} = 1
-        $config_defines{HAVE_LONG_LONG_INT} = 1
+    $if $sizeof_hash{LONG} == $sizeof_hash{LONG_LONG}
+        $config_defines{MPIR_COUNT_MAX} = 'LONG_MAX'
+        $config_defines{MPIR_OFFSET_MAX} = 'LONG_MAX'
+        $config_defines{MPIR_Ucount} = "unsigned long"
+    $else
+        $config_defines{MPIR_COUNT_MAX} = 'LONG_LONG_MAX'
+        $config_defines{MPIR_OFFSET_MAX} = 'LONG_LONG_MAX'
+        $config_defines{MPIR_Ucount} = "unsigned long long"
+    # $config_defines{HAVE_LONG_LONG} = 1
+    $config_defines{HAVE_LONG_LONG_INT} = 1
 
-        get_sizeof_bsend_status($MPI_AINT)
+    get_sizeof_bsend_status($MPI_AINT)
 
 fncode: get_sizeof_bsend_status($MPI_AINT)
     $call dump_c_test, mymake/t.c
@@ -640,11 +648,13 @@ subcode: make_mpich
     $call mpich_make_setup
 
     $autoconf_vars{MPILIBNAME} = "mpi"
+    $autoconf_vars{PMPILIBNAME} = "pmpi"
     $autoconf_vars{MPIABILIBNAME} = "mpi_abi"
     $autoconf_vars{MPIFCLIBNAME} = "mpifort"
     $autoconf_vars{MPICXXLIBNAME} = "mpicxx"
 
-    $autoconf_vars{VISIBILITY_CFLAGS} = "-fvisibility=hidden"
+    $if $opts{cc_weak} ne "no"
+        $autoconf_vars{VISIBILITY_CFLAGS} = "-fvisibility=hidden"
 
     $if !$opts{"disable-ch4-netmod-inline"}
         $if $opts{device} =~/ch4:ofi/
