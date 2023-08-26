@@ -119,7 +119,7 @@ subcode: need_pmi(@hydra)
 subcode: need_romio
     system "rsync -r confdb/ $(Dromio)/confdb/" 
     system "cp maint/version.m4 $(Dromio)/"
-    system "ln -sf ../mpi/romio/include/mpio.h src/include/mpio.h"
+    system "ln -sf ../mpi/romio/include/mpio.h src/include/mpio.h && touch src/mpi/romio/include/mpio.h"
     # # mpl
     # &call modify, configure.ac
     $call add_subdir_inc_lib, romio
