@@ -89,7 +89,7 @@ subcode: need_mpl(@hydra)
 #---------------------------------------- 
 subcode: need_pmi(@hydra)
     $(if:!hydra)
-        $if $opts{"with-pmi"} !~ /slurm|cray/ and $opts{"with-pmilib"} !~/slurm|cray/
+        $if !$opts{"with-pmi"}
             system "rsync -r confdb/ $(Dpmi)/confdb/" 
             system "cp maint/version.m4 $(Dpmi)/"
             $call add_subdir_inc_lib, pmi

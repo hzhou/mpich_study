@@ -36,12 +36,6 @@ subcode: init_config_defines
         "implicit" => "MPICH_VCI__IMPLICIT",
         "explicit" => "MPICH_VCI__EXPLICIT",
 
-    &call init_opt_vals, with-pmi, USE_{PMI1_API,PMI2_API,PMIX_API}
-        "default" => "PMI1_API",
-        "pmi1"    => "PMI1_API",
-        "pmi2"    => "PMI2_API",
-        "pmix"    => "PMIX_API",
-
     subcode: init_opt(opt, name)
         $hash_defines{"$(opt)"} = "$(name)"
 
