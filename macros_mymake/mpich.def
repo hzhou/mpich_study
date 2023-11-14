@@ -160,9 +160,10 @@ subcode: mpich_make_setup
     subcode: need_mpich_preproc
         $(set:errhan=src/mpi/errhan/$1)
         push @extra_make_rules, "$(errhan:errutil.lo): $(errhan:defmsg.h)"
-        $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
         push @CONFIGS, "src/include/mpichconf.h"
         push @CONFIGS, "src/include/mpir_cvars.h"
+        push @CONFIGS, "src/mpi/errhan/defmsg.h"
+        $call push_autogen_rule, errmsg, src/mpi/errhan/defmsg.h
         $call push_autogen_rule, cvars, src/include/mpir_cvars.h
         # $call push_autogen_rule, logs, src/include/mpiallstates.h
         $if -f "src/include/autogen.h.in"
