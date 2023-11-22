@@ -664,7 +664,9 @@ subcode: make_mpich
                 push @mods, "$U/use_mpi/mpi_c_interface_$1.mod"
         $make_vars{modinc_HEADERS} = join(' ', @mods)
 
-    $if 1 # linux
+    $if $opts{cc_weak} eq "no"
+        $make_vars{lib_libpmpi_la_LIBADD} .= " $L_list"
+    $else # linux
         $make_vars{lib_libmpi_la_LIBADD} .= " $L_list"
 
     $if $opts{"with-xpmem"}
