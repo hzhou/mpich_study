@@ -64,7 +64,7 @@ subcode: mpich_slow
                     $print $1
 
     subcode: patch_mpicc_etc
-        $(for:p in mpicc,mpicxx,mpifort)
+        $(for:p in mpicc,mpicxx,mpifort,mpicc_abi)
             $if -f "src/env/$(p).bash"
                 $call get_file_lines, src/env/$(p).bash
                 my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")

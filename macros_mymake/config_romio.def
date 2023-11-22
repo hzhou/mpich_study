@@ -6,6 +6,8 @@ subcode: config_init_romio
 subcode: config_romio
     $call ac_init, ROMIO, $version, discuss@mpich.org, romio, http://www.mpich.org/
     $call set_config_defines
+    $call patch_mpio_h
+    system "touch src/mpi/romio/include/mpiof.h"
 
     subcode: set_config_defines
         $call AC_USE_SYSTEM_EXTENSIONS
@@ -43,14 +45,26 @@ subcode: config_romio
         $config_defines{HAVE_MPI_LONG_LONG_INT} = 1
         $config_defines{HAVE_MPI_STATUS_SET_ELEMENTS_X} = 1
         $config_defines{HAVE_MPI_TYPE_SIZE_X} = 1
+        $config_defines{HAVE_MPIX_TYPE_IOV} = 1
 
         $config_defines{HAVE_DECL_PWRITE} = 1
         $config_defines{HAVE_DECL_MPI_COMBINER_HINDEXED_BLOCK} = 1
+
+    subcode: patch_mpio_h
+        my %confs
+        $confs{DEFINE_HAVE_MPI_GREQUEST} = "#define HAVE_MPI_GREQUEST 1"
+        $confs{HAVE_MPI_INFO} = "#define HAVE_MPI_INFO"
+        $confs{HAVE_MPI_DARRAY_SUBARRAY} = "#define HAVE_MPI_DARRAY_SUBARRAY"
+        autoconf_file("src/mpi/romio/include/mpio.h", \%confs)
 
 subcode: make_romio
     my %conds
     $conds{BUILD_ROMIO_EMBEDDED} = 1
     $conds{MPIO_GLUE_MPICH} = 1
+    $conds{BUILD_AD_UFS} = 1
+    $conds{BUILD_AD_NFS} = 1
+    $conds{BUILD_AD_TESTFS} = 1
+    $autoconf_vars{mpl_includedir} = "-I../../mpl/include -I../../include"
     load_automake("src/mpi/romio/Makefile.am", \%conds)
     dump_makefile("src/mpi/romio/Makefile")
 

@@ -70,6 +70,7 @@ subcode: config_test
 
 subcode: make_test
     my %conds
+    $conds{BUILD_MPIX_TESTS} = 1
     $autoconf_vars{threadlib} = "-lpthread"
     my @all_am = glob("test/mpi/*/Makefile.am")
     push @all_am, glob("test/mpi/threads/*/Makefile.am")

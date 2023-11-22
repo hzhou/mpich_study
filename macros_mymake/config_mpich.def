@@ -78,6 +78,8 @@ subcode: config_mpich
         $temp{ENABLE_PMI1} = 1
         $temp{ENABLE_PMI2} = 1
 
+        $if !$opts{disable_romio}
+            $temp{HAVE_ROMIO} = 1
         $if $opts{device}=~/ch4/
             $temp{MPICH_THREAD_GRANULARITY} = 'MPICH_THREAD_GRANULARITY__VCI'
             $temp{MPICH_THREAD_REFCOUNT} = 'MPICH_REFCOUNT__LOCKFREE'
@@ -241,8 +243,7 @@ subcode: config_mpich
                 $(for:SHM)
                     $make_conds{BUILD_MPID_COMMON_$1} = 1
 
-            $if !$opts{disable_romio}
-                $make_conds{BUILD_ROMIO} = 1
+            # do not set BUILD_ROMIO; we will treat it as a subdir
 
             $if !$opts{disable_cxx}
                 $make_conds{BUILD_CXX_BINDING} = 1
@@ -467,6 +468,10 @@ subcode: patch_mpicxx_h
         $confs{FORTRAN_BINDING} = 1
     $else
         $confs{FORTRAN_BINDING} = 0
+    $if !$opts{disable_romio}
+        $confs{HAVE_CXX_IO} = 1
+    $else
+        $confs{HAVE_CXX_IO} = 0
 
     $(for:33-36%x and $(cxx_set))
         $call set_datatype_cxx, $2, $1

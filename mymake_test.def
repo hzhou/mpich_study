@@ -106,11 +106,11 @@ subcode: testing_config
         $foreach $t in split /\s+/, $opts{config_args}
             $if $t=~/--(dis|en)able-.*tests/
                 $config_args .= " $t"
-            $elif $t=~/--with-device=(.*)/
-                $config_args .= " $t"
             $elif $t=~/--(dis|en)able-(fortran|cxx|romio)/
                 $config_args .= " $t"
             $elif $t=~/--with-(thread-package|argobots|cuda|ze)/
+                $config_args .= " $t"
+            $elif $t=~/--enable-mpi-abi/
                 $config_args .= " $t"
 
 subcode: echo_system(@cmd)

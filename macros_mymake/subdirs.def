@@ -330,9 +330,11 @@ subcode: add_subdir_make(name)
         $if !$opts{disable_romio}
             $lib_dep .= " $(Hromio)"
         $lib_dep .= " $(Hmpl)"
+    $(elif:name=romio)
+        $lib_dep .= " $(Hmpl)"
 
     $(if:quick)
-        $(if:name=mpl or name=pmi or name=opa)
+        $(if:name=mpl or name=pmi or name=romio or name=opa)
             push @extra_make_rules, "$config_h:"
             push @extra_make_rules, "\t\x24(DO_config) $(name) && \x24(DO_makefile) $(name)"
             push @extra_make_rules, ""

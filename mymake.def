@@ -26,8 +26,8 @@ page: mymake
     my $python = find_python3()
     $if -f "maint/gen_binding_c.py"
         $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
-    $if -f "src/binding/abi/gen_abi.py"
-        $call run_script, cd src/binding/abi && $python gen_abi.py
+    $if -f "maint/gen_abi.py"
+        $call run_script, $python maint/gen_abi.py
     $if -f "maint/gen_ch4_api.py"
         $call autogen, src/mpid/ch4/netmod/include/netmod.h, $python maint/gen_ch4_api.py
     $if -f "maint/gen_coll.py"
@@ -211,6 +211,8 @@ page: mymake_clean
     push @realclean_list, "src/mpl/Makefile"
     push @realclean_list, "src/pmi/include/pmi_config.h"
     push @realclean_list, "src/pmi/Makefile"
+    push @realclean_list, "src/mpi/romio/adio/include/romioconf.h"
+    push @realclean_list, "src/mpi/romio/Makefile"
     $if -d "src/openpa"
         push @realclean_list, "mymake/openpa"
 
