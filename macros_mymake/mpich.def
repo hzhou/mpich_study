@@ -1,4 +1,5 @@
 include: macros_mymake/dependency.def
+include: macros_mymake/gforker.def
 
 subcode: mpich_slow
     $call @preproc_bindings
@@ -93,12 +94,7 @@ subcode: mpich_slow
         push @extra_make_rules, "\t\x24(DO_clean)"
 
     subcode: add_rule_pm
-        $if $opts{pm} eq "gforker"
-            $call add_rule_gforker
-        $elif $opts{pm} eq "remshell"
-            $call add_rule_remshell
-        $else
-            $call add_rule_hydra, hydra
+	$call add_rule_hydra, hydra
 
 #---------------------------------------- 
 subcode: set_make_rules_DO
@@ -130,6 +126,8 @@ subcode: mpich_make_setup
     $elif $opts{device}=~/ch3.*:ofi/
         $call need_ofi
 
+    $call add_rule_gforker
+    $call add_rule_remshell
     $call add_rule_cpi
     $call @add_rule_dep
 
