@@ -36,35 +36,12 @@ subcode: config_cxx
 subcode: autogen_fortran
     $(set:D=src/binding/fortran)
     $if !-f "configure"
-        $call buildiface, mpif_h
-        $call buildiface, use_mpi
-        $call buildiface, use_mpi_f08
         $if -f "maint/gen_binding_f77.py"
             system "$python maint/gen_binding_f77.py"
         $if -f "maint/gen_binding_f90.py"
             system "$python maint/gen_binding_f90.py"
         $if -f "maint/gen_binding_f08.py"
             system "$python maint/gen_binding_f08.py"
-        $else
-            $call buildiface, use_mpi_f08/wrappers_c
-
-    subcode: buildiface(dir)
-        $print : buildiface - $(dir)
-        chdir "$(D)/$(dir)"
-        $(if:dir=use_mpi_f08/wrappers_c)
-            system "rm -f Makefile.mk"
-            $if -f "$pwd/src/include/mpi_proto.h"
-                system "perl buildiface $pwd/src/include/mpi_proto.h"
-            $else
-                system "perl buildiface $pwd/src/include/mpi.h.in"
-            system "perl buildiface $pwd/src/mpi/romio/include/mpio.h.in"
-        $(elif:dir=use_mpi)
-            $if -f "buildiface"
-                system "perl buildiface >/dev/null"
-                system "perl ../mpif_h/buildiface -infile=cf90t.h -deffile=./cf90tdefs"
-        $(else)
-            system "perl buildiface >/dev/null"
-        chdir $pwd
 
 subcode: config_fortran
     $(set:D=src/binding/fortran)
@@ -81,7 +58,7 @@ subcode: add_extra_use_mpi
     push @extra_make_rules, "$(U)/mpi_constants.lo: $(U)/mpifnoext.h", ""
     push @extra_make_rules, "$(U)/mpifnoext.h: $(D)/mpif_h/mpif.h"
     # remove EXTERNAL functions and MPI_WTIME/MPI_WTICK declarations
-    push @extra_make_rules, "\tsed -e 's/^C/!/g' -e '/EXTERNAL/d' -e '/MPI_WTICK/d' \$< > \$@"
+    push @extra_make_rules, "\tsed -e 's/^C/!/g' -e '/EXTERNAL/d' -e '/PMPI_/d' \$< > \$@"
     push @extra_make_rules, ""
 
 subcode: add_extra_use_mpi_f08

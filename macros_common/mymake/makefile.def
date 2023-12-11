@@ -243,7 +243,7 @@ fncode: dump_makefile($makefile, $moddir)
 
     subcode: set_dst_hash_ltlibs_programs
         $foreach $target in @ltlibs, @programs
-            $if $target=~/^(lib|bin)\//
+            $if $target=~/^(bin)\//
                 $dst_hash{$target} = "\x24(PREFIX)/$1"
 
     subcode: dump_rules(which)
