@@ -79,8 +79,8 @@ subcode: add_extra_use_mpi_f08
 
     subcode: add_wrappers_f
         $(for:f_sync_reg_f08ts,f08ts)
-            push @extra_make_rules, "$(U)/wrappers_f/$1.lo: $(U)/mpi_f08.lo"
-            push @extra_make_rules, "$(U)/wrappers_f/p$1.lo: $(U)/mpi_f08.lo"
+            push @extra_make_rules, "$(U)/wrappers_f/$1.lo: $(U)/mpi_f08.lo $(U)/mpi_c_interface.lo"
+            push @extra_make_rules, "$(U)/wrappers_f/p$1.lo: $(U)/mpi_f08.lo $(U)/mpi_c_interface.lo"
 
 
 # ref: custom_make.def

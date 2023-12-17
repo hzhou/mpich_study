@@ -6,7 +6,7 @@ subcode: add_rule_gforker
 
 subcode: add_rule_pm_simple(name)
     push @extra_make_rules,  "$(name)_OBJECTS = \\"
-    $foreach $a in qw(cmnargs process ioloop pmiserv labelout env newsession rm pmiport dbgiface simple_pmiutil2)
+    $foreach $a in qw(cmnargs process ioloop pmiserv labelout env newsession rm pmiport dbgiface simple_pmiutil)
         push @extra_make_rules,  "    src/pm/util/$a.o \\"
     push @extra_make_rules,  "    src/pm/$(name)/mpiexec.o"
     push @extra_make_rules, ""

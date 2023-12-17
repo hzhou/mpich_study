@@ -12,6 +12,7 @@ subcode: config_mpich
     $call patch_mpi_h
     $call patch_mpir_ext_h
     $call patch_mpichinfo_h
+    $call patch_mpif90model_h
     $if !$opts{disable_cxx}
         $call patch_mpicxx_h
     $if !$opts{disable_fortran}
@@ -19,7 +20,6 @@ subcode: config_mpich
         my $dir="src/binding/fortran/mpif_h"
         $call write_mpif_h, $dir/mpif.h
         my $dir="src/binding/fortran/use_mpi"
-        $call patch_mpif90model_h
         $call write_mpi_constants_f90, $dir/mpi_constants.f90
         my %confs
         $confs{WTIME_DOUBLE_TYPE} = "REAL*8"
@@ -446,6 +446,17 @@ subcode: patch_mpir_ext_h
     my %confs
     $confs{HAVE_ERROR_CHECKING} = 1
     autoconf_file("src/include/mpir_ext.h", \%confs)
+
+subcode: patch_mpif90model_h
+    my %confs
+    $confs{FC_REAL_MODEL} = "6, 37"
+    $confs{FC_DOUBLE_MODEL} = "15, 307"
+    $confs{FC_INTEGER_MODEL} = "9"
+    $confs{FC_INTEGER_MODEL_MAP} = "{9, 4, 4}, "
+    $if -f "src/include/mpif90model.h.in"
+        autoconf_file("src/include/mpif90model.h", \%confs)
+    $elif -f "src/mpi/datatype/mpif90model.h.in"
+        autoconf_file("src/mpi/datatype/mpif90model.h", \%confs)
 
 subcode: patch_mpichinfo_h
     my %confs
