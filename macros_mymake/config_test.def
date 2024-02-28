@@ -1,13 +1,20 @@
+subcode: init_MPICC
+    my $MPICC = "mpicc"
+    $if $opts{"enable-mpi-abi"}
+        $MPICC = "mpicc_abi"
+
 subcode: config_init_test
+    $call init_MPICC
     $config_in = "$mymake_dir/config_templates/mpitestconf.h"
     $config_out = "test/mpi/include/mpitestconf.h"
     $if $ENV{CC}
-        system "sed -e 's/\"$ENV{CC}\"/\"mpicc\"/' libtool > test/mpi/libtool"
+        system "sed -e 's/\"$ENV{CC}\"/\"$MPICC\"/' libtool > test/mpi/libtool"
     $else
-        system "sed -e 's/\"gcc\"/\"mpicc\"/' libtool > test/mpi/libtool"
+        system "sed -e 's/\"gcc\"/\"$MPICC\"/' libtool > test/mpi/libtool"
     system "chmod a+x test/mpi/libtool"
 
 subcode: config_test
+    $call init_MPICC
     $call ac_init, mpich-testsuite, $version, discuss@mpich.org, mpich-testsuite, http://www.mpich.org/
     $call set_config_defines
     $if -e "test/mpi/runtests.in"
@@ -69,6 +76,7 @@ subcode: config_test
         autoconf_file("test/mpi/f77/ext/add1size.h", \%confs)
 
 subcode: make_test
+    $call init_MPICC
     my %conds
     $conds{BUILD_MPIX_TESTS} = 1
     $autoconf_vars{threadlib} = "-lpthread"
@@ -122,10 +130,10 @@ subcode: make_test
             $make_vars{LIBS} .= " -lcudart -lcuda"
 
         $make_vars{LIBTOOL} = "$top_srcdir/libtool"
-        $make_vars{CC} = "mpicc"
+        $make_vars{CC} = "$MPICC"
         $make_vars{CXX} = "mpicxx"
         $make_vars{FC} = "mpifort -fcray-pointer"
-        $make_vars{CCLD} = "mpicc"
+        $make_vars{CCLD} = "$MPICC"
         $make_vars{CXXLD} = "mpicxx"
         $make_vars{FCLD} = "mpifort"
         $if $dir=~/f77/

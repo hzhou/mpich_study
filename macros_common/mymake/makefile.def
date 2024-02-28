@@ -205,10 +205,12 @@ fncode: dump_makefile($makefile, $moddir)
 
         $if @install_list
             $print "\x23 --------------------\n"
-            $print ".PHONY: install"
+            $print ".PHONY: install all-install"
             $print "install: @install_deps"
             $foreach $l in @install_list
                 $print "\t$l"
+            $print
+            $print "all-install: install hydra-install"
             $print
 
     # ---- DUMP UTILS --------------------

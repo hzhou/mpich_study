@@ -386,6 +386,7 @@ subcode: patch_mpi_h
         $else
             $(for:$(DT_fortran_set))
                 $call set_datatype_null, $1
+        $map set_datatype_null, REAL2, COMPLEX4
 
         # -- CXX --
         $if !$opts{disable_cxx}
@@ -549,6 +550,9 @@ subcode: patch_mpicc_etc
             $call get_file_lines, $script
             &call open_W, mymake/mpi$p
                 $foreach $l in @lines
+                    $if $l=~/cxxlibs="-l"/
+                        print Out "    cxxlibs=\n"
+                        next
                     $l=~s/\@(\w+)\@/$confs{$1}/g
                     $l=~s/__(\w+)_TO_BE_FILLED_AT_INSTALL_TIME__/$confs{$1}/
                     print Out $l
@@ -679,6 +683,9 @@ subcode: make_mpich
         $make_vars{lib_libpmpi_la_LIBADD} .= " $L_list"
     $else # linux
         $make_vars{lib_libmpi_la_LIBADD} .= " $L_list"
+
+    $if $opts{"enable-mpi-abi"}
+        $make_vars{lib_libmpi_abi_la_LIBADD} .= " $L_list"
 
     $if $opts{"with-xpmem"}
         my $p = $opts{"with-xpmem"}
