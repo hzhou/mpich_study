@@ -26,7 +26,7 @@ subcode: test_frame
         if test -n $compiler ; then
             $call mult_call, SetCompiler
         fi
-        $(for:autoconf,automake,libtool)
+        $(for:autoconf,automake,libtoolize)
             which $1
             $1 --version
 
