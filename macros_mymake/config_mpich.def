@@ -77,6 +77,10 @@ subcode: config_mpich
         # PMI
         $temp{ENABLE_PMI1} = 1
         $temp{ENABLE_PMI2} = 1
+        $temp{ENABLE_PMIX} = 1
+        $if $opts{"with-pmix"}
+            $temp{ENABLE_PMI1} = undef
+            $temp{ENABLE_PMI2} = undef
 
         $if !$opts{disable_romio}
             $temp{HAVE_ROMIO} = 1
@@ -104,6 +108,12 @@ subcode: config_mpich
                 $if $opts{"with-xpmem"}
                     $temp{MPIDI_CH4_SHM_ENABLE_XPMEM}=1
                     $make_conds{BUILD_SHM_IPC_XPMEM} = 1
+                $if $opts{"without-cma"}
+                    $temp{MPIDI_CH4_SHM_ENABLE_CMA}=0
+                    $make_conds{BUILD_SHM_IPC_CMA} = 0
+                $else
+                    $temp{MPIDI_CH4_SHM_ENABLE_CMA} = 1
+                    $make_conds{BUILD_SHM_IPC_CMA} = 1
 
             $if $opts{device}=~/ch4:ucx/
                 $temp{HAVE_CH4_NETMOD_UCX}=1
@@ -635,7 +645,8 @@ subcode: make_mpich
     $call set_mymake_DO
     $call add_rule_pm
 
-    $opts{so_version}="0:0:0"
+    $if !$opts{so_version}
+        $opts{so_version}="0:0:0"
     $call mpich_make_setup
 
     $autoconf_vars{MPILIBNAME} = "mpi"

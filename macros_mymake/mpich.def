@@ -21,11 +21,11 @@ subcode: mpich_slow
         $call patch_mpicc_etc
 
         $ENV{CFLAGS}=$opts{CFLAGS}
-        $(for:Hmpl, Hpmi)
-            my $t="$($1)"
-            $t=~s/$pwd\///g
-
-            $ret = system "make $t"
+        $(for:mpl, pmi)
+            $if $opts{"embed_$1"}
+                my $t="$(H$1)"
+                $t=~s/$pwd\///g
+                $ret = system "make $t"
 
     $if $ret == 0
         # post filtering config_defines
@@ -50,9 +50,10 @@ subcode: mpich_slow
         &call open_r, src/include/mpichconf.h
             $if /^#define\s+HAVE_.*WEAK.* 1/
                 $opts{have_weak}=1
-        &call open_r, maint/version.m4
-            $if /libmpi_so_version_m4.*\[([\d:]*)\]/
-                $opts{so_version}=$1
+        $if !$opts{so_version} or $opts{so_version} eq "0:0:0"
+            &call open_r, maint/version.m4
+                $if /libmpi_so_version_m4.*\[([\d:]*)\]/
+                    $opts{so_version}=$1
         &call open_r, config.status
             $if /S\["WRAPPER_LIBS"\]="(.*)"/
                 $opts{WRAPPER_LIBS}=$1

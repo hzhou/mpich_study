@@ -61,6 +61,7 @@ macros:
 #---------------------------------------- 
 subcode: need_mpl(@hydra)
     $(if:!hydra)
+        $opts{"embed_mpl"} = 1
         $if !$opts{quick} && !-d "$(Dmpl)/confdb"
             $call do_cmd, cp -r confdb $(Dmpl)/
         $call add_subdir_inc_lib, mpl
@@ -89,12 +90,25 @@ subcode: need_mpl(@hydra)
 #---------------------------------------- 
 subcode: need_pmi(@hydra)
     $(if:!hydra)
-        $if !$opts{"with-pmi"}
+        $if !$opts{"with-pmi"} and !$opts{"with-pmix"} and !$opts{"with-pmi1"} and !$opts{"with-pmi2"}
+            $opts{"embed_pmi"} = 1
             system "rsync -r confdb/ $(Dpmi)/confdb/" 
             system "cp maint/version.m4 $(Dpmi)/"
             $call add_subdir_inc_lib, pmi
             $call set_configure
             $call add_subdir_make, pmi
+        $elif $opts{"with-pmix"}
+            my $L=$opts{"with-pmix"}
+            $I_list .= " -I$L/include"
+            $L_list .= " -L$L/lib -lpmix"
+        $elif $opts{"with-pmi1"}
+            my $L=$opts{"with-pmi"}
+            $I_list .= " -I$L/include"
+            $L_list .= " -L$L/lib -lpmi"
+        $elif $opts{"with-pmi2"}
+            my $L=$opts{"with-pmi2"}
+            $I_list .= " -I$L/include"
+            $L_list .= " -L$L/lib -lpmi2"
     $(else)
         $I_list .= " -I../../../$(Dpmi)/src"
         # TODO: use libpmiutil.la

@@ -25,6 +25,8 @@ subcode: config_mpl
             $config_defines{USE_MMAP_SHM} = 1
         $config_defines{USE_NOTHING_FOR_YIELD} = 1
 
+        $config_defines{HAVE_BACKTRACE} = 1
+
         # --enable-timer-type=[gethrtime,clock_gettime,gettimeofday,mach_absolute_time,linux86_cycle,gcc_ia64_cycle,ppc64_cycle]
         $config_defines{HAVE_CLOCK_GETTIME} = 1
         $config_defines{HAVE_CLOCK_GETRES} = 1

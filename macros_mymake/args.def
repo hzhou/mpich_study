@@ -79,6 +79,8 @@ subcode: parse_args
         $(for:CC,CXX,F77,FC)
             $if $opts{$1}
                 $ENV{$1}=$opts{$1}
+            $elif $ENV{$1}
+                $opts{$1} = $ENV{$1}
 
     subcode: parse_ARGV
         $foreach $a in @ARGV

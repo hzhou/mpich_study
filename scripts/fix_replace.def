@@ -2,13 +2,16 @@ include: macros/patch.def
 page: t, patch_frame
     module: perl
     patch: REPLACE
+    # root:  $ENV{HOME}/work/pull_requests/2408_coll_group
 
 #---------------------------------------- 
 subcode: grep_REPLACE
-    $call grep_l, 'MPIR_ERR_COLL_CHECKANDCONT'
+    $call grep_l, 'mpi_errno_ret'
 
 subcode: filter_lines_REPLACE
-    $if $(l)=~/MPIR_ERR_COLL_CHECKANDCONT\(mpi_errno\)/
+    # int mpi_errno_ret ATTRIBUTE((unused)) = MPI_SUCCESS;
+    $if $(l)=~/^\s*int mpi_errno_ret ATTRIBUTE\S* = MPI_SUCCESS;/
         $cnt++
-        $(l) =~s/mpi_errno/mpi_errno, *errflag/
+        # $(l) =~s/MPIR_ERR_COLL_CHECKANDCONT.*;/MPIR_ERR_CHECK(mpi_errno);/
+        $(l) = "-DELETE"
 

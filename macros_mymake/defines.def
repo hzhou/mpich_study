@@ -107,6 +107,8 @@ subcode: filter_config_defines
                 $config_defines{MPICH_DEBUG_HANDLES} = 1
             $elif $t eq "handlealloc"
                 $config_defines{MPICH_DEBUG_HANDLEALLOC} = 1
+            $elif $t eq "progress"
+                $config_defines{MPICH_DEBUG_PROGRESS} = 1
             $elif $t eq "asan"
                 $config_cflags{O}=1
                 $(for:-g, -fsanitize=address, -fno-omit-frame-pointer)
