@@ -82,10 +82,6 @@ subcode: need_mpl(@hydra)
                 $configure.=" $t"
             $elif $t=~/--with(out)?-(mpl|thread-package|argobots|uti|cuda|hip|ze)/
                 $configure.=" $t"
-    $(else)
-        $call add_subdir_inc_lib, pmi_hydra
-        push @extra_make_rules, "$(Lpmi_hydra):"
-        push @extra_make_rules, "\t\x24(MAKE) -C ../../.. $(Lpmi)"
 
 #---------------------------------------- 
 subcode: need_pmi(@hydra)

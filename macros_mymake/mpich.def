@@ -4,6 +4,9 @@ include: macros_mymake/gforker.def
 subcode: mpich_slow
     $call @preproc_bindings
     $(setmacro:makefile=mpich)
+
+    $if !$opts{"with-pmi"} and !$opts{"with-pmix"} and !$opts{"with-pmi1"} and !$opts{"with-pmi2"}
+        $opts{"3rd-party-pmi"} = 1
     $call set_general_make_rules
     $call mpich_make_setup
 
@@ -81,7 +84,8 @@ subcode: mpich_slow
 
     subcode: set_general_make_rules
         $call set_mymake_DO
-        $call add_rule_pm
+        $if !$opts{"3rd-party-pmi"}
+            $call add_rule_hydra, hydra
         # $call add_rule_testing
 
     subcode: set_mymake_DO
@@ -94,8 +98,6 @@ subcode: mpich_slow
         push @extra_make_rules, "realclean: clean"
         push @extra_make_rules, "\t\x24(DO_clean)"
 
-    subcode: add_rule_pm
-	$call add_rule_hydra, hydra
 
 #---------------------------------------- 
 subcode: set_make_rules_DO
@@ -115,7 +117,7 @@ subcode: mpich_make_setup
     $if $opts{enable_izem}
         $call need_izem
 
-    $if -f "src/pmi/configure.ac"
+    $if -f "src/pmi/configure.ac" && !$opts{"3rd-party-pmi"}
         $call need_pmi
 
     $if !$opts{disable_romio}
