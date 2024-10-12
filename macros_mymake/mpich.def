@@ -198,6 +198,7 @@ subcode: mpich_configure
             system "autoreconf -ivf"
     $if !-f "mymake/Makefile.orig"
         $call stage, Configure MPICH
+        $call get_mpl_flags
         system "rm -f Makefile"
         my $t = join ' ', @config_args
         $if !$ret
@@ -214,6 +215,11 @@ subcode: mpich_configure
         my $t = `uname -m`
         $if $t=~/x86_64/
             $ENV{FORTRAN_MPI_OFFSET}="integer*8"
+    subcode: get_mpl_flags
+        $ENV{COMPILER_TLS}="_Thread_local"
+        $foreach $t in @config_args
+            $if $t=~/--with-(cuda|hip|ze)/
+                $ENV{GPU_SUPPORT}=uc($1)
     # -------------------
     subcode: modify_configure_ac
         $call patch_confdb_subcfg
