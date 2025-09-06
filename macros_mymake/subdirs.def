@@ -50,6 +50,7 @@ macros:
     Iromio: $(Dromio)/include
     Lromio: $(Dromio)/libromio.la
     LPromio:$(Dromio)/libpromio.la
+    Lromio_abi: $(Dromio)/libromio_abi.la
     Hromio: $(Dromio)/adio/include/romioconf.h
 
     Dpmi: src/pmi
@@ -77,6 +78,8 @@ subcode: need_mpl(@hydra)
         my $configure = "./configure --disable-versioning --enable-embedded"
         # $if $opts{argobots}
         #     $configure .= " CPPFLAGS='-I$opts{argobots}/include'"
+        $if $opts{fast}
+            $configure.=" --enable-fast=$opts{fast}"
         $foreach $t in @config_args
             $if $t=~/--enable-(g|strict)/
                 $configure.=" $t"
@@ -137,8 +140,8 @@ subcode: need_romio
     $call set_configure
     $call add_subdir_make, romio
 
-    $dst_hash{"$(Dromio)/include/mpio.h"} = "$opts{prefix}/include"
-    $dst_hash{"$(Dromio)/include/mpiof.h"} = "$opts{prefix}/include"
+    # $dst_hash{"$(Dromio)/include/mpio.h"} = "$opts{prefix}/include"
+    # $dst_hash{"$(Dromio)/include/mpiof.h"} = "$opts{prefix}/include"
 
     subcode: set_configure
         my @t_env 
@@ -183,8 +186,11 @@ subcode: need_izem
 #---------------------------------------- 
 subcode: need_jsonc
     $(set:json_gen=maint/tuning/coll/json_gen.sh)
-    $if -f "$(json_gen)"
-        system "bash $(json_gen)"
+    my $json_gen = "maint/tuning/coll/json_gen.sh"
+    $if -f "maint/json_gen.sh"
+        $json_gen = "maint/json_gen.sh"
+    $if -f $json_gen
+        system "bash $json_gen"
         $if -d "mymake/$(Djsonc)"
             $call add_subdir_inc_lib, jsonc
             my $configure = "./configure"
@@ -354,6 +360,10 @@ subcode: add_subdir_make(name)
         $(else)
             &call add_subdir_rule_block, $subdir, $lib_la, $lib_dep
                 push @t, "\x24(MAKE)"
+        $(if:name=romio)
+            $if $opts{"enable-mpi-abi"}
+                &call add_subdir_rule_block, $subdir, $(Lromio_abi), $lib_dep
+                    push @t, "\x24(MAKE)"
     $(else)
         &call add_subdir_rule_block, $subdir, $config_h
             push @t, "\x24(DO_stage) Configure $(name:uc)"

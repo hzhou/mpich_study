@@ -87,7 +87,7 @@ fncode: dump_makefile($makefile, $moddir)
             my $am_flags = get_make_var("AM_$2FLAGS")
             $flags.=" $am_flags"
             $if $flags=~/-I(\S+)/ -> $modpath
-                $if $fc =~/^(pgfortran|ifort)/
+                $if $fc =~/^(pgfortran|ifort|ifx)/
                     $flags.=" -module $modpath"
                 $elif $fc =~/^sunf\d+/
                     $flags.=" -moddir=$modpath"
@@ -149,10 +149,22 @@ fncode: dump_makefile($makefile, $moddir)
                 $print
 
     subcode: dump_clean
+        my $root = "."
+        my @prune_dirs
+        $if -d "src"
+            $root = "src"
+
+            $foreach $d in "src/pmi", "src/mpl"
+                $if -d $d
+                    push @prune_dirs, "-path $d"
+        my $prune
+        $if @prune_dirs
+            $prune = "-type d \\( ". join(' -o ', @prune_dirs) . " \\) -prune -o"
+
         $print "\x23 --------------------\n"
         $print ".PHONY: clean"
         $print "clean:"
-        $print "\t(find src $(join:-name '*.$1': -o :o,lo,a,la) |xargs rm -f)"
+        $print "\t(find $root $prune \\( $(join:-name '*.$1': -o :o,lo,a,la) \\) -print |xargs rm -f)"
         $print
 
     subcode: dump_install

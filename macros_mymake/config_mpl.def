@@ -38,6 +38,12 @@ subcode: config_mpl
         $config_defines{HAVE_GCC_INTRINSIC_ATOMIC}=1
         $config_defines{HAVE_GCC_INTRINSIC_SYNC}=1
 
+        $config_defines{HAVE_X86INTRIN_H}=1
+
+        # /usr/include/libdrm/i915_drm.h
+        $if -f "/usr/include/libdrm/i915_drm.h"
+            $config_defines{HAVE_LIBDRM_I915_DRM_H} = 1
+
         $if $opts{cc_version}=~/gcc 4/
             $config_defines{COMPILER_TLS}="__thread"
         $else # C11
@@ -51,10 +57,13 @@ subcode: config_mpl
         $(for:a in aligned_alloc,BROKEN_VALGRIND,FDOPEN,getifaddrs,getpid,inet_ntop,sleep,usleep)
             $config_defines{HAVE_$(a:uc)}=1
 
-        $if $opts{"with-cuda"}
-            $config_defines{HAVE_GPU} = 1
-            $config_defines{HAVE_CUDA} = 1
+        $(for:a in cuda,hip,ze)
+            $case $opts{"with-$(a)"}
+                $config_defines{HAVE_GPU} = 1
+                $config_defines{HAVE_$(a:uc)} = 1
 
+        $config_defines{HAVE_POSIX_SHM}=1
+        $config_defines{HAVE_INITSHM}=1
         $config_defines{HAVE_PTHREAD_MUTEXATTR_SETPSHARED} = 1
 
         $config_defines{backtrace_size_t} = "int"
@@ -72,12 +81,18 @@ subcode: make_mpl
 
     my %conds
     $conds{MPL_EMBEDDED_MODE} = 1
-    $if $opts{"with-cuda"}
-        my $p = $opts{"with-cuda"}
-        $conds{MPL_HAVE_CUDA} = 1
-        $make_vars{CPPFLAGS} .= " -I$p/include"
-        $make_vars{LDFLAGS} .= " -L$p/lib64"
-        $make_vars{LIBS} .= " -lcudart -lcuda"
+    $(for:a in cuda,hip,ze)
+        $case $opts{"with-$(a)"}
+            my $p = $opts{"with-$(a)"}
+            $conds{MPL_HAVE_$(a:uc)} = 1
+            $make_vars{CPPFLAGS} .= " -I$p/include"
+            $make_vars{LDFLAGS} .= " -L$p/lib64"
+            $(if:a=cuda)
+                $make_vars{LIBS} .= " -lcudart -lcuda"
+            $(elif:a=hip)
+                $make_vars{LIBS} .= " -lhip"
+            $(elif:a=ze)
+                $make_vars{LIBS} .= " -lze_loader"
     # $conds{MPL_HAVE_ZE} = 1
     load_automake("src/mpl/Makefile.am", \%conds)
     @programs=()
@@ -105,6 +120,9 @@ subcode: make_pmi
     my %conds
     $conds{EMBEDDED_MODE} = 1
     $autoconf_vars{mpl_includedir} = "-I../mpl/include -I../include"
+
+    push @extra_make_rules, "test_pmi1: examples/test_pmi1.o libpmi.la"
+    push @extra_make_rules, "\t\@echo LTLD \$@ && \x24(LTLD) -o \$@ \$^ ../mpl/libmpl.la"
 
     load_automake("src/pmi/Makefile.am", \%conds)
     @programs=()

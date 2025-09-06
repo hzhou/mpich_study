@@ -7,7 +7,7 @@ subcode: config_romio
     $call ac_init, ROMIO, $version, discuss@mpich.org, romio, http://www.mpich.org/
     $call set_config_defines
     $call patch_mpio_h
-    system "touch src/mpi/romio/include/mpiof.h"
+    # system "touch src/mpi/romio/include/mpiof.h"
 
     subcode: set_config_defines
         $call AC_USE_SYSTEM_EXTENSIONS
@@ -19,7 +19,7 @@ subcode: config_romio
         $config_defines{LT_OBJDIR} = ".libs/"
 
         $config_defines{HAVE_LONG_LONG_64} = 1
-        $config_defines{HAVE_INT_LT_POINTER} = 1
+        $config_defines{INT_LT_POINTER} = 1
         $config_defines{HAVE_STRUCT_STATFS} = 1
         $config_defines{HAVE_STRUCT_AIOCB_AIO_FILDES} = 1
         $config_defines{HAVE_STRUCT_AIOCB_AIO_REQPRIO} = 1
@@ -59,12 +59,17 @@ subcode: config_romio
 
 subcode: make_romio
     my %conds
+    $conds{BUILD_BINDING} = 0
     $conds{BUILD_ROMIO_EMBEDDED} = 1
     $conds{MPIO_GLUE_MPICH} = 1
     $conds{BUILD_AD_UFS} = 1
     $conds{BUILD_AD_NFS} = 1
     $conds{BUILD_AD_TESTFS} = 1
+    $if $opts{"enable-mpi-abi"}
+        $conds{BUILD_ABI_LIB} = 1
+        $special_targets{libromio_abi_la} = "\x24(LTCC) -DBUILD_MPI_ABI"
     $autoconf_vars{mpl_includedir} = "-I../../mpl/include -I../../include"
+    $autoconf_vars{DEFINE_HAVE_MPI_GREQUEST}="#define HAVE_MPI_GREQUEST 1"
     load_automake("src/mpi/romio/Makefile.am", \%conds)
     dump_makefile("src/mpi/romio/Makefile")
 

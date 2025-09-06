@@ -86,8 +86,6 @@ subcode: parse_args
         $foreach $a in @ARGV
             $if $a=~/^-(quick|f08|noclean|sh)/
                 $opts{$1}=1
-            $elif $a=~/^-(.*?)=(.*)/
-                $opts{$1}=$2
             $elif $a=~/^--(.*?)=(.*)/ -> $o, $v
                 $opts{$1}=$2
                 $if $v eq "no"
@@ -95,6 +93,8 @@ subcode: parse_args
                         $opts{"without-$1"} = 1
                     $elif $o=~/^enable-(.*)/
                         $opts{"disable-$1"} = 1
+            $elif $a=~/^-(.*?)=(.*)/
+                $opts{$1}=$2
             $elif $a=~/^--(.*)/
                 $opts{$1}=1
             $elif $a=~/^(\w+)=(.*)/

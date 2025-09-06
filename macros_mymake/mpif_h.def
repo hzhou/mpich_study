@@ -246,21 +246,6 @@ subcode: load_mpidef_list
         $map push_MPI_key, ADDRESS_KIND, OFFSET_KIND, COUNT_KIND, INTEGER_KIND
 
 
-subcode: patch_mpif90model_h
-    &call open_W, src/binding/fortran/use_mpi/mpif90model.h
-        $print "#ifndef MPIR_F90MODEL_INCLUDED"
-        $print "#define MPIR_F90MODEL_INCLUDED"
-        # 6 decimal precision, 10^37 range
-        $print #define MPIR_F90_REAL_MODEL    6, 37
-        # 15 decimal precision, 10^307 range
-        $print #define MPIR_F90_DOUBLE_MODEL 15, 307
-        # default integer has range of 10^9
-        $print #define MPIR_F90_INTEGER_MODEL 9
-        # 1-, 2-, 4-, 8-byte integers (NOTE: the end comma is important)
-        $print #define MPIR_F90_ALL_INTEGER_MODELS 2, 1, 4, 2, 9, 4, 18, 8,
-        $print #define MPIR_F90_INTEGER_MODEL_MAP {2, 1, 1}, {4, 2, 2}, {9, 4, 4}, {18, 8, 8},
-        $print "#endif"
-
 subcode: write_mpi_constants_f90(f)
     &call open_W, $(f)
         $print MODULE MPI_CONSTANTS

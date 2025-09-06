@@ -5,7 +5,7 @@ subcode: mpich_slow
     $call @preproc_bindings
     $(setmacro:makefile=mpich)
 
-    $if !$opts{"with-pmi"} and !$opts{"with-pmix"} and !$opts{"with-pmi1"} and !$opts{"with-pmi2"}
+    $if $opts{"with-pmi"} or $opts{"with-pmix"} or $opts{"with-pmi1"} or $opts{"with-pmi2"}
         $opts{"3rd-party-pmi"} = 1
     $call set_general_make_rules
     $call mpich_make_setup
@@ -80,6 +80,9 @@ subcode: mpich_slow
                         $elif $l=~/^final_(c|cxx|f|fc)flags="(.*)"/ -> $c, $flags
                             $if $opts{CFLAGS}=~/-fsanitize=(address|undefined)/
                                 $l = "final_${c}flags=\"$flags -fsanitize=$1\"\n"
+                        $elif $l=~/cxxlibs="-l"/
+                            print Out "    cxxlibs=\n"
+                            next
                         print Out $l
 
     subcode: set_general_make_rules

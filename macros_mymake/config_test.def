@@ -12,6 +12,10 @@ subcode: config_init_test
     $else
         system "sed -e 's/\"gcc\"/\"$MPICC\"/' libtool > test/mpi/libtool"
     system "chmod a+x test/mpi/libtool"
+    $if -f "test/mpi/maint/gen_all_mpitests.py"
+        chdir "test/mpi"
+        system "python maint/gen_all_mpitests.py"
+        chdir "../.."
 
 subcode: config_test
     $call init_MPICC
@@ -40,6 +44,8 @@ subcode: config_test
             $config_defines{POINTERINT_t} = "long long"
 
         $config_defines{SIZEOF_MPI_OFFSET} = $sizeof_hash{VOID_P}
+
+        $config_defines{MPIO_USES_MPI_REQUEST} = 1
         # getrusage
         # $config_defines{HAVE_GETRUSAGE} = 1
 
@@ -106,6 +112,8 @@ subcode: make_test
         @extra_make_rules=()
         $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
         $call add_make_rule, util/libmtest_single.la, util, libmtest_single.la
+        $if -f "test/mpi/maint/gen_all_mpitests.py"
+            $call add_make_rule, util/librun_mpitests.la, util, librun_mpitests.la
         $if $a =~ /threads/
             $call add_make_rule, util/libmtest_thread.la, util, libmtest_thread.la
         $if $a =~ /datatype/
@@ -142,6 +150,21 @@ subcode: make_test
             undef $opts{ld_default}
         $else
             dump_makefile("test/mpi/$dir/Makefile")
+    $if -e "test/mpi/util/run_mpitests.c"
+        $call @make_init
+        my $top_srcdir = "."
+        $make_vars{top_srcdir}="."
+        load_automake("test/mpi/Makefile.am", \%conds)
+
+        @extra_make_rules=()
+        $call add_make_rule, dtpools/src/libdtpools.la, dtpools/src, libdtpools.la
+        $call add_make_rule, util/libmtest_single.la, util, libmtest_single.la
+
+        $make_vars{LIBTOOL} = "$top_srcdir/libtool"
+        $make_vars{CC} = "$MPICC"
+        $make_vars{CCLD} = "$MPICC"
+
+        dump_makefile("test/mpi/Makefile")
 
     subcode: add_make_rule(target, dir, sub_target, @dep)
         $(if:dep)
