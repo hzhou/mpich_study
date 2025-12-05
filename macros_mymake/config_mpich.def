@@ -52,6 +52,9 @@ subcode: config_mpich
     # ----------------------
     subcode: init_temp_defines
         $temp{HAVE_MPICHCONF}=1
+        my $commit = `git rev-parse --short HEAD`
+        chomp $commit
+        $temp{MPICH_COMMIT_HASH}="\"$commit\""
 
         # features
         $(for:nem,recvq,rma,dims)

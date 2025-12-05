@@ -24,6 +24,12 @@ page: mymake
     $call @dump_args
 
     my $python = find_python3()
+
+    my $commit = `git rev-parse --short HEAD`
+    &call open_w, MPICH_COMMIT_HASH
+        print Out "MPICH_COMMIT_HASH=$commit\n"
+    system "chmod a+x MPICH_COMMIT_HASH"
+
     $if -f "maint/gen_binding_c.py"
         $call autogen, src/mpi/pt2pt/send.c, $python maint/gen_binding_c.py -single-source
     $if -f "maint/gen_abi.py"

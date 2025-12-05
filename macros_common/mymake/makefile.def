@@ -91,6 +91,8 @@ fncode: dump_makefile($makefile, $moddir)
                     $flags.=" -module $modpath"
                 $elif $fc =~/^sunf\d+/
                     $flags.=" -moddir=$modpath"
+                $elif $fc =~/^nag+/
+                    NOOP
                 $elif $fc =~/^af\d+/
                     $flags.=" -YMOD_OUT_DIR=$modpath"
                 $else

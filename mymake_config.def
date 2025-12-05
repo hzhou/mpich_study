@@ -48,7 +48,7 @@ page: mymake_config
         $if 0
             NOOP
         $call filter_config_defines
-    $call post_config_defines
+    # $call post_config_defines
 
     $call load_version
 
