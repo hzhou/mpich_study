@@ -1,6 +1,0 @@
-include: build/config_h.def
-
-page: t.ac
-    module: sh
-
-    $call config_h

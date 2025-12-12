@@ -1,5 +1,0 @@
-include: build/ac_mpich.def
-
-page: t.ac, mpich_ac_frame
-    module: sh
-
