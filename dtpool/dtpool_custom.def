@@ -2,11 +2,9 @@ include: macros/common.def
 include: macros/create_idx.def
 
 page: dtpools.c, from template/dtpools.c
-    output_dir: ./dtp_out
     module: c
 
 page: dtpools_custom.c, from template/dtpools_custom.c
-    output_dir: ./dtp_out
     module: c
 
 macros:

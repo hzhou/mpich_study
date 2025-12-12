@@ -2,7 +2,7 @@ include: macros_mymake/jenkins_old.def
 include: macros_mymake/jenkins_new.def
 include: macros_mymake/test_frame.def
 include: macros_mymake/test_config.def
-include: macros_mymake/test_makelog.def
+# include: macros_mymake/test_makelog.def
 include: macros_mymake/test_random.def
 output_dir: ./mymake
 

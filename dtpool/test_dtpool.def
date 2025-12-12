@@ -47,7 +47,6 @@ template: init_dtp_desc_1
                              "1: resized [lb 8, extent 8]";
 page: dtpools
     module: c
-    output_dir: ./test_out
     seed: 0
 
     $local int err = 0
