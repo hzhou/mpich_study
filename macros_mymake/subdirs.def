@@ -155,11 +155,6 @@ subcode: need_romio
         $if $opts{"enable-mpi-abi"}
             $configure .= " --enable-mpi-abi"
 
-# NOTE: romio is in its original path
-subcode: filter_lib_romio
-    # $t=~s/\S+\/(romio)\/\S+\.la\s*//g
-    # $if $t=~/libpromio/
-
 #---------------------------------------- 
 subcode: need_yaksa
     $call add_subdir_inc_lib, yaksa
@@ -370,7 +365,7 @@ subcode: add_subdir_make(name)
             $if -f "$opts{moddir}/$(D$(name))/autogen.sh"
                 push @t, "sh autogen.sh"
             $else
-                push @t, "autoreconf -ivf"
+                push @t, "libtoolize && autoreconf -ivf"
             push @t, "$configure"
             push @t, "cp $pwd/libtool ."
         my $dep = "$config_h"

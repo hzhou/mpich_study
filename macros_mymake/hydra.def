@@ -49,7 +49,7 @@ subcode: hydra_config
             $elif $l=~/endif/
                 $flag_skip=0
                 next
-        system "autoreconf -ivf"
+        system "libtoolize && autoreconf -ivf"
     system "rm -f Makefile"
     system "./configure"
     $call patch_config_h

@@ -200,7 +200,7 @@ subcode: mpich_configure
         $call stage, Autoconf MPICH
         &call modify_frame, temporary
             $call modify_configure_ac
-            system "autoreconf -ivf"
+            system "libtoolize && autoreconf -ivf"
     $if !-f "mymake/Makefile.orig"
         $call stage, Configure MPICH
         $call get_mpl_flags

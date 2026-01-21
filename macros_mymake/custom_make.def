@@ -59,14 +59,11 @@ subcode: custom_make(what)
                 $objects{$add} = $t
 
         subcode:: set_libs_custom
-            $call filter_lib_mpl_etc
+            $t=~s/(\S+\/)?(mpl|pmi|openpa|izem|hwloc|yaksa|json-c|libfabric|ucx)\/\S+\.la\s*//g
+            $t=~s/\@(ofilib|ucxlib|mpl_lib|hwloc_lib|yaksa_lib|pmi_lib|json_lib)\@\s*//g
             $(if:makefile=hydra)
                 $t=~s/-lhydra/libhydra.la/g
                 $t=~s/-lpm/libpm.la/g
-            $(elif:makefile=mpich)
-                $call filter_lib_romio
-                $call filter_lib_ucx
-                $call filter_lib_ofi
 
             $(if:makefile=mpich and which=ltlibs)
                 $if ($add=~/libmpi_la_/ && $opts{have_weak}) or ($add=~/libpmpi_la_/)
@@ -78,14 +75,6 @@ subcode: custom_make(what)
                 $if $add=~/libhydra.*_la/
                     $t.= $L_list
 
-            subcode: filter_lib_mpl_etc
-                $t=~s/(\S+\/)?(mpl|pmi|openpa|izem|hwloc|yaksa|json-c|libfabric|ucx)\/\S+\.la\s*//g
-
-            subcode: filter_lib_ucx
-                $t=~s/\@ucxlib\@\s*//g
-
-            subcode: filter_lib_ofi
-                $t=~s/\@ofilib\@\s*//g
 #---------------------------------------- 
 subcode: modify_frame(@is_temp)
     my @mod_list

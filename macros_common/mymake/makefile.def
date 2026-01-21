@@ -302,6 +302,8 @@ fncode: dump_makefile($makefile, $moddir)
 
         subcode: check_cppflags
             my $t_cppflags = get_make_var("${a}_CPPFLAGS")
+            $if $t_cppflags
+                $t_cppflags=~s/\@(mpl|pmi|hwloc)_includedir\@//g
 
         subcode: set_objects
             my $o= "${a}_OBJECTS"
@@ -387,6 +389,8 @@ subcode:: dump_make_var_custom
         $if $opts{"with-cuda"}
             my $p = $opts{"with-cuda"}
             $I_list .= " -I$p/include"
+    $(if:key=AM_CPPFLAGS)
+        $t=~s/\@(mpl|hwloc|pmi)_includedir\@//g
 
 fncode: get_make_var_unique($name)
     my $tlist = get_make_var_list($name)
