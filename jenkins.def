@@ -125,6 +125,9 @@ page: test_quick.sh
         make install
         $call run_make, hydra
         make hydra-install
+        if test -e src/binding/fortran/Makefile
+            $call run_make, mpifort
+            make mpifort-install
 
         &call test_testing
             cp -r confdb/ test/mpi/confdb/

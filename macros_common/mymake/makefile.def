@@ -236,6 +236,8 @@ fncode: dump_makefile($makefile, $moddir)
         $(if:key=LDFLAGS)
             $if $opts{"with-cuda"}
                 $t .= " -L".$opts{"with-cuda"}."/lib64"
+            $elif $opts{"with-hip"}
+                $t .= " -L".$opts{"with-hip"}."/lib64"
         $print "$(key) = $t"
 
     subcode: dump_object(key, tlist)
@@ -388,6 +390,9 @@ subcode:: dump_make_var_custom
     $(if:key=CPPFLAGS)
         $if $opts{"with-cuda"}
             my $p = $opts{"with-cuda"}
+            $I_list .= " -I$p/include"
+        $elif $opts{"with-hip"}
+            my $p = $opts{"with-hip"}
             $I_list .= " -I$p/include"
     $(if:key=AM_CPPFLAGS)
         $t=~s/\@(mpl|hwloc|pmi)_includedir\@//g

@@ -39,6 +39,8 @@ subcode: parse_args
         $if $mod_tarball =~/modules\.tar\.gz$/
             $if $opts{"with-cuda"} && $mod_tarball
                 $mod_tarball=~s/modules.*\.tar\.gz/modules-gpu.tar.gz/
+            $elif $opts{"with-hip"} && $mod_tarball
+                $mod_tarball=~s/modules.*\.tar\.gz/modules-hip.tar.gz/
             $if !-e $mod_tarball
                 $print "$mod_tarball not found! Using module.tar.gz."
                 $mod_tarball = "modules.tar.gz"

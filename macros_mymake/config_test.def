@@ -58,6 +58,9 @@ subcode: config_test
         $if $opts{"with-cuda"}
             $config_defines{HAVE_GPU} = 1
             $config_defines{HAVE_CUDA} = 1
+        $elif $opts{"with-hip"}
+            $config_defines{HAVE_GPU} = 1
+            $config_defines{HAVE_HIP} = 1
 
     subcode: patch_runtests
         my %confs
@@ -136,6 +139,12 @@ subcode: make_test
             $make_vars{CPPFLAGS} .= " -I$p/include"
             $make_vars{LDFLAGS} .= " -L$p/lib64"
             $make_vars{LIBS} .= " -lcudart -lcuda"
+        $elif $opts{"with-hip"}
+            my $p = $opts{"with-hip"}
+            $conds{HAVE_HIP} = 1
+            $make_vars{CPPFLAGS} .= " -I$p/include"
+            $make_vars{LDFLAGS} .= " -L$p/lib64"
+            $make_vars{LIBS} .= " -lamdhip64"
 
         $make_vars{LIBTOOL} = "$top_srcdir/libtool"
         $make_vars{CC} = "$MPICC"

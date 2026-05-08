@@ -107,4 +107,6 @@ subcode: add_rule_hydra(name)
         $if $opts{"with-argobots"}
             $config_args .= " --with-argobots=$opts{argobots}"
         $if $opts{"with-cuda"}
-            $config_args .= " --with-cuda=$opts{cuda}"
+            $config_args .= " --with-cuda=$opts{'with-cuda'}"
+        $if $opts{"with-hip"}
+            $config_args .= " --with-hip=$opts{'with-hip'}"

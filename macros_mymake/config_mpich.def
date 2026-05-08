@@ -9,13 +9,15 @@ subcode: config_mpich
 
     $call set_config_defines
     $call patch_mpicc_etc
-    $call patch_mpi_h
+    my $mpi_h_confs
+    $if -e "src/include/mpi.h.in"
+        $call patch_mpi_h
     $call patch_mpir_ext_h
     $call patch_mpichinfo_h
     $call patch_mpif90model_h
     $if !$opts{disable_cxx}
         $call patch_mpicxx_h
-    $if !$opts{disable_fortran}
+    $if !$opts{disable_fortran} and $mpi_h_confs
         $call load_mpi_h, src/include/mpi.h
         my $dir="src/binding/fortran/mpif_h"
         $call write_mpif_h, $dir/mpif.h
@@ -385,15 +387,15 @@ subcode: config_mpich
             $elif $temp{MPICH_DATATYPE_ENGINE} eq "MPICH_DATATYPE_ENGINE_YAKSA"
                 $make_conds{BUILD_YAKSA_ENGINE} = 1
 
-            $(for:SCHED,THREAD,SELF)
+            $(for:SCHED,THREAD,SELF,GENQ_PRIVATE)
                 $make_conds{BUILD_MPID_COMMON_$1} = 1
             $if $opts{device}=~/ch4/
-                $(for:SHM,BC,GENQ,STREAM_WORKQ)
+                $(for:SHM,BC,STREAM_WORKQ,GENQ,GENQ_SHM)
                     $make_conds{BUILD_MPID_COMMON_$1} = 1
             $elif $opts{device}=~/ch3:sock/
                 # NOOP
             $else # ch3:tcp
-                $(for:SHM)
+                $(for:SHM,GENQ,GENQ_SHM)
                     $make_conds{BUILD_MPID_COMMON_$1} = 1
 
             # do not set BUILD_ROMIO; we will treat it as a subdir
@@ -437,7 +439,7 @@ subcode: patch_mpi_h
     $call set_mpi_aint
     $call set_mpi_datatypes
     autoconf_file("src/include/mpi.h", \%confs)
-    my $mpi_h_confs = \%confs
+    $mpi_h_confs = \%confs
 
     subcode: set_mpi_misc
         $confs{MPICH_VERSION} = $version
@@ -658,6 +660,9 @@ subcode: patch_mpicc_etc
     $confs{LDFLAGS} = $ENV{LDFLAGS}
     $if $opts{"with-cuda"}
         my $p = $opts{"with-cuda"}
+        $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
+    $elif $opts{"with-hip"}
+        my $p = $opts{"with-hip"}
         $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
     $confs{LIBS} = $ENV{LIBS}
     $confs{MPILIBNAME} = "mpi"

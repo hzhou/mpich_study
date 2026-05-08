@@ -89,7 +89,30 @@ subcode: mpich_slow
         $call set_mymake_DO
         $if !$opts{"3rd-party-pmi"}
             $call add_rule_hydra, hydra
+        $if -e "src/binding/fortran/Makefile.am"
+            $call add_rule_mpifort
         # $call add_rule_testing
+
+        subcode: add_rule_mpifort
+            $(set:name=fortran)
+            $(set:dir=src/binding/fortran)
+            my $mkfile="$(dir)/Makefile"
+            push @extra_make_rules, ".PHONY: $(name) $(name)-install"
+            push @extra_make_rules, "$(name): $mkfile"
+            push @extra_make_rules, "\t(cd $(dir) && \x24(MAKE) )"
+            push @extra_make_rules, ""
+            push @extra_make_rules, "$(name)-install: $mkfile"
+            push @extra_make_rules, "\t(cd $(dir) && \x24(MAKE) install )"
+            push @extra_make_rules, ""
+            push @extra_make_rules, "$(name)-clean:"
+            push @extra_make_rules, "\t(cd $(dir) && make clean && rm -f Makefile )"
+            push @extra_make_rules, ""
+            push @extra_make_rules, "$mkfile:"
+            my $autogen_env = "MPICH_CONFDB=../../../confdb"
+            my $config_args = "--prefix=$opts{prefix} --with-mpi=$opts{prefix}"
+            push @extra_make_rules, "\t(cd $(dir) &&  $autogen_env ./autogen.sh && ./configure $config_args )"
+            push @extra_make_rules, ""
+
 
     subcode: set_mymake_DO
         $(for:stage,clean,errmsg,cvars,logs,hydra,testing,mpi_h)
