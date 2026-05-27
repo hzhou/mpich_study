@@ -70,8 +70,13 @@ subcode: mpich_slow
 
     subcode: patch_mpicc_etc
         $(for:p in mpicc,mpicxx,mpifort)
+            my $script
             $if -f "src/env/$(p).bash"
-                $call get_file_lines, src/env/$(p).bash
+                $script = "src/env/$(p).bash"
+            $elif -f "src/binding/fortran/env/$(p).bash"
+                $script = "src/binding/fortran/env/$(p).bash"
+            $if $script
+                $call get_file_lines, $script
                 my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")
                 &call open_W, mymake/$(p)
                     $foreach $l in @lines
@@ -90,11 +95,11 @@ subcode: mpich_slow
         $if !$opts{"3rd-party-pmi"}
             $call add_rule_hydra, hydra
         $if -e "src/binding/fortran/Makefile.am"
-            $call add_rule_mpifort
+            system "cp maint/version.m4 src/binding/fortran/"
+            $call add_rule_mpifort, mpifort
         # $call add_rule_testing
 
-        subcode: add_rule_mpifort
-            $(set:name=fortran)
+        subcode: add_rule_mpifort(name)
             $(set:dir=src/binding/fortran)
             my $mkfile="$(dir)/Makefile"
             push @extra_make_rules, ".PHONY: $(name) $(name)-install"
@@ -178,8 +183,9 @@ subcode: mpich_make_setup
     # install mpicc etc.
     my $bin="\x24(PREFIX)/bin"
     $dst_hash{"mymake/mpicc"}=$bin
-    $dst_hash{"mymake/mpifort"}=$bin
     $dst_hash{"mymake/mpicxx"}=$bin
+    $if -e "src/env/mpifort.bash.in"
+        $dst_hash{"mymake/mpifort"}=$bin
     $if $opts{"enable-mpi-abi"}
         $dst_hash{"LN_S-$bin/mpicc_abi"}="$bin/mpicc"
 

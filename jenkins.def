@@ -113,7 +113,6 @@ page: test_build.sh
         subcode: apply_xfail
             perl $mymake_dir/apply_xfail.pl conf=maint/jenkins/xfail.conf netmod=$mpich_device queue=ib64 compiler=gnu config=default
 
-
 page: test_quick.sh
     module: general
 
@@ -125,7 +124,7 @@ page: test_quick.sh
         make install
         $call run_make, hydra
         make hydra-install
-        if test -e src/binding/fortran/Makefile
+        &call if_test, -e src/binding/fortran/Makefile.am
             $call run_make, mpifort
             make mpifort-install
 
@@ -152,9 +151,8 @@ page: build_modules.sh
     uname -a
 
     $(for:a in $(MODLIST))
-        if test $do_$(a) = yes ; then
+        &call if_test, $do_$(a) = yes
             $call do_$(a)
-        fi
 
     find . -name '*.o' |xargs rm -f
     rm -rf */.git
@@ -268,6 +266,11 @@ subcode: set_mymake_dir
             chomp $pwd
             $mymake_dir .= "$pwd/$1"
         $ENV{mymake_dir}=$mymake_dir
+
+subcode: if_test(@cond)
+    if test $(cond) ; then
+        BLOCK
+    fi
 
 #---------------------------------------- 
 page: jenkins.sh

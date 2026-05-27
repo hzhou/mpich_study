@@ -10,8 +10,7 @@ subcode: config_mpich
     $call set_config_defines
     $call patch_mpicc_etc
     my $mpi_h_confs
-    $if -e "src/include/mpi.h.in"
-        $call patch_mpi_h
+    $call patch_mpi_h
     $call patch_mpir_ext_h
     $call patch_mpichinfo_h
     $call patch_mpif90model_h
@@ -438,7 +437,13 @@ subcode: patch_mpi_h
     $call set_mpi_maxes
     $call set_mpi_aint
     $call set_mpi_datatypes
-    autoconf_file("src/include/mpi.h", \%confs)
+    my $mpi_h
+    $if -f "src/include/mpi_mpich.h.in"
+        $mpi_h = "src/include/mpi_mpich.h"
+    $elif -f "src/include/mpi.h.in"
+        $mpi_h = "src/include/mpi.h"
+    $if $mpi_h
+        autoconf_file($mpi_h, \%confs)
     $mpi_h_confs = \%confs
 
     subcode: set_mpi_misc
