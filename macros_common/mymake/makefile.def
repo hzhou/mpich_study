@@ -131,8 +131,11 @@ fncode: dump_makefile($makefile, $moddir)
             $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
             $print
             $if $opts{"with-cuda"}
+                my $cudalt = "confdb/cudalt.sh"
+                $if $makefile=~/src.mpl.Makefile/ and -e "src/mpl/src/gpu/cudalt.sh"
+                    $cudalt = "src/gpu/cudalt.sh"
                 $print "%.lo: %.cu"
-                $call quiet_rule, NVCC, confdb/cudalt.sh \$\@ nvcc -c \x24(AM_CPPFLAGS) \$<
+                $call quiet_rule, NVCC, $cudalt \$\@ nvcc -c \x24(AM_CPPFLAGS) \$<
                 $print
             $if !$opts{disable_cxx}
                 $print "%.lo: %.cxx"

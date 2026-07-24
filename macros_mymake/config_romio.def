@@ -67,7 +67,7 @@ subcode: make_romio
     $conds{BUILD_AD_TESTFS} = 1
     $if $opts{"enable-mpi-abi"}
         $conds{BUILD_ABI_LIB} = 1
-        $special_targets{libromio_abi_la} = "\x24(LTCC) -DBUILD_MPI_ABI"
+        $special_targets{libromio_abi_la} = "\x24(LTCC) -DMPICH_BUILD_MPI_ABI"
     $autoconf_vars{mpl_includedir} = "-I../../mpl/include -I../../include"
     $autoconf_vars{DEFINE_HAVE_MPI_GREQUEST}="#define HAVE_MPI_GREQUEST 1"
     load_automake("src/mpi/romio/Makefile.am", \%conds)

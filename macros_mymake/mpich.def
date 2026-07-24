@@ -173,7 +173,7 @@ subcode: mpich_make_setup
     $if $opts{do_pmpi}
         $special_targets{lib_libmpi_la}="\x24(LTCC) -DMPICH_MPI_FROM_PMPI"
     $if $opts{"enable-mpi-abi"}
-        my $CC = "\x24(LTCC) -DBUILD_MPI_ABI -Isrc/binding/abi"
+        my $CC = "\x24(LTCC) -DMPICH_BUILD_MPI_ABI -DBUILD_MPI_ABI -Isrc/binding/abi"
         $if !$opts{do_pmpi}
             $special_targets{lib_libmpi_abi_la}=$CC
         $else

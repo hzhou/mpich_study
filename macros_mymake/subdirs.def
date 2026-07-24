@@ -209,7 +209,7 @@ subcode: need_ucx
         $if -e "$L/lib64/libucp.so"
             $L_list .= " -L$L/lib64 -lucp -luct -lucm -lucs"
         $else
-            $print "libfabric.so NOT FOUND in $L"
+            $print "libucp.so NOT FOUND in $L"
 
     subcode: need_ucx_embedded
         $call patch_ucx_for_pgi
@@ -264,6 +264,8 @@ subcode: need_ofi
         $I_list .= " -I$L/include"
         $if -e "$L/lib64/libfabric.so"
             $L_list .= " -L$L/lib64 -lfabric"
+        $elif -e "$L/lib/libfabric.so"
+            $L_list .= " -L$L/lib -lfabric"
         $else
             $print "libfabric.so NOT FOUND in $L"
 
