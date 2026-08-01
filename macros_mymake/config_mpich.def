@@ -63,7 +63,8 @@ subcode: config_mpich
         $temp{HAVE_TAG_ERROR_BITS} = 1
         $temp{USE_PMI_PORT} = 1
         $temp{HAVE_NAMEPUB_SERVICE} = 1
-        $temp{HAVE_HWLOC} = 1
+        $if !$opts{"without-hwloc"}
+            $temp{HAVE_HWLOC} = 1
 
         $if $opts{"disable-error-checking"}
             NOOP
@@ -82,10 +83,10 @@ subcode: config_mpich
         # PMI
         $temp{ENABLE_PMI1} = 1
         $temp{ENABLE_PMI2} = 1
-        # $temp{ENABLE_PMIX} = 1
         $if $opts{"with-pmix"}
             $temp{ENABLE_PMI1} = undef
             $temp{ENABLE_PMI2} = undef
+            $temp{ENABLE_PMIX} = 1
             $temp{PMI_FROM_3RD_PARTY} = 1
 
         $if !$opts{disable_romio}

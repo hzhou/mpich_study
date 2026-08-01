@@ -28,3 +28,11 @@ Both modes use pre-built submodules from `modules.tar.gz` to skip submodule auto
 - `github/` — GitHub/PR management tools
 - `toy/` — Toy/test MPI programs
 - `mymake/` — Generated output directory
+- `mymake/config_templates/` — Autoconf header templates (`.h.in` files) used by quick mode to generate config headers
+- `mymake_sync_headers.def` — Script to regenerate config_templates from a fresh MPICH repo (`~/work/mpich-github`)
+
+## Config Templates
+
+`mymake/config_templates/` contains autoheader-generated `.h.in` files from various MPICH `configure.ac` files. These are used by quick mode's config logic (`macros_mymake/config_*.def`) as the basis for generating config headers.
+
+To regenerate from a fresh MPICH checkout: `perl mymake/mymake_sync_headers.pl`
