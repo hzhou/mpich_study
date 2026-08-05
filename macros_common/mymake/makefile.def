@@ -37,6 +37,8 @@ fncode: dump_makefile($makefile, $moddir)
 
     subcode: mymake_common_VARS
         $print "CONFIGS = @CONFIGS"
+        $if $opts{"with-cuda"}
+            $print "NVCC = $opts{'with-cuda'}/bin/nvcc"
         $print
         $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
         $print

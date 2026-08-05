@@ -89,17 +89,18 @@ subcode: need_mpl(@hydra)
 #---------------------------------------- 
 subcode: need_pmi(@hydra)
     $(if:!hydra)
-        $if !$opts{"with-pmi"} and !$opts{"with-pmix"} and !$opts{"with-pmi1"} and !$opts{"with-pmi2"}
+        $if $opts{"with-pmix"}
+            my $L=$opts{"with-pmix"}
+            $I_list .= " -I$L/include"
+            $L_list .= " -L$L/lib -lpmix"
+
+        $if !$opts{"with-pmi"} and !$opts{"with-pmi1"} and !$opts{"with-pmi2"}
             $opts{"embed_pmi"} = 1
             system "rsync -r confdb/ $(Dpmi)/confdb/" 
             system "cp maint/version.m4 $(Dpmi)/"
             $call add_subdir_inc_lib, pmi
             $call set_configure
             $call add_subdir_make, pmi
-        $elif $opts{"with-pmix"}
-            my $L=$opts{"with-pmix"}
-            $I_list .= " -I$L/include"
-            $L_list .= " -L$L/lib -lpmix"
         $elif $opts{"with-pmi1"}
             my $L=$opts{"with-pmi"}
             $I_list .= " -I$L/include"

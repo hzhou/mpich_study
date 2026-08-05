@@ -84,10 +84,12 @@ subcode: config_mpich
         $temp{ENABLE_PMI1} = 1
         $temp{ENABLE_PMI2} = 1
         $if $opts{"with-pmix"}
-            $temp{ENABLE_PMI1} = undef
-            $temp{ENABLE_PMI2} = undef
+            # $temp{ENABLE_PMI1} = undef
+            # $temp{ENABLE_PMI2} = undef
             $temp{ENABLE_PMIX} = 1
             $temp{PMI_FROM_3RD_PARTY} = 1
+            # OpenPMIx >= 5.0 FIXME: check pmix version
+            $temp{HAVE_PMIX_INFO_LOAD} = 1
 
         $if !$opts{disable_romio}
             $temp{HAVE_ROMIO} = 1
@@ -632,6 +634,7 @@ subcode: patch_mpichinfo_h
     $confs{CFLAGS} = ""
     $confs{MPICH_CUSTOM_STRING}=""
     $confs{MPICH_ABIVERSION} = "0:0:0"
+    $confs{MPICH_YAKSA_INFO} = "seq" # FIXME
     autoconf_file("src/include/mpichinfo.h", \%confs)
 
 subcode: patch_mpicxx_h
