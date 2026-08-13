@@ -1,5 +1,6 @@
 include: macros_mymake/dependency.def
 include: macros_mymake/gforker.def
+include: macros_mymake/mpicc_etc.def
 
 subcode: mpich_slow
     $call @preproc_bindings
@@ -9,6 +10,7 @@ subcode: mpich_slow
         $opts{"3rd-party-pmi"} = 1
     $call set_general_make_rules
     $call mpich_make_setup
+    $call load_maint_version
 
     my $ret=0
     $call mpich_configure
@@ -68,34 +70,13 @@ subcode: mpich_slow
                 &call open_W, mymake/CFLAGS
                     $print $1
 
-    subcode: patch_mpicc_etc
-        $(for:p in mpicc,mpicxx,mpifort)
-            my $script
-            $if -f "src/env/$(p).bash"
-                $script = "src/env/$(p).bash"
-            $elif -f "src/binding/fortran/env/$(p).bash"
-                $script = "src/binding/fortran/env/$(p).bash"
-            $if $script
-                $call get_file_lines, $script
-                my %tmp=(PREFIX=>$opts{prefix}, EXEC_PREFIX=>"$opts{prefix}/bin", SYSCONFDIR=>"$opts{prefix}/etc", INCLUDEDIR=>"$opts{prefix}/include", LIBDIR=>"$opts{prefix}/lib")
-                &call open_W, mymake/$(p)
-                    $foreach $l in @lines
-                        $if $l=~/_TO_BE_FILLED_AT_INSTALL_TIME__/
-                            $l=~s/__(\w+)_TO_BE_FILLED_AT_INSTALL_TIME__/$tmp{$1}/e
-                        $elif $l=~/^final_(c|cxx|f|fc)flags="(.*)"/ -> $c, $flags
-                            $if $opts{CFLAGS}=~/-fsanitize=(address|undefined)/
-                                $l = "final_${c}flags=\"$flags -fsanitize=$1\"\n"
-                        $elif $l=~/cxxlibs="-l"/
-                            print Out "    cxxlibs=\n"
-                            next
-                        print Out $l
-
     subcode: set_general_make_rules
         $call set_mymake_DO
         $if !$opts{"3rd-party-pmi"}
             $call add_rule_hydra, hydra
         $if -e "src/binding/fortran/Makefile.am"
             system "cp maint/version.m4 src/binding/fortran/"
+            system "touch src/binding/fortran/localdefs"
             $call add_rule_mpifort, mpifort
         # $call add_rule_testing
 
@@ -184,8 +165,6 @@ subcode: mpich_make_setup
     my $bin="\x24(PREFIX)/bin"
     $dst_hash{"mymake/mpicc"}=$bin
     $dst_hash{"mymake/mpicxx"}=$bin
-    $if -e "src/env/mpifort.bash.in"
-        $dst_hash{"mymake/mpifort"}=$bin
     $if $opts{"enable-mpi-abi"}
         $dst_hash{"LN_S-$bin/mpicc_abi"}="$bin/mpicc"
 

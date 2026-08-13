@@ -50,7 +50,7 @@ page: mymake_config
         $call filter_config_defines
     # $call post_config_defines
 
-    $call load_version
+    $call load_maint_version
 
     $call set_cc
     $call get_c_sizeof
@@ -67,13 +67,6 @@ page: mymake_config
 
     $call collect_config_h
     $call dump_config_h
-
-    subcode: load_version
-        $global $version
-        &call open_r, "maint/version.m4"
-            $if /m4_define\(\[MPICH_VERSION_m4\],\[(.*)\]/
-                $version = $1
-                last
 
 page: mymake_makefile
     my $what=shift @ARGV
