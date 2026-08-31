@@ -13,6 +13,7 @@ subcode: config_mpich
     $call patch_mpicc_etc
     my $mpi_h_confs
     $call patch_mpi_h
+    $call patch_mpi_fortran_h
     $call patch_mpir_ext_h
     $call patch_mpichinfo_h
     $call patch_mpif90model_h
@@ -436,6 +437,12 @@ subcode: config_mpich
                     last
 
 #---------------------------------------- 
+subcode: patch_mpi_fortran_h
+    my %confs
+    $confs{MPI_FINT} = "int"
+    $if -f "src/include/mpi_fortran.h.in"
+        autoconf_file("src/include/mpi_fortran.h", \%confs)
+
 subcode: patch_mpi_h
     my %confs
     $call set_mpi_misc

@@ -16,9 +16,13 @@ subcode: patch_mpicc_etc
         my $p = $opts{"with-hip"}
         $confs{LDFLAGS} .= "  -Wl,-rpath -Wl,$p/lib64"
     $confs{LIBS} = $ENV{LIBS}
-    $confs{MPILIBNAME} = "mpi"
-    $confs{PMPILIBNAME} = "pmpi"
-    $confs{MPIABILIBNAME} = "mpi_abi"
+    $if $opts{"enable-mpi-abi"}
+        $confs{MPILIBNAME} = "mpi_abi"
+        $confs{PMPILIBNAME} = "pmpi_abi"
+    $else
+        $confs{MPILIBNAME} = "mpi"
+        $confs{PMPILIBNAME} = "pmpi"
+        $confs{MPIABILIBNAME} = "mpi_abi"
     $if $opts{cc_weak} eq "no"
         $confs{LPMPILIBNAME} = "-lpmpi"
     $else
@@ -38,6 +42,8 @@ subcode: patch_mpicc_etc
 
     $if $opts{CFLAGS}=~/-fsanitize=(address|undefined)/
         $confs{WRAPPER_CFLAGS} .= " -fsanitize=$1"
+
+    $confs{WRAPPER_EXTRA_F77_FLAGS} = "-fallow-argument-mismatch"
 
     $call load_shlib_conf
     $confs{PREFIX}=$opts{prefix}

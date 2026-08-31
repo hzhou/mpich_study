@@ -80,11 +80,13 @@ subcode: parse_args
 
         $(if:_pagename=mymake)
             $call post_config_defines
-        $(for:CC,CXX,F77,FC)
+        $(for:CC,CXX,FC and gcc,g++,gfortran)
             $if $opts{$1}
                 $ENV{$1}=$opts{$1}
             $elif $ENV{$1}
                 $opts{$1} = $ENV{$1}
+            $else
+                $opts{$1} = "$2"
 
     subcode: parse_ARGV
         $foreach $a in @ARGV
