@@ -52,8 +52,9 @@ subcode: config_fortran
 subcode: add_extra_use_mpi
     $(set:D=src/binding/fortran)
     $(set:U=src/binding/fortran/use_mpi)
-    push @extra_make_rules, "$(U)/mpi.lo: $(U)/mpi_constants.lo $(U)/mpi_sizeofs.lo $(U)/mpi_base.lo"
+    push @extra_make_rules, "$(U)/mpi.lo: $(U)/mpi_constants.lo $(U)/mpi_sizeofs.lo $(U)/mpi_base.lo $(U)/pmpi_base.lo"
     push @extra_make_rules, "$(U)/mpi_base.lo: $(U)/mpi_constants.lo", ""
+    push @extra_make_rules, "$(U)/pmpi_base.lo: $(U)/mpi_constants.lo", ""
     push @extra_make_rules, "$(U)/mpi_sizeofs.lo: $(U)/mpifnoext.h", ""
     push @extra_make_rules, "$(U)/mpi_constants.lo: $(U)/mpifnoext.h", ""
     push @extra_make_rules, "$(U)/mpifnoext.h: $(D)/mpif_h/mpif.h"

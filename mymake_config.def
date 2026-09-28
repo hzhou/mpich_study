@@ -346,6 +346,7 @@ subcode: get_c_features
     $config_defines{HAVE__FUNCTION__}="\x2f**/"
     $(for:a in PRAGMA_WEAK_ALIAS,MULTIPLE_PRAGMA_WEAK, GCC_ATTRIBUTE, MACRO_VA_ARGS, VA_COPY, VISIBILITY, BUILTIN_EXPECT, C11__STATIC_ASSERT, H_ADDR_LIST, SCHED_GETAFFINITY, SCHED_SETAFFINITY, SETITIMER, STRUCT_RANDOM_DATA)
         $config_defines{HAVE_$(a)}=1
+    $config_defines{HAVE_PRAGMA_WEAK}=1
     $config_defines{USE_WEAK_SYMBOLS}=1
     $config_defines{WORDS_LITTLEENDIAN}=1
 
