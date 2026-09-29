@@ -53,7 +53,9 @@ fncode: load_automake($file, $cond_hash)
                     $if $dir ne "noinst"
                         $dst_hash{$a} = "\x24(PREFIX)/$dir"
             $elif /^(\w+)\s*\+?=\s*(.*)/
-                $make_vars{$1}.="$2 "
+                $if $make_vars{$1}
+                    $make_vars{$1}.=" "
+                $make_vars{$1}.=$2
 
     subcode: get_file_in_lines(file)
         my @lines
