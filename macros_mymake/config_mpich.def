@@ -13,29 +13,11 @@ subcode: config_mpich
     $call patch_mpicc_etc
     my $mpi_h_confs
     $call patch_mpi_h
-    $call patch_mpi_fortran_h
     $call patch_mpir_ext_h
     $call patch_mpichinfo_h
     $call patch_mpif90model_h
     $if !$opts{disable_cxx}
         $call patch_mpicxx_h
-    $if !$opts{disable_fortran} and $mpi_h_confs
-        $call load_mpi_h, src/include/mpi.h
-        my $dir="src/binding/fortran/mpif_h"
-        $call write_mpif_h, $dir/mpif.h
-        my $dir="src/binding/fortran/use_mpi"
-        $call write_mpi_constants_f90, $dir/mpi_constants.f90
-        my %confs
-        $confs{WTIME_DOUBLE_TYPE} = "REAL*8"
-        $confs{SIZEOF_FC_INTEGER} = $sizeof_hash{INTEGER}
-        $confs{SIZEOF_FC_REAL} = $sizeof_hash{REAL}
-        $confs{SIZEOF_FC_DOUBLE_PRECISION} = $sizeof_hash{DOUBLE_PRECISION}
-        $confs{SIZEOF_FC_CHARACTER} = $sizeof_hash{CHARACTER}
-        my $dir="src/binding/fortran/use_mpi_f08"
-        $call write_f08_types, $dir/mpi_f08_types.f90
-        $call write_f08_c_interface_types, $dir/mpi_c_interface_types.f90
-        $call write_f08_constants, $dir/mpi_f08_compile_constants.f90
-        $call write_f08_link_constants_f90, $dir/mpi_f08_link_constants.f90
     $if $opts{"enable-mpi-abi"}
         $make_conds{BUILD_ABI_LIB} = 1
     $else
@@ -82,8 +64,6 @@ subcode: config_mpich
         # fortran
         $temp{TRUE} = 1
         $temp{FALSE} = 0
-        $temp{F77_NAME_LOWER_USCORE} = 1
-        $temp{HAVE_AINT_DIFFERENT_THAN_FINT} = 1
 
         # PMI
         $temp{ENABLE_PMI1} = 1
@@ -176,14 +156,6 @@ subcode: config_mpich
         $elif $opts{device} =~ /ch3/ and $opts{device}!~/:sock/
             $call patch_ch3_nemesis
 
-        $if !$opts{disable_fortran}
-            $temp{HAVE_NO_FORTRAN_MPI_TYPES_IN_C} = 1
-            $temp{HAVE_FORTRAN_BINDING} = 1
-            $if $sizeof_hash{VOID_P} > $sizeof_hash{INT}
-                $temp{HAVE_AINT_LARGER_THAN_FINT} = 1
-            $temp{MPIR_FC_REAL_CTYPE} = "float"
-            $temp{MPIR_FC_DOUBLE_CTYPE} = "double"
-            $call patch_setbot_c
         $if 0 # cxx
             $temp{HAVE_NAMESPACES}=1
             $temp{HAVE_NAMESPACE_STD}=1
@@ -410,18 +382,6 @@ subcode: config_mpich
             $if !$opts{disable_cxx}
                 $make_conds{BUILD_CXX_BINDING} = 1
 
-            $if !$opts{disable_fortran}
-                $make_conds{BUILD_F77_BINDING} = 1
-                $make_conds{BUILD_FC_BINDING} = 1
-                $if $opts{f08}
-                    $make_conds{BUILD_F08_BINDING} = 1
-                    $config_defines{HAVE_F08_BINDING} = 1
-                $else
-                    $config_defines{HAVE_F08_BINDING} = 0
-            $else
-                $(for:mpif_h,use_mpi, use_mpi_f08)
-                    system "touch src/binding/fortran/$1/Makefile.mk"
-
             $if 1
                 $make_conds{BUILD_PMI_SIMPLE} = 1
             $else
@@ -439,12 +399,6 @@ subcode: config_mpich
                     last
 
 #---------------------------------------- 
-subcode: patch_mpi_fortran_h
-    my %confs
-    $confs{MPI_FINT} = "int"
-    $if -f "src/include/mpi_fortran.h.in"
-        autoconf_file("src/include/mpi_fortran.h", \%confs)
-
 subcode: patch_mpi_h
     my %confs
     $call set_mpi_misc
@@ -529,11 +483,6 @@ subcode: patch_mpi_h
         $sizeof_hash{"C_FLOAT16"} = 2
         $(for:FLOAT,DOUBLE,LONG_DOUBLE)
             $sizeof_hash{"C_$1_COMPLEX"} = $sizeof_hash{"$1__COMPLEX"}
-        # fortran
-        $sizeof_hash{CHARACTER} = $sizeof_hash{CHAR}
-        $sizeof_hash{INTEGER} = $sizeof_hash{INT}
-        $sizeof_hash{REAL} = $sizeof_hash{FLOAT}
-        $sizeof_hash{DOUBLE_PRECISION} = $sizeof_hash{DOUBLE}
 
         $(for:$(DT_basic_range) and $(DT_basic_set))
             $call set_datatype, $2, $1
@@ -541,26 +490,8 @@ subcode: patch_mpi_h
         $(for:$(DT_pair_range) and $(DT_pair_set))
             $call set_pairtype, $2, $1
 
-        # -- FORTRAN --
-        $if !$opts{disable_fortran}
-            $(for:$(DT_fortran_range) and $(DT_fortran_set))
-                $call set_datatype, $2, $1
-            # MPIR_INTERGER#_CTYPE
-            $foreach $n in 1,2,4,8
-                $foreach $type in "char", "short", "int", "long", "long long"
-                    my $a = get_config_name($type)
-                    $if $sizeof_hash{$a} == $n
-                        $config_defines{"MPIR_INTEGER${n}_CTYPE"} = $type
-                        last
-            $foreach $n in 4,8,16
-                $foreach $type in "float", "double", "__float128"
-                    my $a = get_config_name($type)
-                    $if $sizeof_hash{$a} == $n
-                        $config_defines{"MPIR_REAL${n}_CTYPE"} = $type
-                        last
-        $else
-            $(for:$(DT_fortran_set))
-                $call set_datatype_null, $1
+        $(for:$(DT_fortran_set))
+            $call set_datatype_null, $1
         $map set_datatype_null, REAL2, COMPLEX4
 
         # -- CXX --
@@ -652,10 +583,6 @@ subcode: patch_mpichinfo_h
 subcode: patch_mpicxx_h
     my %confs
     $confs{HAVE_CXX_EXCEPTIONS}=0
-    $if !$opts{disable_fortran}
-        $confs{FORTRAN_BINDING} = 1
-    $else
-        $confs{FORTRAN_BINDING} = 0
     $if !$opts{disable_romio}
         $confs{HAVE_CXX_IO} = 1
     $else
@@ -671,17 +598,6 @@ subcode: patch_mpicxx_h
 
     subcode: set_datatype_cxx(T, idx)
         $confs{MPIR_$(T)} = sprintf("0x4c00%02x$(idx)", $sizeof_hash{"$(T)"})
-
-subcode: patch_mpif_h
-
-#---------------------------------------- 
-subcode: patch_setbot_c
-    my %confs
-    $confs{MPI_STATUS_SIZE} = 5
-    $confs{CMB_1INT_ALIGNMENT}='__attribute__((aligned(16)))'
-    $confs{CMB_STATUS_ALIGNMENT}='__attribute__((aligned(32)))'
-    autoconf_file("src/binding/fortran/mpif_h/setbot.c", \%confs)
-    autoconf_file("src/binding/fortran/mpif_h/setbotf.f", \%confs)
 
 #---------------------------------------- 
 subcode: get_c_sizeof_mpich
@@ -767,22 +683,6 @@ subcode: make_mpich
 
     $if !$opts{disable_cxx}
         $call config_cxx
-    $if !$opts{disable_fortran}
-        $call config_fortran
-        my $U="src/binding/fortran"
-        # ----
-        $make_vars{AM_FCFLAGS} = "-I$U/use_mpi"
-        my @mods
-        $(for:mpi,mpi_sizeofs,mpi_constants,mpi_base)
-            push @mods, "$U/use_mpi/$1.mod"
-        $if $opts{f08}
-            $(for:pmpi_f08,mpi_f08)
-                push @mods, "$U/use_mpi/$1.mod"
-            $(for:callbacks,compile_constants,link_constants,types)
-                push @mods, "$U/use_mpi/mpi_f08_$1.mod"
-            $(for:cdesc,glue,nobuf,types)
-                push @mods, "$U/use_mpi/mpi_c_interface_$1.mod"
-        $make_vars{modinc_HEADERS} = join(' ', @mods)
 
     $if $opts{cc_weak} eq "no"
         $make_vars{lib_libpmpi_la_LIBADD} .= " $L_list"
@@ -830,6 +730,21 @@ subcode: make_mpich
         # $call add_rule_remshell
         $call add_rule_hydra, hydra
         # $call add_rule_hydra, hydra2
+        $call add_rule_fortran
+
+    subcode: add_rule_fortran
+        my $add="lib/libmpi.la src/binding/fortran/Makefile"
+        push @extra_make_rules, ".PHONY: fortran fortran-install"
+        push @extra_make_rules, ""
+        push @extra_make_rules, "src/binding/fortran/Makefile:"
+        push @extra_make_rules, "\t\x24(DO_config) fortran && \x24(DO_makefile) fortran"
+        push @extra_make_rules, ""
+        push @extra_make_rules, "fortran: $add"
+        push @extra_make_rules, "\t(cd src/binding/fortran && \x24(MAKE) )"
+        push @extra_make_rules, ""
+        push @extra_make_rules, "fortran-install: $add"
+        push @extra_make_rules, "\t(cd src/binding/fortran && \x24(MAKE) install )"
+        push @extra_make_rules, ""
 
     subcode: add_rule_hydra(name)
         my $add="$(Lmpl) \x24(MODDIR)/$(Lhwloc) src/pm/hydra/Makefile"

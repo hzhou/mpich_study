@@ -28,6 +28,7 @@ fncode: load_automake($file, $cond_hash)
             $make_vars{top_srcdir} = "."
         my $prev
         $foreach @lines
+            s/\x24\(srcdir\)/./g
             s/\x24\(top_srcdir\)/$make_vars{top_srcdir}/g
             s/\x24\(top_builddir\)/$make_vars{top_srcdir}/g
             s/\@(\w+)\@/$autoconf_vars{$1}/g

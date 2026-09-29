@@ -10,7 +10,7 @@ subcode: preproc_bindings
     $dst_hash{"LN_S-$bin/mpic++"}="$bin/mpicxx"
 
     $if !$opts{disable_fortran}
-        $call config_fortran
+        $call config_fortran_binding
         $dst_hash{"mymake/mpifort"}=$bin
         $dst_hash{"LN_S-$bin/mpif90"}="$bin/mpifort"
         $dst_hash{"LN_S-$bin/mpif77"}="$bin/mpifort"
@@ -43,7 +43,7 @@ subcode: autogen_fortran
         $if -f "maint/gen_binding_f08.py"
             system "$python maint/gen_binding_f08.py"
 
-subcode: config_fortran
+subcode: config_fortran_binding
     $(set:D=src/binding/fortran)
     $call add_extra_use_mpi
     $call add_extra_use_mpi_f08

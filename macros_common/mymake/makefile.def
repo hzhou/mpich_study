@@ -43,11 +43,13 @@ fncode: dump_makefile($makefile, $moddir)
         $map dump_variable, DEFS, DEFAULT_INCLUDES, INCLUDES, AM_CPPFLAGS, CPPFLAGS, AM_CFLAGS, CFLAGS, AM_LDFLAGS, LDFLAGS, LIBS
         $print
 
-        $call dump_CC
-        $if !$opts{disable_cxx}
-            $call dump_cxx
-        $if !$opts{disable_fortran}
+        $if $makefile=~/src.binding.fortran./
+            $call dump_CC
             $call dump_fortran
+        $else
+            $call dump_CC
+            $if !$opts{disable_cxx}
+                $call dump_cxx
 
     # ---- COMPILER CHAIN ------------------------
     macros: 
@@ -82,30 +84,28 @@ fncode: dump_makefile($makefile, $moddir)
     # FIXME: add -module src/binding/fortran/use_mpi
     #    or modify to install modules from srcdir
     subcode: dump_fortran
-        # $(for:F77,FC and F,FC)
-        $(for:FC and FC)
-            my $fc = get_make_var("$1")
-            my $flags = get_make_var("$2FLAGS")
-            my $am_flags = get_make_var("AM_$2FLAGS")
-            $flags.=" $am_flags"
-            $if $flags=~/-I(\S+)/ -> $modpath
-                $if $fc =~/^(pgfortran|ifort|ifx)/
-                    $flags.=" -module $modpath"
-                $elif $fc =~/^sunf\d+/
-                    $flags.=" -moddir=$modpath"
-                $elif $fc =~/^nag+/
-                    NOOP
-                $elif $fc =~/^af\d+/
-                    $flags.=" -YMOD_OUT_DIR=$modpath"
-                $else
-                    $flags.=" -J$modpath"
-            $print "$1COMPILE = $fc $flags"
-            $if $lt
-                $print "LT$1 = $(LT:compile) --tag=$1 \x24($1COMPILE)"
+        my $fc = get_make_var("FC")
+        my $flags = get_make_var("FCFLAGS")
+        my $am_flags = get_make_var("AM_FCFLAGS")
+        $flags.=" $am_flags"
+        $if $flags=~/-I(\S+)/ -> $modpath
+            $if $fc =~/^(pgfortran|ifort|ifx)/
+                $flags.=" -module $modpath"
+            $elif $fc =~/^sunf\d+/
+                $flags.=" -moddir=$modpath"
+            $elif $fc =~/^nag+/
+                NOOP
+            $elif $fc =~/^af\d+/
+                $flags.=" -YMOD_OUT_DIR=$modpath"
+            $else
+                $flags.=" -J$modpath"
+        $print "FCCOMPILE = $fc $flags"
+        $if $lt
+            $print "LTFC = $(LT:compile) --tag=FC \x24(FCCOMPILE)"
 
-                my $ld = get_make_var("$1LD")
-                $print "$1LD = $(LT:link) --tag=$1 $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
-            $print
+            my $ld = get_make_var("FCLD")
+            $print "FCLD = $(LT:link) --tag=FC $ld \x24(AM_LDFLAGS) \x24(LDFLAGS)"
+        $print
 
     # ----------------------
     subcode: dump_extra
@@ -132,6 +132,13 @@ fncode: dump_makefile($makefile, $moddir)
             $print "%.lo: %.c"
             $call quiet_rule, LTCC, \x24(LTCC) -c -o \$\@ \$<
             $print
+            $if $makefile=~/src.binding.fortran/
+                $print "%.lo: %.f"
+                $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+                $print
+                $print "%.lo: %.f90"
+                $call quiet_rule, LTFC, \x24(LTFC) -c -o \$\@ \$<
+                $print
             $if $opts{"with-cuda"}
                 my $cudalt = "confdb/cudalt.sh"
                 $if $makefile=~/src.mpl.Makefile/ and -e "src/mpl/src/gpu/cudalt.sh"
@@ -229,8 +236,9 @@ fncode: dump_makefile($makefile, $moddir)
             $foreach $l in @install_list
                 $print "\t$l"
             $print
-            $print "all-install: install hydra-install"
-            $print
+            $if $makefile eq "Makefile"
+                $print "all-install: install hydra-install"
+                $print
 
     # ---- DUMP UTILS --------------------
     subcode: dump_variable(key)
