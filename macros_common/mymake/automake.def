@@ -101,7 +101,7 @@ fncode: get_make_objects($p, $is_program)
     my $t = get_make_var("${a}_SOURCES")
     $t .= get_make_var("dist_${a}_SOURCES")
     $t .= get_make_var("nodist_${a}_SOURCES")
-    $if !$t
+    $if !$t and $is_program
         $t = "$p.c"
     my @tlist
     $foreach $a in  split /\s+/, $t

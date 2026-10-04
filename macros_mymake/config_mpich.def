@@ -733,7 +733,10 @@ subcode: make_mpich
         $call add_rule_fortran
 
     subcode: add_rule_fortran
-        my $add="lib/libmpi.la src/binding/fortran/Makefile"
+        my $add="lib/libmpi.la"
+        $if $opts{"enable-mpi-abi"}
+            $add="lib/libmpi_abi.la"
+        $add .= " src/binding/fortran/Makefile"
         push @extra_make_rules, ".PHONY: fortran fortran-install"
         push @extra_make_rules, ""
         push @extra_make_rules, "src/binding/fortran/Makefile:"
