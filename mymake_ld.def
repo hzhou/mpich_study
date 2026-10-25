@@ -2,6 +2,8 @@ include: macros_common/mymake.def
 output_dir: ./mymake
 
 page: mymake_ld
+    module: perl
+
     my (@args, %info)
     my $lt = "./libtool"
     $call parse_args
@@ -102,6 +104,8 @@ page: mymake_ld
             undef $opt
 
 page: mymake_install
+    module: perl
+
     $use Cwd
     my ($obj, $dst) = @ARGV
     $if $dst=~/\/lib$/

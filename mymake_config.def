@@ -29,6 +29,8 @@ macros:
     # showload: 1
 
 page: mymake_config
+    module: perl
+
     $global $config, $config_in, $config_out, $config_prefix
     $config = shift @ARGV
     $print -- mymake_config $config ...
@@ -70,6 +72,8 @@ page: mymake_config
     $call dump_config_h
 
 page: mymake_makefile
+    module: perl
+
     my $what=shift @ARGV
     $if !$what
         $what = "mpich"

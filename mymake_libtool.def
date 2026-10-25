@@ -5,6 +5,8 @@ include: macros_mymake/libtool.def
 output_dir: ./mymake
 
 page: mymake_libtool
+    module: perl
+
     $call load_opts
 
     $call mymake_libtool, CXX, F77, FC
