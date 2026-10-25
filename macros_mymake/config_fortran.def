@@ -76,6 +76,10 @@ subcode: config_fortran
         $config_defines{MPI_REAL8_SUPPORTED} = 1
         $config_defines{MPI_COMPLEX8_SUPPORTED} = 1
         $config_defines{MPI_COMPLEX16_SUPPORTED} = 1
+        # optional types, as configure does: try to compile a declaration
+        $(for:LOGICAL16,INTEGER16,REAL2,REAL16,COMPLEX4,COMPLEX32 and logical*16,integer*16,real*2,real*16,complex*4,complex*32)
+            $if fc_has_type("$2")
+                $config_defines{MPI_$1_SUPPORTED} = 1
 
         $config_defines{F77_TRUE_VALUE} = 1
         $config_defines{F77_FALSE_VALUE} = 0
@@ -186,3 +190,11 @@ subcode: mod_add_extra_use_mpi_f08
             push @extra_make_rules, "$(U)/wrappers_f/$1.lo: $(U)/mpi_f08.lo $(U)/mpi_c_interface.lo"
             push @extra_make_rules, "$(U)/wrappers_f/p$1.lo: $(U)/mpi_f08.lo $(U)/mpi_c_interface.lo"
 
+
+fncode: fc_has_type($type)
+    &call open_w, mymake/t-fc.f
+        print Out "      program t\n      $type a\n      end\n"
+    system "$opts{FC} -c -o mymake/t-fc.o mymake/t-fc.f >/dev/null 2>&1"
+    my $ret = ($? == 0)
+    unlink "mymake/t-fc.f", "mymake/t-fc.o"
+    return $ret
