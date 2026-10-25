@@ -48,6 +48,9 @@ fncode: load_automake($file, $cond_hash)
                     $if $dir ne "noinst"
                         $dst_hash{$a} = "\x24(PREFIX)/$dir"
             $elif /^(\w+)_PROGRAMS\s*\+?=\s*(.*)/ -> $dir, $t
+                # like automake, don't build EXTRA_PROGRAMS by default
+                $if $dir eq "EXTRA"
+                    $t = ""
                 $foreach $a in split /\s+/, $t
                     push @programs, $a
                     $if $dir ne "noinst"
