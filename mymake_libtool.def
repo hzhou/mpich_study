@@ -2,6 +2,8 @@ include: macros_common/mymake.def
 include: macros_common/mymake/libtool.def
 include: macros_mymake/libtool.def
 
+output_dir: ./mymake
+
 page: mymake_libtool
     $call load_opts
 
