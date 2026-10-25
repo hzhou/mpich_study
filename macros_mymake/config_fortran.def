@@ -137,6 +137,8 @@ subcode: make_fortran
 
     $make_vars{DEFAULT_INCLUDES} = "-I."
     $make_vars{AM_CPPFLAGS} = "-fvisibility=hidden -Isrc/binding/fortran"
+    # mpi.h and mpix.h from the MPICH tree, matching mpi_libs
+    $make_vars{CPPFLAGS} = "-I../../include"
     $make_vars{srcdir} = "src/binding/fortran"
 
     load_automake("src/binding/fortran/Makefile.am", \%conds)
