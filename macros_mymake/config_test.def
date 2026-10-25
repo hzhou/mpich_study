@@ -82,7 +82,10 @@ subcode: config_test
     subcode: patch_f77_tests
         my %confs
         $confs{F77_MPI_ADDRESS} = "INTEGER*8"
-        autoconf_file("test/mpi/f77/ext/add1size.h", \%confs)
+        $confs{F77_MPI_OFFSET} = "INTEGER*8"
+        $foreach $f in glob("test/mpi/f77/*/*.h.in test/mpi/errors/f77/*/*.h.in")
+            $f=~s/\.in$//
+            autoconf_file($f, \%confs)
 
 subcode: make_test
     $call init_MPICC
