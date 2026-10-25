@@ -16,6 +16,14 @@ subcode: patch_libtool(from)
                 $if $need_patch{shared}
                     $l=~s/-shared /$need_patch{shared} /
             # --------------------------
+            $if $need_patch{gxx}
+                # the recorded crt objects and search paths belong to the
+                # g++ that configured libtool, let g++ -shared supply its own
+                $if $l=~/^(predep_objects|postdep_objects|predeps|postdeps|compiler_lib_search_dirs|compiler_lib_search_path)=/
+                    $l = "$1=\"\"\n"
+                $elif $l=~/^archive(_expsym)?_cmds=/
+                    $l=~s/ -nostdlib / /
+            # --------------------------
             print Out $l
     system "chmod a+x libtool"
 
@@ -25,6 +33,8 @@ subcode: patch_libtool(from)
             $need_patch{wl}="-Qoption ld "
             $need_patch{link_static_flag}=" -Bstatic"
             $need_patch{shared}="-G"
+        $elif $CC =~ /^g\+\+/
+            %need_patch=(gxx=>1)
         $else
             %need_patch=()
 
