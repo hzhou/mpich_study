@@ -81,6 +81,14 @@ page: mymake_sync_headers
         system "cp $src $dst"
         print "  $template_name updated\n"
 
+    # record the commit base, e.g. to compare with the tree being built
+    my $commit = `git -C $mpich_dir log -1 --format="%H %cs %s"`
+    my $autoconf = `autoconf --version | head -1`
+    &call open_W, $template_dir/STAMP
+        print Out "commit: $commit"
+        print Out "autoconf: $autoconf"
+    print "STAMP: $commit"
+
     # clean up
     system "rm -rf $mpich_dir"
     print "\nDone.\n"
