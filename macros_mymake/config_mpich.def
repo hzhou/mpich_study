@@ -185,7 +185,20 @@ subcode: config_mpich
         $temp{MPIR_FLOAT32_ALIGN} = "4"
         $temp{MPIR_FLOAT64_ALIGN} = "8"
         $temp{MPIR_ALT_FLOAT128_ALIGN} = "16"
-        # $temp{MPIR_INT128_ALIGN} = "long long"
+        # optional types, if the compiler has them (see get_c_sizeof_mpich)
+        $if $sizeof_hash{"_FLOAT16"}
+            $temp{MPIR_FLOAT16_CTYPE} = "_Float16"
+        $if $sizeof_hash{"FLOAT128"}
+            $temp{MPIR_FLOAT128_CTYPE} = "__float128"
+            $temp{MPIR_FLOAT128_ALIGN} = "16"
+        $if $sizeof_hash{"__INT128"}
+            $temp{MPIR_INT128_CTYPE} = "__int128"
+            $temp{MPIR_UINT128_CTYPE} = "unsigned __int128"
+            $temp{MPIR_INT128_ALIGN} = "16"
+        $temp{MPIR_COMPLEX32_CTYPE} = "float _Complex"
+        $temp{MPIR_COMPLEX64_CTYPE} = "double _Complex"
+        $temp{MPIR_ALT_COMPLEX128_CTYPE} = "long double _Complex"
+        $temp{MPIR_CXX_BOOL_CTYPE} = "_Bool"
 
         $temp{MPIR_CHAR_INTERNAL} = "MPIR_INT8"
         $temp{MPIR_UNSIGNED_CHAR_INTERNAL} = "MPIR_UINT8"
@@ -210,7 +223,8 @@ subcode: config_mpich
         $else
             $temp{MPIR_LONG_DOUBLE_INTERNAL} = "MPIR_ALT_FLOAT$len"
         $temp{MPIR_BYTE_INTERNAL} = "MPIR_UINT8"
-        my $len = $sizeof_hash{"WCHAR"} * 8
+        # sizeof_hash{WCHAR} is set later, in patch_mpi_h
+        my $len = $sizeof_hash{"WCHAR_T"} * 8
         $temp{MPIR_WCHAR_INTERNAL} = "MPIR_INT$len"
         $temp{MPIR_PACKED_INTERNAL} = "MPIR_FIXED8"
         $temp{MPIR_LB_INTERNAL} = "MPIR_FIXED0"
@@ -220,7 +234,7 @@ subcode: config_mpich
         $temp{MPIR_2INT_INTERNAL} = "MPIR_2INT$len"
         $temp{MPIR_SIGNED_CHAR_INTERNAL} = "MPIR_INT8"
         my $len = $sizeof_hash{"LONG_LONG"} * 8
-        $temp{MPIR_UNSIGNED_LONG_LONG_INTERNAL} = "MPIR_INT$len"
+        $temp{MPIR_UNSIGNED_LONG_LONG_INTERNAL} = "MPIR_UINT$len"
         my $len = $sizeof_hash{"pac_cv_f77_sizeof_character"} * 8
         $temp{MPIR_CHARACTER_INTERNAL} = "MPIR_INT$len"
         my $len = $sizeof_hash{"pac_cv_f77_sizeof_integer"} * 8
@@ -604,10 +618,13 @@ subcode: get_c_sizeof_mpich
     get_sizeof(["_Bool"], ["stdio.h"]);
     get_sizeof(["__float128"], ["stdio.h"]);
     get_sizeof(["_Float16"], ["stdio.h"]);
+    get_sizeof(["__int128"], ["stdio.h"]);
     get_sizeof(["wchar_t"], ["stdio.h", "stddef.h"]);
-    $config_defines{SIZEOF__FLOAT16}=0
-    $config_defines{SIZEOF___FLOAT128}=0
-    $config_defines{SIZEOF_WCHAR_T}=0
+    # each is probed on its own since the compiler may not have it
+    $(for:_FLOAT16,__FLOAT128,__INT128 and _FLOAT16,FLOAT128,__INT128)
+        $config_defines{SIZEOF_$1} = $sizeof_hash{$2} + 0
+        $config_defines{ALIGNOF_$1} = $sizeof_hash{$2} + 0
+    $config_defines{SIZEOF_WCHAR_T} = $sizeof_hash{WCHAR_T} + 0
 
     $if $sizeof_hash{VOID_P}==$sizeof_hash{INT}
         # 32-bit
@@ -615,6 +632,7 @@ subcode: get_c_sizeof_mpich
     $else
         # 64-bit
         $config_defines{MAX_ALIGNMENT} = 16
+        $config_defines{ALIGNOF_MAX_ALIGN_T} = 16
 
     $config_defines{MPIR_Ufint} = "unsigned int"
     my $MPI_AINT
