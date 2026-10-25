@@ -36,6 +36,9 @@ subcode: parse_args
         $(for:a in modules,modules-yaksa-new,modules-gpu)
             $elif -e "$(a).tar.gz"
                 $mod_tarball = "$(a).tar.gz"
+        $if !$mod_tarball and $opts{mymake}=~/^(.*)\/[^\/]+\/[^\/]+$/
+            # look next to the mymake directory, e.g. ~/work/modules.tar.gz
+            $mod_tarball = "$1/modules.tar.gz"
         # --
         # my $cmd = "git log --after=\"2021-2-16\" |grep 'Yaksa has been updated to use intptr_t'"
         $if $mod_tarball =~/modules\.tar\.gz$/
