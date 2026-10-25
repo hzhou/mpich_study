@@ -49,6 +49,14 @@ subcode: patch_mpicc_etc
 
     $confs{WRAPPER_EXTRA_F77_FLAGS} = "-fallow-argument-mismatch"
 
+    # libmpi(_abi) for mpifort, as MPICH's configure exports to the binding
+    my $mpilib = "mpi"
+    $if $opts{"enable-mpi-abi"}
+        $mpilib = "mpi_abi"
+    $confs{mpi_dependency_libs} = "-l$mpilib"
+    $if $opts{do_pmpi}
+        $confs{mpi_dependency_libs} .= " -lp$mpilib"
+
     $call load_shlib_conf
     $confs{PREFIX}=$opts{prefix}
     $confs{EXEC_PREFIX}="$opts{prefix}/bin"
