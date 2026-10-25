@@ -167,7 +167,8 @@ fncode: dump_makefile($makefile, $moddir)
     subcode: dump_clean
         my $root = "."
         my @prune_dirs
-        $if -d "src"
+        # sub-Makefiles clean their own directory
+        $if $makefile eq "Makefile" and -d "src"
             $root = "src"
 
             $foreach $d in "src/pmi", "src/mpl"
