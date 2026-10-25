@@ -38,6 +38,8 @@ page: mymake_sync_headers
     push @headers, ["test/mpi", "include/mpitestconf.h.in", "mpitestconf.h"]
     # dtpools
     push @headers, ["test/mpi/dtpools", "dtpoolsconf.h.in", "dtpoolsconf.h"]
+    # standalone Fortran binding
+    push @headers, ["src/binding/fortran", "mpifort_config.h.in", "mpifort_config.h"]
 
     $foreach $h in @headers
         my ($subdir, $header_in, $template_name) = @$h
@@ -84,9 +86,9 @@ page: mymake_sync_headers
     print "\nDone.\n"
 
 subcode: create_stubs
-    # version.m4 - needed by romio, hydra, test/mpi
+    # version.m4 - needed by romio, hydra, test/mpi, fortran
     # copy from maint/version.m4 to each subdir that needs it
-    $foreach $d in "src/mpi/romio", "src/pm/hydra", "test/mpi"
+    $foreach $d in "src/mpi/romio", "src/pm/hydra", "test/mpi", "src/binding/fortran"
         system "cp $mpich_dir/maint/version.m4 $mpich_dir/$d/version.m4"
     # subsys_include.m4 - needed by main configure.ac
     my $old_dir = getcwd()
