@@ -153,6 +153,9 @@ subcode: make_test
         $make_vars{CC} = "$MPICC"
         $make_vars{CXX} = "mpicxx"
         $make_vars{FC} = "mpifort -fcray-pointer"
+        $if $opts{FC}=~/gfortran/
+            # gfortran >= 10 rejects mpif.h-style mismatched arguments
+            $make_vars{FC} .= " -fallow-argument-mismatch"
         $make_vars{CCLD} = "$MPICC"
         $make_vars{CXXLD} = "mpicxx"
         $make_vars{FCLD} = "mpifort"
