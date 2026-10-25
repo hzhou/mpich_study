@@ -50,6 +50,8 @@ fncode: dump_makefile($makefile, $moddir)
             $call dump_CC
             $if !$opts{disable_cxx}
                 $call dump_cxx
+            $if !$opts{disable_fortran}
+                $call dump_fortran
 
     # ---- COMPILER CHAIN ------------------------
     macros: 
